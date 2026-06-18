@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
-import { tmpdir, userInfo } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   createElectricCliHandlers,
@@ -132,14 +132,14 @@ async function parse(argv: Array<string>, handlers = createHandlers()) {
 }
 
 describe(`createElectricProgram`, () => {
-  it(`uses system cli username as the default principal header`, () => {
+  it(`uses the CLI identity as the default user principal header`, () => {
     const env = getElectricCliEnv({
       ELECTRIC_AGENTS_URL: `https://agents.example.test`,
       ELECTRIC_AGENTS_IDENTITY: `tester@example.com`,
     })
 
     expect(env.electricAgentsHeaders).toEqual({
-      'electric-principal': `system:cli-${userInfo().username}`,
+      'electric-principal': `user:tester@example.com`,
     })
   })
 

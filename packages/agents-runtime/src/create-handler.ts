@@ -567,14 +567,23 @@ export function createRuntimeRouter(
         }
       }
 
-      const typeRes = await fetch(
-        appendPathToUrl(baseUrl, `/_electric/entity-types`),
-        {
+      const registrationUrl = appendPathToUrl(
+        baseUrl,
+        `/_electric/entity-types`
+      )
+      let typeRes: Response
+      try {
+        typeRes = await fetch(registrationUrl, {
           method: `POST`,
           headers: await registrationHeaders(),
           body: JSON.stringify(body),
-        }
-      )
+        })
+      } catch (error) {
+        const message = `Failed to register type "${name}" at ${registrationUrl}: ${formatFetchError(error)}`
+        runtimeLog.error(`[agent-runtime]`, message)
+        failed.push(`${name} (${message})`)
+        return
+      }
 
       if (!typeRes.ok) {
         const err = await typeRes.text()
@@ -756,6 +765,17 @@ function json(body: Record<string, unknown>, status: number): Response {
     status,
     headers: { 'content-type': `application/json` },
   })
+}
+
+function formatFetchError(error: unknown): string {
+  if (error instanceof Error) {
+    const cause =
+      error.cause instanceof Error
+        ? `: ${error.cause.message || error.cause.name}`
+        : ``
+    return `${error.message || error.name || `Unknown error`}${cause}`
+  }
+  return String(error) || `Unknown error`
 }
 
 async function toFetchRequest(req: IncomingMessage): Promise<Request> {

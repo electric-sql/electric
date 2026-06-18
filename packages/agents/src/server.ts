@@ -311,6 +311,9 @@ export class BuiltinAgentsServer {
         appSkillsDirs: this.options.appSkillsDirs,
         enabledModelValues: this.options.enabledModelValues,
         serverHeaders: pullWake.headers,
+        defaultDispatchPolicyForType: () => ({
+          targets: [{ type: `runner`, runnerId: pullWake.runnerId }],
+        }),
       })
       if (!this.bootstrap) {
         throw new Error(
@@ -430,9 +433,13 @@ export class BuiltinAgentsServer {
     )
     headers.set(`content-type`, `application/json`)
     const profiles = this.bootstrap?.runtime.sandboxProfileDescriptors ?? []
-    const response = await fetch(
-      appendPathToUrl(this.options.agentServerUrl, `/_electric/runners`),
-      {
+    const registrationUrl = appendPathToUrl(
+      this.options.agentServerUrl,
+      `/_electric/runners`
+    )
+    let response: Response
+    try {
+      response = await fetch(registrationUrl, {
         method: `POST`,
         headers,
         body: JSON.stringify({
@@ -443,8 +450,12 @@ export class BuiltinAgentsServer {
           admin_status: `enabled`,
           sandbox_profiles: profiles,
         }),
-      }
-    )
+      })
+    } catch (error) {
+      throw new Error(
+        `Failed to register pull-wake runner ${pullWake.runnerId} at ${registrationUrl}: ${formatFetchError(error)}`
+      )
+    }
     if (!response.ok) {
       throw new Error(
         `Failed to register pull-wake runner ${pullWake.runnerId}: ${response.status} ${await response.text()}`
@@ -452,4 +463,15 @@ export class BuiltinAgentsServer {
     }
     return (await response.json()) as { wake_stream_offset?: string }
   }
+}
+
+function formatFetchError(error: unknown): string {
+  if (error instanceof Error) {
+    const cause =
+      error.cause instanceof Error
+        ? `: ${error.cause.message || error.cause.name}`
+        : ``
+    return `${error.message || error.name || `Unknown error`}${cause}`
+  }
+  return String(error) || `Unknown error`
 }

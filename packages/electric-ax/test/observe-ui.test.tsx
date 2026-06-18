@@ -1,18 +1,59 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
+import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
+import type { Collection, InitialQueryBuilder } from '@tanstack/db'
+import type * as AgentsRuntime from '@electric-ax/agents-runtime'
 import {
   AgentTextView,
+  ObserveView,
   ObserveExitHotkey,
   ToolCallView,
   ToolResultView,
+  compareRunItems,
+  createMessageSendBody,
+  runItemsToContentItems,
   UserMessageView,
   formatTime,
   truncate,
 } from '../src/observe-ui'
+import type { EntityStreamDB } from '../src/entity-stream-db'
+
+type TimelineTestRow = { key: string }
+type EntityStoppedTestRow = {
+  key: string
+  timestamp: string
+  reason?: string
+}
+
+const runtimeMocks = vi.hoisted(() => ({
+  timelineRows: undefined as Collection<TimelineTestRow, string> | undefined,
+}))
+
+vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
+  const actual = await importOriginal<typeof AgentsRuntime>()
+  return {
+    ...actual,
+    createEntityTimelineQuery: () => (q: InitialQueryBuilder) =>
+      q.from({ row: runtimeMocks.timelineRows! }),
+  }
+})
 
 // ============================================================================
 // Helper functions
 // ============================================================================
+
+function createLocalCollection<TRow extends object>(
+  id: string,
+  getKey: (row: TRow) => string
+): Collection<TRow, string> {
+  return createCollection(
+    localOnlyCollectionOptions({
+      id: `test-${id}-${Math.random().toString(36).slice(2)}`,
+      getKey,
+      initialData: [],
+    })
+  )
+}
 
 describe(`formatTime`, () => {
   it(`returns empty string for undefined`, () => {
@@ -60,6 +101,111 @@ describe(`ObserveExitHotkey`, () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
 
     expect(onExit).toHaveBeenCalledOnce()
+  })
+})
+
+describe(`ObserveView`, () => {
+  it(`rerenders when an entity stopped event arrives without timeline events`, async () => {
+    runtimeMocks.timelineRows = createLocalCollection(
+      `timeline`,
+      (row: TimelineTestRow) => row.key
+    )
+    const entityStopped = createLocalCollection<EntityStoppedTestRow>(
+      `stopped`,
+      (row) => row.key
+    )
+    const db = {
+      collections: {
+        entityStopped,
+      },
+    } as unknown as EntityStreamDB
+    const { lastFrame, unmount } = render(
+      <ObserveView
+        db={db}
+        entityUrl="/chat/closed"
+        baseUrl="http://localhost:4437"
+        identity="user"
+      />
+    )
+
+    expect(lastFrame()).toContain(`Waiting for events...`)
+    expect(lastFrame()).not.toContain(`Stream closed`)
+
+    entityStopped.insert({
+      key: `stop-1`,
+      timestamp: new Date().toISOString(),
+      reason: `done`,
+    })
+
+    await expect
+      .poll(() => lastFrame(), { timeout: 1000 })
+      .toContain(`Stream closed`)
+
+    unmount()
+  })
+})
+
+describe(`createMessageSendBody`, () => {
+  it(`omits legacy from attribution`, () => {
+    expect(createMessageSendBody(`hello`)).toEqual({
+      payload: { text: `hello` },
+    })
+    expect(createMessageSendBody(`hello`)).not.toHaveProperty(`from`)
+  })
+
+  it(`includes a stable client key when provided`, () => {
+    expect(createMessageSendBody(`hello`, { key: `optimistic-1` })).toEqual({
+      key: `optimistic-1`,
+      payload: { text: `hello` },
+    })
+  })
+})
+
+describe(`run item rendering helpers`, () => {
+  it(`ignores transient missing text content`, () => {
+    expect(
+      runItemsToContentItems([
+        {
+          text: {
+            key: `text-1`,
+            run_id: `run-1`,
+            order: `1`,
+            status: `streaming`,
+            content: undefined,
+          },
+          toolCall: null,
+        } as any,
+      ])
+    ).toEqual([])
+  })
+
+  it(`sorts numeric timeline orders numerically`, () => {
+    const items = [
+      {
+        text: {
+          key: `text-10`,
+          run_id: `run-1`,
+          order: 10,
+          status: `completed`,
+          content: `ten`,
+        },
+        toolCall: null,
+      },
+      {
+        text: {
+          key: `text-2`,
+          run_id: `run-1`,
+          order: 2,
+          status: `completed`,
+          content: `two`,
+        },
+        toolCall: null,
+      },
+    ] as any
+
+    expect(
+      [...items].sort(compareRunItems).map((item) => item.text.key)
+    ).toEqual([`text-2`, `text-10`])
   })
 })
 
