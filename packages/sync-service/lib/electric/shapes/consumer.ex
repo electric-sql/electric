@@ -52,8 +52,13 @@ defmodule Electric.Shapes.Consumer do
           optional(:is_subquery_shape?) => boolean()
         }
 
-  def name(stack_id, shape_handle) when is_binary(shape_handle) do
-    ConsumerRegistry.name(stack_id, shape_handle)
+  @doc """
+  The `{:via, ...}` registration name for a consumer, keyed by its numeric
+  routing id. Used to register/address the consumer process directly.
+  """
+  @spec name(Electric.stack_id(), Electric.shape_id()) :: GenServer.name()
+  def name(stack_id, shape_id) when is_integer(shape_id) do
+    ConsumerRegistry.name(stack_id, shape_id)
   end
 
   def register_for_changes(stack_id, shape_handle) do
@@ -69,26 +74,31 @@ defmodule Electric.Shapes.Consumer do
     :ok
   end
 
+  # Handle-boundary function: client/materializer callers hold a handle. Resolve
+  # it to the routing id once, then address the consumer by id.
   @spec await_snapshot_start(Electric.stack_id(), Electric.shape_handle(), timeout()) ::
           :started | {:error, any()}
   def await_snapshot_start(stack_id, shape_handle, timeout \\ @default_snapshot_timeout)
       when is_binary(stack_id) and is_binary(shape_handle) do
     stack_id
-    |> consumer_pid(shape_handle)
+    |> consumer_pid_for_handle(shape_handle)
     |> GenServer.call(:await_snapshot_start, timeout)
   end
 
+  # Handle-boundary function (called by the materializer with a handle).
   @spec subscribe_materializer(Electric.stack_id(), Electric.shape_handle(), pid()) ::
           {:ok, LogOffset.t()}
-  def subscribe_materializer(stack_id, shape_handle, pid) do
+  def subscribe_materializer(stack_id, shape_handle, pid) when is_binary(shape_handle) do
     stack_id
-    |> consumer_pid(shape_handle)
+    |> consumer_pid_for_handle(shape_handle)
     |> GenServer.call({:subscribe_materializer, pid})
   end
 
+  # Handle-boundary function: resolves the handle to its routing id once and
+  # looks the consumer up by id.
   @spec whereis(Electric.stack_id(), Electric.shape_handle()) :: pid() | nil
-  def whereis(stack_id, shape_handle) do
-    consumer_pid(stack_id, shape_handle)
+  def whereis(stack_id, shape_handle) when is_binary(shape_handle) do
+    consumer_pid_for_handle(stack_id, shape_handle)
   end
 
   def stop(nil, _reason) do
@@ -105,15 +115,27 @@ defmodule Electric.Shapes.Consumer do
     :exit, _reason -> :ok
   end
 
-  def stop(stack_id, shape_handle, reason) do
+  @spec stop(Electric.stack_id(), Electric.shape_id(), term()) :: :ok
+  def stop(stack_id, shape_id, reason) when is_integer(shape_id) do
     # if consumer is present, terminate it gracefully
     stack_id
-    |> consumer_pid(shape_handle)
+    |> consumer_pid(shape_id)
     |> stop(reason)
   end
 
-  defp consumer_pid(stack_id, shape_handle) do
-    ConsumerRegistry.whereis(stack_id, shape_handle)
+  # Routing identity: look up the consumer pid by its numeric id.
+  @spec consumer_pid(Electric.stack_id(), Electric.shape_id()) :: pid() | nil
+  defp consumer_pid(stack_id, shape_id) when is_integer(shape_id) do
+    ConsumerRegistry.whereis(stack_id, shape_id)
+  end
+
+  # Handle boundary: resolve handle -> id once, then look up by id.
+  @spec consumer_pid_for_handle(Electric.stack_id(), Electric.shape_handle()) :: pid() | nil
+  defp consumer_pid_for_handle(stack_id, shape_handle) when is_binary(shape_handle) do
+    case ShapeCache.ShapeStatus.id_for_handle(stack_id, shape_handle) do
+      {:ok, shape_id} -> consumer_pid(stack_id, shape_id)
+      :error -> nil
+    end
   end
 
   @doc """
@@ -134,7 +156,7 @@ defmodule Electric.Shapes.Consumer do
     GenServer.start_link(
       __MODULE__,
       %{stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id},
-      name: name(stack_id, shape_handle),
+      name: name(stack_id, shape_id),
       spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :consumer)
     )
   end
@@ -1132,7 +1154,7 @@ defmodule Electric.Shapes.Consumer do
   defp consider_flushed(%State{} = state, log_offset) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
-      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, log_offset)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_id, log_offset)
       state
     else
       # We're looking to "relabel" the next flush to include this txn, so we're looking for the
@@ -1159,7 +1181,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp confirm_flushed_and_notify(state, flushed_offset) do
     {state, txn_offset} = State.align_offset_to_txn_boundary(state, flushed_offset)
-    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, txn_offset)
+    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_id, txn_offset)
     state
   end
 

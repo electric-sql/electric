@@ -68,14 +68,14 @@ defmodule Electric.Shapes.EventRouter do
     Filter.active_shapes(router.filter)
   end
 
-  @spec event_by_shape_handle(t(), Relation.t() | TransactionFragment.t()) ::
+  @spec event_by_shape_id(t(), Relation.t() | TransactionFragment.t()) ::
           {%{shape_id() => Relation.t() | TransactionFragment.t()}, t()}
-  def event_by_shape_handle(%EventRouter{} = router, %Relation{} = relation) do
+  def event_by_shape_id(%EventRouter{} = router, %Relation{} = relation) do
     result = route_relation_to_shapes(router, relation)
     {result, router}
   end
 
-  def event_by_shape_handle(
+  def event_by_shape_id(
         %EventRouter{} = router,
         %TransactionFragment{changes: changes, commit: commit} = txn_fragment
       ) do

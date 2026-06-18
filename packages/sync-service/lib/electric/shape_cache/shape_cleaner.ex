@@ -108,8 +108,17 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   def handle_writer_termination(stack_id, shape_handle, @shutdown_suspend) do
     # deregister the consumer without removing it from the rest of the system
     # the next time a txn comes in matching this consumer it will be re-started
-    # by the consumer registry as per any other lazily loaded consumer
-    Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, stack_id)
+    # by the consumer registry as per any other lazily loaded consumer.
+    #
+    # ShapeStatus.remove_shape is NOT called on the suspend path, so the
+    # handle->id mapping is still intact and we can resolve the routing key.
+    case ShapeStatus.id_for_handle(stack_id, shape_handle) do
+      {:ok, shape_id} ->
+        Electric.Shapes.ConsumerRegistry.remove_consumer(shape_id, stack_id)
+
+      :error ->
+        :ok
+    end
   end
 
   def handle_writer_termination(_stack_id, _shape_handle, reason)
@@ -156,18 +165,26 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   defp remove_shape_immediate(stack_id, shape_handle, reason) do
     OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_µs")
 
+    # Resolve the numeric routing id BEFORE removing the shape from ShapeStatus,
+    # since ShapeStatus.remove_shape deletes the handle->id mapping. The id is
+    # the key used by the consumer registry and the shape log collector.
+    shape_id =
+      case ShapeStatus.id_for_handle(stack_id, shape_handle) do
+        {:ok, id} -> id
+        :error -> nil
+      end
+
     case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
       :ok ->
         OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_µs")
 
         stack_storage = Storage.for_stack(stack_id)
 
-        with :ok <- Consumer.stop(stack_id, shape_handle, reason),
+        with :ok <- stop_consumer(stack_id, shape_id, reason),
              OpenTelemetry.start_interval(:"remove_shape.storage_cleanup.duration_µs"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
              OpenTelemetry.start_interval(:"remove_shape.shape_log_collector_remove.duration_µs"),
-             :ok <-
-               Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
+             :ok <- remove_from_shape_log_collector(stack_id, shape_id) do
           :ok
         end
 
@@ -175,6 +192,16 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         {:error, :data_removed}
     end
   end
+
+  # The shape was already gone from ShapeStatus before we could resolve its id,
+  # so there is no consumer/registration to tear down by id.
+  defp stop_consumer(_stack_id, nil, _reason), do: :ok
+  defp stop_consumer(stack_id, shape_id, reason), do: Consumer.stop(stack_id, shape_id, reason)
+
+  defp remove_from_shape_log_collector(_stack_id, nil), do: :ok
+
+  defp remove_from_shape_log_collector(stack_id, shape_id),
+    do: Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_id)
 
   defp remove_shapes_deferred(stack_id, shape_handles) when is_list(shape_handles) do
     OpenTelemetry.start_interval(:"remove_shape.remove_shapes_deferred.duration_µs")

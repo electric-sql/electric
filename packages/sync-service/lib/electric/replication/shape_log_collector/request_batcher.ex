@@ -31,10 +31,10 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
 
   @type t :: %__MODULE__{
           stack_id: Electric.stack_id(),
-          to_add: %{Electric.shape_handle() => Electric.Shapes.Shape.t()},
-          to_remove: MapSet.t(Electric.shape_handle()),
-          to_schedule_waiters: %{Electric.shape_handle() => GenServer.from() | nil},
-          ack_waiters: [{Electric.shape_handle(), GenServer.from()}],
+          to_add: %{Electric.shape_id() => Electric.Shapes.Shape.t()},
+          to_remove: MapSet.t(Electric.shape_id()),
+          to_schedule_waiters: %{Electric.shape_id() => GenServer.from() | nil},
+          ack_waiters: [{Electric.shape_id(), GenServer.from()}],
           ack_ref: reference() | nil
         }
 
@@ -49,28 +49,28 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
   """
   @spec add_shape(
           Electric.stack_id(),
-          Electric.shape_handle(),
+          Electric.shape_id(),
           Electric.Shapes.Shape.t(),
           :create | :restore
         ) :: :ok | {:error, any()}
   # shapes that are being restored are already in the filters
   # because they were restored from the ets at startup
-  def add_shape(_stack_id, _shape_handle, _shape, :restore) do
+  def add_shape(_stack_id, _shape_id, _shape, :restore) do
     :ok
   end
 
   # new shapes -- created after boot -- do need to be added
-  def add_shape(stack_id, shape_handle, shape, :create) do
-    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape}, 45_000)
+  def add_shape(stack_id, shape_id, shape, :create) do
+    GenServer.call(name(stack_id), {:add_shape, shape_id, shape}, 45_000)
   end
 
   @doc """
   Schedules a shape removal from the SLC, returns before the shape is
   actually removed.
   """
-  @spec remove_shape(Electric.stack_id(), Electric.shape_handle()) :: :ok
-  def remove_shape(stack_id, shape_handle) do
-    GenServer.call(name(stack_id), {:remove_shape, shape_handle})
+  @spec remove_shape(Electric.stack_id(), Electric.shape_id()) :: :ok
+  def remove_shape(stack_id, shape_id) do
+    GenServer.call(name(stack_id), {:remove_shape, shape_id})
   end
 
   @doc """
@@ -79,7 +79,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
   @spec handle_processor_update_response(
           Electric.stack_id(),
           reference(),
-          %{optional(Electric.shape_handle()) => :ok | {:error, String.t()}}
+          %{optional(Electric.shape_id()) => :ok | {:error, String.t()}}
         ) :: :ok
   def handle_processor_update_response(stack_id, ref, results) do
     GenServer.cast(name(stack_id), {:handle_processor_update_response, ref, results})
@@ -108,21 +108,21 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
   end
 
   @impl true
-  def handle_call({:add_shape, shape_handle, shape}, from, state) do
+  def handle_call({:add_shape, shape_id, shape}, from, state) do
     {:noreply,
      %{
        state
-       | to_add: Map.put(state.to_add, shape_handle, shape),
-         to_remove: MapSet.delete(state.to_remove, shape_handle),
-         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_handle, from)
+       | to_add: Map.put(state.to_add, shape_id, shape),
+         to_remove: MapSet.delete(state.to_remove, shape_id),
+         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_id, from)
      }, {:continue, :maybe_schedule_update}}
   end
 
-  def handle_call({:remove_shape, shape_handle}, _from, state) do
-    if from = Map.get(state.to_schedule_waiters, shape_handle) do
+  def handle_call({:remove_shape, shape_id}, _from, state) do
+    if from = Map.get(state.to_schedule_waiters, shape_id) do
       GenServer.reply(
         from,
-        {:error, "Shape #{shape_handle} removed before registration completed"}
+        {:error, "Shape #{shape_id} removed before registration completed"}
       )
     end
 
@@ -135,9 +135,9 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
     {:reply, :ok,
      %{
        state
-       | to_add: Map.delete(state.to_add, shape_handle),
-         to_remove: MapSet.put(state.to_remove, shape_handle),
-         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_handle, nil)
+       | to_add: Map.delete(state.to_add, shape_id),
+         to_remove: MapSet.put(state.to_remove, shape_id),
+         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_id, nil)
      }, {:continue, :maybe_schedule_update}}
   end
 
@@ -146,8 +146,8 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
         {:handle_processor_update_response, ref, results},
         %{ack_ref: ref} = state
       ) do
-    for {shape_handle, from} when not is_nil(from) <- state.ack_waiters do
-      GenServer.reply(from, Map.fetch!(results, shape_handle))
+    for {shape_id, from} when not is_nil(from) <- state.ack_waiters do
+      GenServer.reply(from, Map.fetch!(results, shape_id))
     end
 
     {

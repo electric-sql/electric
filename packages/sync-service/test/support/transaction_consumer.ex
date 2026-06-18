@@ -5,12 +5,12 @@ defmodule Support.TransactionConsumer do
 
   import ExUnit.Assertions
 
-  def name(stack_id, shape_handle) do
-    Electric.Shapes.ConsumerRegistry.name(stack_id, shape_handle)
+  def name(stack_id, shape_id) do
+    Electric.Shapes.ConsumerRegistry.name(stack_id, shape_id)
   end
 
   def name(opts) when is_list(opts) do
-    name(Keyword.fetch!(opts, :stack_id), Keyword.fetch!(opts, :shape_handle))
+    name(Keyword.fetch!(opts, :stack_id), Keyword.fetch!(opts, :shape_id))
   end
 
   def start_link(opts) do
@@ -69,10 +69,23 @@ defmodule Support.TransactionConsumer do
     action = Keyword.get(opts, :action, :create)
     shape = Keyword.fetch!(opts, :shape)
     shape_handle = Keyword.fetch!(opts, :shape_handle)
+    shape_id = Keyword.fetch!(opts, :shape_id)
 
-    Electric.Replication.ShapeLogCollector.add_shape(stack_id, shape_handle, shape, action)
+    # Seed the handle<->id mapping so any code on the routing path that resolves
+    # a handle to its id (e.g. dependency resolution in the ShapeLogCollector)
+    # can find it.
+    Electric.ShapeCache.ShapeStatus.put_handle_id(stack_id, shape_handle, shape_id)
 
-    {:ok, %{id: id, stack_id: stack_id, parent: parent, shape_handle: shape_handle}}
+    Electric.Replication.ShapeLogCollector.add_shape(stack_id, shape_id, shape, action)
+
+    {:ok,
+     %{
+       id: id,
+       stack_id: stack_id,
+       parent: parent,
+       shape_handle: shape_handle,
+       shape_id: shape_id
+     }}
   end
 
   def handle_call(
@@ -108,9 +121,9 @@ defmodule Support.TransactionConsumer do
 
   # we no longer monitor consumer processes in the ShapeLogCollector
   # so consumers must de-register themselves
-  def terminate(reason, %{stack_id: stack_id, shape_handle: shape_handle} = state) do
+  def terminate(reason, %{stack_id: stack_id, shape_id: shape_id} = state) do
     send(state.parent, {__MODULE__, {state.id, self()}, {:terminate, reason}})
-    Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle)
+    Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_id)
   end
 
   def handle_info(_msg, state), do: {:noreply, state}

@@ -71,6 +71,16 @@ defmodule Electric.ShapeCleanerTest do
 
         existing_shape_map = Map.new(existing_shapes)
 
+        # Seed handle->id mappings so the restore path (which routes by id) can
+        # resolve the restored shapes.
+        for {handle, _shape} <- existing_shapes do
+          Electric.ShapeCache.ShapeStatus.put_handle_id(
+            stack_id,
+            handle,
+            :erlang.phash2(handle) + 1
+          )
+        end
+
         if map_size(existing_shape_map) > 0 do
           patch_calls(Electric.ShapeCache.ShapeStatus,
             remove_shape: fn _stack_id, handle ->
@@ -120,6 +130,9 @@ defmodule Electric.ShapeCleanerTest do
         {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
         assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
+        {:ok, shape_id} =
+          Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
+
         consumer_ref =
           Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
           |> Process.monitor()
@@ -153,7 +166,7 @@ defmodule Electric.ShapeCleanerTest do
         )
 
         expect_calls(Electric.Replication.ShapeLogCollector,
-          remove_shape: fn _, ^shape_handle -> :ok end
+          remove_shape: fn _, ^shape_id -> :ok end
         )
 
         :ok = @cleanup_fn.(ctx.stack_id, shape_handle)
@@ -174,7 +187,10 @@ defmodule Electric.ShapeCleanerTest do
 
       @tag restore_shapes: [{"my-shape", @shape}]
       test "removes shape handle from shape log collector if no consumer runnning", ctx do
-        assert ["my-shape"] = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+        # The routing pipeline is keyed by the numeric shape id.
+        shape_id = :erlang.phash2("my-shape") + 1
+
+        assert [^shape_id] = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
 
         :ok = ShapeCleaner.remove_shape(ctx.stack_id, "my-shape")
 

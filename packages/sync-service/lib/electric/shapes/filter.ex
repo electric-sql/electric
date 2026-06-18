@@ -52,8 +52,8 @@ defmodule Electric.Shapes.Filter do
   end
 
   @spec has_shape?(t(), shape_id()) :: boolean()
-  def has_shape?(%Filter{shapes_table: table}, shape_handle) do
-    :ets.member(table, shape_handle)
+  def has_shape?(%Filter{shapes_table: table}, shape_id) do
+    :ets.member(table, shape_id)
   end
 
   @spec active_shapes(t()) :: [shape_id()]

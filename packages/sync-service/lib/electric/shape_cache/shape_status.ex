@@ -277,6 +277,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> :error
       id -> {:ok, id}
     end
+  rescue
+    # The meta table doesn't exist (e.g. ShapeStatus not running). Treat the
+    # same as a missing mapping so callers don't crash.
+    ArgumentError -> :error
   end
 
   @spec handle_for_id(stack_id(), shape_id()) :: {:ok, shape_handle()} | :error
@@ -285,6 +289,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> :error
       handle -> {:ok, handle}
     end
+  rescue
+    # The id table doesn't exist (e.g. ShapeStatus not running). Treat the same
+    # as a missing mapping so logging/telemetry callers don't crash.
+    ArgumentError -> :error
   end
 
   @doc """
@@ -297,6 +305,33 @@ defmodule Electric.ShapeCache.ShapeStatus do
     case handle_for_id(stack_id, id) do
       {:ok, handle} -> handle
       :error -> "unknown, id: #{id}"
+    end
+  end
+
+  if Mix.env() == :test do
+    @doc false
+    # Test-only helper to seed a handle<->id mapping without going through the
+    # full add_shape/2 flow (which mints its own handle). Used by routing tests
+    # that work with fixed handle constants.
+    @spec put_handle_id(stack_id(), shape_handle(), shape_id()) :: :ok
+    def put_handle_id(stack_id, shape_handle, id) do
+      # Reverse mapping (handle_for_id reads this table).
+      :ets.insert(shape_id_table(stack_id), {id, shape_handle})
+
+      # Forward mapping (id_for_handle reads @shape_id_pos of the meta row).
+      # Update the id in an existing meta row if present, otherwise insert a
+      # minimal row carrying just the id at the right position.
+      meta_table = shape_meta_table(stack_id)
+
+      case :ets.lookup(meta_table, shape_handle) do
+        [row] ->
+          :ets.insert(meta_table, put_elem(row, @shape_id_pos - 1, id))
+
+        [] ->
+          :ets.insert(meta_table, {shape_handle, nil, false, nil, 0, id})
+      end
+
+      :ok
     end
   end
 

@@ -56,6 +56,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                   )
   @subquery_shape_handle "subquery-shape-handle"
 
+  # Deterministic, stable, positive routing id for a given handle. Tests seed
+  # these into ShapeStatus so the restore path (which resolves handle -> id) and
+  # consumer registration (which uses the id directly) agree on the key.
+  def shape_id_for(shape_handle), do: :erlang.phash2(shape_handle) + 1
+
   def setup_log_collector(ctx) do
     %{stack_id: stack_id} = ctx
     # Start a test Registry
@@ -63,6 +68,15 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     existing_shapes = Map.get(ctx, :restore_shapes, [])
+
+    # Seed handle<->id mappings for the shapes the restore path will resolve.
+    for {shape_handle, _shape} <- existing_shapes do
+      Electric.ShapeCache.ShapeStatus.put_handle_id(
+        stack_id,
+        shape_handle,
+        shape_id_for(shape_handle)
+      )
+    end
 
     Repatch.patch(Electric.ShapeCache.ShapeStatus, :list_shapes, [mode: :shared], fn ^stack_id ->
       existing_shapes
@@ -169,12 +183,17 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              parent: parent,
              shape: @shape,
              shape_handle: @shape_handle,
+             shape_id: shape_id_for(@shape_handle),
              action: :restore
            ]}
         )
 
       :ok =
-        Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer,
+          shape_id_for(@shape_handle),
+          ctx.stack_id
+        )
 
       txn =
         complete_txn_fragment(xmin, lsn, [
@@ -211,6 +230,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              parent: parent,
              shape: @shape,
              shape_handle: @shape_handle,
+             shape_id: shape_id_for(@shape_handle),
              stack_id: ctx.stack_id,
              action: :restore
            ]}
@@ -218,7 +238,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       # since we're starting the consumer manually we have to explictly register it
       :ok =
-        Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer,
+          shape_id_for(@shape_handle),
+          ctx.stack_id
+        )
 
       txn =
         complete_txn_fragment(xmin, lsn, [
@@ -241,10 +265,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 
       # After restore, the subquery shape should be in fallback because
-      # no consumer has seeded the SubqueryIndex yet.
+      # no consumer has seeded the SubqueryIndex yet. The subquery index is
+      # keyed by the routing id (the Filter receives the id during restore).
       index = SubqueryIndex.for_stack(ctx.stack_id)
       assert index != nil
-      assert SubqueryIndex.fallback?(index, @subquery_shape_handle)
+      assert SubqueryIndex.fallback?(index, shape_id_for(@subquery_shape_handle))
 
       parent = self()
 
@@ -257,6 +282,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              parent: parent,
              shape: @subquery_shape,
              shape_handle: @subquery_shape_handle,
+             shape_id: shape_id_for(@subquery_shape_handle),
              stack_id: ctx.stack_id,
              action: :restore
            ]}
@@ -265,7 +291,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       :ok =
         Electric.Shapes.ConsumerRegistry.register_consumer(
           consumer,
-          @subquery_shape_handle,
+          shape_id_for(@subquery_shape_handle),
           ctx.stack_id
         )
 
@@ -322,6 +348,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            parent: test_pid,
            shape: @shape,
            shape_handle: @shape_handle,
+           shape_id: shape_id_for(@shape_handle),
            action: :restore},
           id: {:consumer, 1}
         )
@@ -334,17 +361,22 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            parent: test_pid,
            shape: @shape,
            shape_handle: @shape_handle <> "-2",
+           shape_id: shape_id_for(@shape_handle <> "-2"),
            action: :restore},
           id: {:consumer, 2}
         )
 
       :ok =
-        Electric.Shapes.ConsumerRegistry.register_consumer(consumer1, @shape_handle, ctx.stack_id)
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer1,
+          shape_id_for(@shape_handle),
+          ctx.stack_id
+        )
 
       :ok =
         Electric.Shapes.ConsumerRegistry.register_consumer(
           consumer2,
-          @shape_handle <> "-2",
+          shape_id_for(@shape_handle <> "-2"),
           ctx.stack_id
         )
 
@@ -384,9 +416,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       Repatch.patch(
         Electric.ShapeCache,
-        :start_consumer_for_handle,
+        :start_consumer_for_id,
         [mode: :shared],
-        fn shape_handle, ^stack_id, _opts ->
+        fn shape_id, ^stack_id, _opts ->
+          {:ok, shape_handle} =
+            Electric.ShapeCache.ShapeStatus.handle_for_id(stack_id, shape_id)
+
           id = System.unique_integer([:positive, :monotonic])
 
           with {:ok, pid} <-
@@ -397,6 +432,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                    parent: parent,
                    shape: @shape,
                    shape_handle: shape_handle,
+                   shape_id: shape_id,
                    action: :restore
                  }) do
             send(parent, {:start_consumer, shape_handle, id, pid})
@@ -501,7 +537,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      stack_id: ctx.stack_id,
                      parent: parent,
                      shape: @shape,
-                     shape_handle: "#{@shape_handle}-#{id}"
+                     shape_handle: "#{@shape_handle}-#{id}",
+                     shape_id: shape_id_for("#{@shape_handle}-#{id}")
                    ]
                  ]},
               restart: :temporary
@@ -774,11 +811,27 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       refute_receive {:flush_boundary_updated, _}, 50
 
-      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-1", last_log_offset)
+      ShapeLogCollector.notify_flushed(
+        ctx.stack_id,
+        shape_id_for(@shape_handle <> "-1"),
+        last_log_offset
+      )
+
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-2", last_log_offset)
+
+      ShapeLogCollector.notify_flushed(
+        ctx.stack_id,
+        shape_id_for(@shape_handle <> "-2"),
+        last_log_offset
+      )
+
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-3", last_log_offset)
+
+      ShapeLogCollector.notify_flushed(
+        ctx.stack_id,
+        shape_id_for(@shape_handle <> "-3"),
+        last_log_offset
+      )
 
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
@@ -968,7 +1021,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      stack_id: ctx.stack_id,
                      parent: parent,
                      shape: @shape,
-                     shape_handle: "#{@shape_handle}-#{id}"
+                     shape_handle: "#{@shape_handle}-#{id}",
+                     shape_id: shape_id_for("#{@shape_handle}-#{id}")
                    ]
                  ]},
               restart: :temporary
@@ -1215,7 +1269,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
          stack_id: ctx.stack_id,
          parent: self(),
          shape: @shape,
-         shape_handle: @shape_handle}
+         shape_handle: @shape_handle,
+         shape_id: shape_id_for(@shape_handle)}
       )
 
     consumers = [{consumer_id, consumer}]
@@ -1342,7 +1397,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
             stack_id: ctx.stack_id,
             parent: parent,
             shape: @shape,
-            shape_handle: "normal-shape-handle"},
+            shape_handle: "normal-shape-handle",
+            shape_id: shape_id_for("normal-shape-handle")},
            id: {:consumer, :normal}
          )},
         {:inner,
@@ -1352,7 +1408,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
             stack_id: ctx.stack_id,
             parent: parent,
             shape: @shape2.shape_dependencies |> List.first(),
-            shape_handle: "inner-shape-handle"},
+            shape_handle: "inner-shape-handle",
+            shape_id: shape_id_for("inner-shape-handle")},
            id: {:consumer, :inner}
          )},
         {:outer,
@@ -1362,7 +1419,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
             stack_id: ctx.stack_id,
             parent: parent,
             shape: %{@shape2 | shape_dependencies_handles: ["inner-shape-handle"]},
-            shape_handle: "outer-shape-handle"},
+            shape_handle: "outer-shape-handle",
+            shape_id: shape_id_for("outer-shape-handle")},
            id: {:consumer, :outer}
          )}
       ]
@@ -1444,7 +1502,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      stack_id: ctx.stack_id,
                      parent: parent,
                      shape: @shape,
-                     shape_handle: "#{@shape_handle}-#{id}"
+                     shape_handle: "#{@shape_handle}-#{id}",
+                     shape_id: shape_id_for("#{@shape_handle}-#{id}")
                    ]
                  ]},
               restart: :temporary
@@ -1533,7 +1592,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            stack_id: ctx.stack_id,
            parent: parent,
            shape: @shape,
-           shape_handle: "shape-alive"},
+           shape_handle: "shape-alive",
+           shape_id: shape_id_for("shape-alive")},
           id: {:consumer, :alive}
         )
 
@@ -1544,7 +1604,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            stack_id: ctx.stack_id,
            parent: parent,
            shape: @shape,
-           shape_handle: "shape-doomed"},
+           shape_handle: "shape-doomed",
+           shape_id: shape_id_for("shape-doomed")},
           id: {:consumer, :doomed}
         )
 
@@ -1578,14 +1639,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end)
 
       assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => {:shutdown, :test}}'
+               ~s'Consumer processes crashed or missing during broadcast: %{#{shape_id_for("shape-doomed")} => {:shutdown, :test}}'
 
       # The alive consumer receives the transaction
       assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}
 
       # Flush only the alive consumer — FlushTracker should advance because
       # the doomed shape was never tracked (excluded as undeliverable).
-      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", log_offset)
+      ShapeLogCollector.notify_flushed(ctx.stack_id, shape_id_for("shape-alive"), log_offset)
 
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}
@@ -1651,14 +1712,18 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end)
 
       assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => :noproc}'
+               ~s'Consumer processes crashed or missing during broadcast: %{#{shape_id_for("shape-doomed")} => :noproc}'
 
       # The alive consumer receives fragment 2
       assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
 
       # Flush both fragments for the alive consumer — FlushTracker should advance
       # because the doomed shape was removed from tracking when its crash was detected.
-      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 5))
+      ShapeLogCollector.notify_flushed(
+        ctx.stack_id,
+        shape_id_for("shape-alive"),
+        LogOffset.new(lsn, 5)
+      )
 
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}

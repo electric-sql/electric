@@ -323,7 +323,7 @@ defmodule Electric.Shapes.Consumer.Effects do
     alias Electric.Replication.ShapeLogCollector
 
     if state.txn_offset_mapping == [] do
-      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, log_offset)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_id, log_offset)
       state
     else
       new_boundary = log_offset

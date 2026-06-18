@@ -16,12 +16,14 @@ defmodule Electric.Shapes.DependencyLayersTest do
                ]
              )
 
-  @outer_shape_handle "outer-shape"
-  @inner_shape_handle "inner-shape"
-  @inner_inner_shape_handle "inner-inner-shape"
+  @outer_shape_id 1
+  @inner_shape_id 2
+  @inner_inner_shape_id 3
 
-  defp add_dependency!(layers, shape, handle) do
-    {:ok, layers} = DependencyLayers.add_dependency(layers, shape, handle)
+  defp add_dependency!(layers, shape, shape_id) do
+    {:ok, layers} =
+      DependencyLayers.add_dependency(layers, shape.shape_dependencies_handles, shape_id)
+
     layers
   end
 
@@ -32,33 +34,33 @@ defmodule Electric.Shapes.DependencyLayersTest do
       outer_shape =
         Shape.new!("child", where: "parent_id IN (SELECT id FROM parent)", inspector: @inspector)
         |> Map.put(:shape_dependencies, [inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_shape_id])
 
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_shape, @inner_shape_handle)
-        |> add_dependency!(outer_shape, @outer_shape_handle)
+        |> add_dependency!(inner_shape, @inner_shape_id)
+        |> add_dependency!(outer_shape, @outer_shape_id)
 
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
-               MapSet.new([@outer_shape_handle, @inner_shape_handle])
+               MapSet.new([@outer_shape_id, @inner_shape_id])
              ) == [
-               MapSet.new([@inner_shape_handle]),
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([@inner_shape_id]),
+               MapSet.new([@outer_shape_id])
              ]
 
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([@outer_shape_id])
              ) == [
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([@outer_shape_id])
              ]
 
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
-               MapSet.new([@inner_shape_handle])
+               MapSet.new([@inner_shape_id])
              ) == [
-               MapSet.new([@inner_shape_handle])
+               MapSet.new([@inner_shape_id])
              ]
     end
 
@@ -72,7 +74,7 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_inner_shape_id])
 
       outer_shape =
         Shape.new!("comments",
@@ -81,21 +83,21 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_shape_id])
 
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_inner_shape, @inner_inner_shape_handle)
-        |> add_dependency!(inner_shape, @inner_shape_handle)
-        |> add_dependency!(outer_shape, @outer_shape_handle)
+        |> add_dependency!(inner_inner_shape, @inner_inner_shape_id)
+        |> add_dependency!(inner_shape, @inner_shape_id)
+        |> add_dependency!(outer_shape, @outer_shape_id)
 
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
-               MapSet.new([@outer_shape_handle, @inner_inner_shape_handle, @inner_shape_handle])
+               MapSet.new([@outer_shape_id, @inner_inner_shape_id, @inner_shape_id])
              ) == [
-               MapSet.new([@inner_inner_shape_handle]),
-               MapSet.new([@inner_shape_handle]),
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([@inner_inner_shape_id]),
+               MapSet.new([@inner_shape_id]),
+               MapSet.new([@outer_shape_id])
              ]
     end
 
@@ -107,8 +109,8 @@ defmodule Electric.Shapes.DependencyLayersTest do
       inner_shape_2 =
         Shape.new!("projects", select: "SELECT id FROM projects", inspector: @inspector)
 
-      inner_handle_1 = "inner-shape-1"
-      inner_handle_2 = "inner-shape-2"
+      inner_id_1 = 11
+      inner_id_2 = 12
 
       # Outer shape depends on both inner shapes
       outer_shape =
@@ -118,21 +120,21 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_shape_1, inner_shape_2])
-        |> Map.put(:shape_dependencies_handles, [inner_handle_1, inner_handle_2])
+        |> Map.put(:shape_dependencies_handles, [inner_id_1, inner_id_2])
 
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_shape_1, inner_handle_1)
-        |> add_dependency!(inner_shape_2, inner_handle_2)
-        |> add_dependency!(outer_shape, @outer_shape_handle)
+        |> add_dependency!(inner_shape_1, inner_id_1)
+        |> add_dependency!(inner_shape_2, inner_id_2)
+        |> add_dependency!(outer_shape, @outer_shape_id)
 
       # Both inner shapes should be in layer 0, outer shape should be in layer 1
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
-               MapSet.new([@outer_shape_handle, inner_handle_1, inner_handle_2])
+               MapSet.new([@outer_shape_id, inner_id_1, inner_id_2])
              ) == [
-               MapSet.new([inner_handle_1, inner_handle_2]),
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([inner_id_1, inner_id_2]),
+               MapSet.new([@outer_shape_id])
              ]
     end
 
@@ -148,13 +150,13 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_inner_shape_id])
 
       # another inner shape with no dependencies, goes to layer 0
       another_inner_shape =
         Shape.new!("parent", select: "SELECT id FROM parent", inspector: @inspector)
 
-      another_inner_handle = "another-inner-shape"
+      another_inner_id = 13
 
       # Outer shape depends on both inner and another_inner (layers 1 and 0)
       # Should go to layer 2 (1 + max(1, 0))
@@ -165,30 +167,30 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_shape, another_inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_shape_handle, another_inner_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_shape_id, another_inner_id])
 
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_inner_shape, @inner_inner_shape_handle)
-        |> add_dependency!(inner_shape, @inner_shape_handle)
-        |> add_dependency!(another_inner_shape, another_inner_handle)
-        |> add_dependency!(outer_shape, @outer_shape_handle)
+        |> add_dependency!(inner_inner_shape, @inner_inner_shape_id)
+        |> add_dependency!(inner_shape, @inner_shape_id)
+        |> add_dependency!(another_inner_shape, another_inner_id)
+        |> add_dependency!(outer_shape, @outer_shape_id)
 
-      assert DependencyLayers.get_for_handles(
+      assert DependencyLayers.get_for_shape_ids(
                layers,
                MapSet.new([
-                 @outer_shape_handle,
-                 @inner_inner_shape_handle,
-                 @inner_shape_handle,
-                 another_inner_handle
+                 @outer_shape_id,
+                 @inner_inner_shape_id,
+                 @inner_shape_id,
+                 another_inner_id
                ])
              ) == [
                # Layer 0: inner_inner and another_inner
-               MapSet.new([@inner_inner_shape_handle, another_inner_handle]),
+               MapSet.new([@inner_inner_shape_id, another_inner_id]),
                # Layer 1: inner
-               MapSet.new([@inner_shape_handle]),
+               MapSet.new([@inner_shape_id]),
                # Layer 2: outer
-               MapSet.new([@outer_shape_handle])
+               MapSet.new([@outer_shape_id])
              ]
     end
   end
@@ -200,13 +202,17 @@ defmodule Electric.Shapes.DependencyLayersTest do
       outer_shape =
         Shape.new!("child", where: "parent_id IN (SELECT id FROM parent)", inspector: @inspector)
         |> Map.put(:shape_dependencies, [inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_shape_id])
 
       # Add outer shape WITHOUT adding inner shape first
       layers = DependencyLayers.new()
 
       assert {:error, {:missing_dependencies, _missing}} =
-               DependencyLayers.add_dependency(layers, outer_shape, @outer_shape_handle)
+               DependencyLayers.add_dependency(
+                 layers,
+                 outer_shape.shape_dependencies_handles,
+                 @outer_shape_id
+               )
     end
 
     test "returns error when dependency was removed before dependent was added" do
@@ -215,17 +221,21 @@ defmodule Electric.Shapes.DependencyLayersTest do
       outer_shape =
         Shape.new!("child", where: "parent_id IN (SELECT id FROM parent)", inspector: @inspector)
         |> Map.put(:shape_dependencies, [inner_shape])
-        |> Map.put(:shape_dependencies_handles, [@inner_shape_handle])
+        |> Map.put(:shape_dependencies_handles, [@inner_shape_id])
 
       # Add inner shape, then remove it
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_shape, @inner_shape_handle)
-        |> DependencyLayers.remove_dependency(@inner_shape_handle)
+        |> add_dependency!(inner_shape, @inner_shape_id)
+        |> DependencyLayers.remove_dependency(@inner_shape_id)
 
       # Try to add dependent - should fail
       assert {:error, {:missing_dependencies, _missing}} =
-               DependencyLayers.add_dependency(layers, outer_shape, @outer_shape_handle)
+               DependencyLayers.add_dependency(
+                 layers,
+                 outer_shape.shape_dependencies_handles,
+                 @outer_shape_id
+               )
     end
 
     test "returns error when some dependencies are missing" do
@@ -235,8 +245,8 @@ defmodule Electric.Shapes.DependencyLayersTest do
       inner_shape_2 =
         Shape.new!("projects", select: "SELECT id FROM projects", inspector: @inspector)
 
-      inner_handle_1 = "inner-shape-1"
-      inner_handle_2 = "inner-shape-2"
+      inner_id_1 = 11
+      inner_id_2 = 12
 
       # Outer shape depends on both inner shapes
       outer_shape =
@@ -246,15 +256,19 @@ defmodule Electric.Shapes.DependencyLayersTest do
           inspector: @inspector
         )
         |> Map.put(:shape_dependencies, [inner_shape_1, inner_shape_2])
-        |> Map.put(:shape_dependencies_handles, [inner_handle_1, inner_handle_2])
+        |> Map.put(:shape_dependencies_handles, [inner_id_1, inner_id_2])
 
       # Only add inner_shape_1, not inner_shape_2
       layers =
         DependencyLayers.new()
-        |> add_dependency!(inner_shape_1, inner_handle_1)
+        |> add_dependency!(inner_shape_1, inner_id_1)
 
       assert {:error, {:missing_dependencies, _missing}} =
-               DependencyLayers.add_dependency(layers, outer_shape, @outer_shape_handle)
+               DependencyLayers.add_dependency(
+                 layers,
+                 outer_shape.shape_dependencies_handles,
+                 @outer_shape_id
+               )
     end
 
     test "adding shape without dependencies returns ok tuple" do
@@ -262,9 +276,12 @@ defmodule Electric.Shapes.DependencyLayersTest do
 
       assert {:ok, layers} =
                DependencyLayers.new()
-               |> DependencyLayers.add_dependency(shape, @inner_shape_handle)
+               |> DependencyLayers.add_dependency(
+                 shape.shape_dependencies_handles,
+                 @inner_shape_id
+               )
 
-      assert layers == [MapSet.new([@inner_shape_handle])]
+      assert layers == [MapSet.new([@inner_shape_id])]
     end
   end
 end

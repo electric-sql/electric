@@ -30,7 +30,7 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
   end
 
   defp execute_effect(%SubscribeShape{action: action}, %State{} = state) do
-    case ShapeLogCollector.add_shape(state.stack_id, state.shape_handle, state.shape, action) do
+    case ShapeLogCollector.add_shape(state.stack_id, state.shape_id, state.shape, action) do
       :ok ->
         {:ok, state}
 

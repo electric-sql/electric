@@ -1,8 +1,9 @@
 defmodule Electric.Shapes.ConsumerRegistry do
   alias Electric.ShapeCache
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Telemetry.OpenTelemetry
 
-  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+  import Electric, only: [is_stack_id: 1]
 
   require Logger
 
@@ -11,7 +12,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
-  @type shape_handle() :: Electric.shape_handle()
+  @type shape_id() :: Electric.shape_id()
   @type t() :: %__MODULE__{
           table: :ets.table(),
           stack_id: stack_id()
@@ -19,13 +20,13 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @consumer_suspend_reason Electric.ShapeCache.ShapeCleaner.consumer_suspend_reason()
 
-  def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
-    {:via, __MODULE__, {stack_id, shape_handle}}
+  def name(stack_id, shape_id) when is_stack_id(stack_id) and is_integer(shape_id) do
+    {:via, __MODULE__, {stack_id, shape_id}}
   end
 
-  def register_name({stack_id, shape_handle}, pid)
-      when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
-    if register_consumer!(pid, shape_handle, ets_name(stack_id)), do: :yes, else: :no
+  def register_name({stack_id, shape_id}, pid)
+      when is_stack_id(stack_id) and is_integer(shape_id) do
+    if register_consumer!(pid, shape_id, ets_name(stack_id)), do: :yes, else: :no
   end
 
   # This is intentionally a no-op. The ETS entry is removed explicitly via
@@ -43,17 +44,17 @@ defmodule Electric.Shapes.ConsumerRegistry do
   # we keep the entry in the registry in the meantime to avoid accidentally
   # restarting the consumer for it to process new transactions when the shape
   # is already on the way out.
-  def unregister_name({_stack_id, _shape_handle}) do
+  def unregister_name({_stack_id, _shape_id}) do
     :ok
   end
 
-  def whereis_name({stack_id, shape_handle}) do
-    whereis(stack_id, shape_handle) || :undefined
+  def whereis_name({stack_id, shape_id}) do
+    whereis(stack_id, shape_id) || :undefined
   end
 
-  @spec whereis(stack_ref(), shape_handle()) :: pid() | nil
-  def whereis(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
-    consumer_pid(shape_handle, ets_name(stack_ref))
+  @spec whereis(stack_ref(), shape_id()) :: pid() | nil
+  def whereis(stack_ref, shape_id) when is_integer(shape_id) do
+    consumer_pid(shape_id, ets_name(stack_ref))
   end
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
@@ -66,45 +67,51 @@ defmodule Electric.Shapes.ConsumerRegistry do
     ArgumentError -> 0
   end
 
-  @spec register_consumer(pid(), shape_handle(), stack_id()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_handle, stack_id) when is_binary(stack_id) do
-    register_consumer(pid, shape_handle, ets_name(stack_id))
+  @spec register_consumer(pid(), shape_id(), stack_id()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_id, stack_id) when is_binary(stack_id) do
+    register_consumer(pid, shape_id, ets_name(stack_id))
   end
 
-  @spec register_consumer(pid(), shape_handle(), t()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_handle, %__MODULE__{table: table}) do
-    register_consumer(pid, shape_handle, table)
+  @spec register_consumer(pid(), shape_id(), t()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_id, %__MODULE__{table: table}) do
+    register_consumer(pid, shape_id, table)
   end
 
-  @spec register_consumer(pid(), shape_handle(), :ets.table()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_handle, table) when is_atom(table) or is_reference(table) do
-    register_consumer!(pid, shape_handle, table)
+  @spec register_consumer(pid(), shape_id(), :ets.table()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_id, table) when is_atom(table) or is_reference(table) do
+    register_consumer!(pid, shape_id, table)
     :ok
   end
 
-  defp register_consumer!(pid, shape_handle, table)
+  defp register_consumer!(pid, shape_id, table)
        when is_pid(pid) and (is_atom(table) or is_reference(table)) do
-    :ets.insert_new(table, [{shape_handle, pid}])
+    :ets.insert_new(table, [{shape_id, pid}])
   end
 
-  @spec publish(%{shape_handle() => term()}, t()) :: %{shape_handle() => term()}
-  def publish(events_by_handle, _registry_state) when events_by_handle == %{}, do: %{}
+  @spec publish(%{shape_id() => term()}, t()) :: %{shape_id() => term()}
+  def publish(events_by_id, _registry_state) when events_by_id == %{}, do: %{}
 
-  def publish(events_by_handle, registry_state) do
-    {suspended, undeliverable} = resolve_and_broadcast(events_by_handle, registry_state)
+  def publish(events_by_id, registry_state) do
+    {suspended, undeliverable} = resolve_and_broadcast(events_by_id, registry_state)
 
     # Retry suspended consumers once with fresh consumer processes.
     # We don't expect new suspensions here since we're targeting previously
     # suspended consumers explicitly.
-    Enum.each(suspended, fn {handle, _event} -> remove_consumer(handle, registry_state) end)
+    Enum.each(suspended, fn {id, _event} -> remove_consumer(id, registry_state) end)
     {still_suspended, retry_undeliverable} = resolve_and_broadcast(suspended, registry_state)
 
     removed_shapes =
       if still_suspended != %{} do
-        handles = Map.keys(still_suspended)
-        Logger.warning(["Consumers still suspended after retry: ", inspect(handles)])
+        ids = Map.keys(still_suspended)
+        Logger.warning(["Consumers still suspended after retry: ", inspect(ids)])
+
+        handles =
+          for id <- ids,
+              {:ok, handle} <- [ShapeStatus.handle_for_id(registry_state.stack_id, id)],
+              do: handle
+
         Electric.ShapeCache.ShapeCleaner.remove_shapes(registry_state.stack_id, handles)
-        Map.new(handles, &{&1, {:publish, :shape_removed}})
+        Map.new(ids, &{&1, {:publish, :shape_removed}})
       else
         %{}
       end
@@ -114,15 +121,15 @@ defmodule Electric.Shapes.ConsumerRegistry do
     |> Map.merge(removed_shapes)
   end
 
-  defp resolve_and_broadcast(events_by_handle, _registry_state)
-       when events_by_handle == %{}, do: {%{}, %{}}
+  defp resolve_and_broadcast(events_by_id, _registry_state)
+       when events_by_id == %{}, do: {%{}, %{}}
 
-  defp resolve_and_broadcast(events_by_handle, %{table: table} = registry_state) do
+  defp resolve_and_broadcast(events_by_id, %{table: table} = registry_state) do
     {to_broadcast, undeliverable} =
-      Enum.reduce(events_by_handle, {[], %{}}, fn {handle, event}, {acc, undeliverable} ->
-        case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
-          nil -> {acc, Map.put(undeliverable, handle, {:publish, :no_shape})}
-          pid -> {[{handle, event, pid} | acc], undeliverable}
+      Enum.reduce(events_by_id, {[], %{}}, fn {id, event}, {acc, undeliverable} ->
+        case consumer_pid(id, table) || start_consumer!(id, registry_state) do
+          nil -> {acc, Map.put(undeliverable, id, {:publish, :no_shape})}
+          pid -> {[{id, event, pid} | acc], undeliverable}
         end
       end)
 
@@ -130,19 +137,19 @@ defmodule Electric.Shapes.ConsumerRegistry do
     {suspended, Map.merge(undeliverable, crashed_or_missing)}
   end
 
-  @spec remove_consumer(shape_handle(), t()) :: :ok
-  def remove_consumer(shape_handle, %__MODULE__{table: table}) do
-    do_remove_consumer(shape_handle, table)
+  @spec remove_consumer(shape_id(), t()) :: :ok
+  def remove_consumer(shape_id, %__MODULE__{table: table}) do
+    do_remove_consumer(shape_id, table)
   end
 
-  @spec remove_consumer(shape_handle(), stack_id()) :: :ok
-  def remove_consumer(shape_handle, stack_id) when is_stack_id(stack_id) do
-    do_remove_consumer(shape_handle, ets_name(stack_id))
+  @spec remove_consumer(shape_id(), stack_id()) :: :ok
+  def remove_consumer(shape_id, stack_id) when is_stack_id(stack_id) do
+    do_remove_consumer(shape_id, ets_name(stack_id))
   end
 
-  @spec do_remove_consumer(shape_handle(), :ets.table()) :: :ok
-  defp do_remove_consumer(shape_handle, table) when is_atom(table) or is_reference(table) do
-    :ets.delete(table, shape_handle)
+  @spec do_remove_consumer(shape_id(), :ets.table()) :: :ok
+  defp do_remove_consumer(shape_id, table) when is_atom(table) or is_reference(table) do
+    :ets.delete(table, shape_id)
     :ok
   end
 
@@ -151,31 +158,31 @@ defmodule Electric.Shapes.ConsumerRegistry do
   for their responses before returning.
 
   Returns a tuple `{suspended, crashed}` where:
-  - `suspended` is a map of `shape_handle => event` for handles whose consumers
+  - `suspended` is a map of `shape_id => event` for ids whose consumers
     suspended (these should be retried by the caller)
-  - `crashed` is a map of `shape_handle => exit_reason` for handles whose consumers
+  - `crashed` is a map of `shape_id => exit_reason` for ids whose consumers
     crashed (these should NOT be retried)
 
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([{shape_handle(), term(), pid() | nil}]) ::
-          {%{shape_handle() => term()}, %{shape_handle() => term()}}
-  def broadcast(handle_event_pids) do
+  @spec broadcast([{shape_id(), term(), pid() | nil}]) ::
+          {%{shape_id() => term()}, %{shape_id() => term()}}
+  def broadcast(id_event_pids) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
     #
     # Filter out nil pids to handle the race condition where a shape is removed
     # from ShapeStatus but events still arrive for it (EventRouter removal is async).
-    # When start_consumer_for_handle returns {:error, :no_shape}, the pid is nil.
-    handle_event_pids
-    |> Enum.reject(fn {_handle, _event, pid} -> is_nil(pid) end)
-    |> Enum.map(fn {handle, event, pid} ->
+    # When start_consumer_for_id returns {:error, :no_shape}, the pid is nil.
+    id_event_pids
+    |> Enum.reject(fn {_id, _event, pid} -> is_nil(pid) end)
+    |> Enum.map(fn {id, event, pid} ->
       ref = Process.monitor(pid)
       send(pid, {:"$gen_call", {self(), ref}, event})
-      {handle, event, ref}
+      {id, event, ref}
     end)
-    |> Enum.reduce({%{}, %{}}, fn {handle, event, ref}, {suspended, crashed} ->
+    |> Enum.reduce({%{}, %{}}, fn {id, event, ref}, {suspended, crashed} ->
       receive do
         {^ref, _reply} ->
           Process.demonitor(ref, [:flush])
@@ -184,11 +191,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
         {:DOWN, ^ref, _, _, @consumer_suspend_reason} ->
           # Consumer is in the act of suspending as the txn arrives.
           # Return for retry (publish/2 will start a new consumer instance).
-          {Map.put(suspended, handle, event), crashed}
+          {Map.put(suspended, id, event), crashed}
 
         {:DOWN, ^ref, _, _, reason} ->
           # Consumer crashed — do not retry, return the crash reason.
-          {suspended, Map.put(crashed, handle, reason)}
+          {suspended, Map.put(crashed, id, reason)}
       end
     end)
     |> tap(fn
@@ -198,7 +205,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
       {suspended, crashed} ->
         if suspended != %{} do
           Logger.debug(fn ->
-            ["Re-trying suspended shape handles ", inspect(Map.keys(suspended))]
+            ["Re-trying suspended shape ids ", inspect(Map.keys(suspended))]
           end)
         end
 
@@ -243,7 +250,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     Electric.StackConfig.put(stack_id, :shape_enable_suspend?, true)
 
     :ets.foldl(
-      fn {_shape_handle, pid}, n ->
+      fn {_shape_id, pid}, n ->
         if Process.alive?(pid),
           do: send(pid, {:configure_suspend, hibernate_after, suspend_after, jitter_period})
 
@@ -254,23 +261,28 @@ defmodule Electric.Shapes.ConsumerRegistry do
     )
   end
 
-  defp consumer_pid(handle, table) do
-    :ets.lookup_element(table, handle, 2, nil)
+  defp consumer_pid(id, table) do
+    :ets.lookup_element(table, id, 2, nil)
   rescue
     ArgumentError -> nil
   end
 
-  defp start_consumer!(handle, %__MODULE__{stack_id: stack_id} = state) do
+  defp start_consumer!(id, %__MODULE__{stack_id: stack_id} = state) do
     OpenTelemetry.with_span(
       "consumer_registry.start_consumer",
-      ["shape.handle": handle],
+      ["shape.handle": ShapeStatus.shape_handle_for_log(stack_id, id), "shape.id": id],
       state.stack_id,
       fn ->
         otel_ctx = OpenTelemetry.get_current_context()
 
-        case ShapeCache.start_consumer_for_handle(handle, stack_id, otel_ctx: otel_ctx) do
+        case ShapeCache.start_consumer_for_id(id, stack_id, otel_ctx: otel_ctx) do
           {:ok, pid} ->
-            Logger.debug(fn -> ["Started consumer for existing handle ", handle] end)
+            Logger.debug(fn ->
+              [
+                "Started consumer for existing handle ",
+                ShapeStatus.shape_handle_for_log(stack_id, id)
+              ]
+            end)
 
             pid
 
@@ -280,7 +292,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
           {:error, reason} ->
             raise RuntimeError,
               message:
-                "Stack #{stack_id} unable to start consumer process for shape handle #{handle}: #{inspect(reason)}"
+                "Stack #{stack_id} unable to start consumer process for shape id #{id} (#{ShapeStatus.shape_handle_for_log(stack_id, id)}): #{inspect(reason)}"
         end
       end
     )

@@ -18,8 +18,19 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     :with_stack_id_from_test,
     :with_async_deleter,
     :with_pure_file_storage,
+    :with_shape_status,
     :with_consumer_registry
   ]
+
+  # The consumer registers (and is looked up) by its numeric routing id. These
+  # tests stand in a fake consumer process, so we seed a handle->id mapping and
+  # register under that id.
+  defp register_fake_consumer(pid, shape_handle, stack_id) do
+    shape_id = :erlang.phash2(shape_handle) + 1
+    Electric.ShapeCache.ShapeStatus.put_handle_id(stack_id, shape_handle, shape_id)
+    ConsumerRegistry.register_consumer(pid, shape_id, stack_id)
+    shape_id
+  end
 
   @shape %Shape{
     root_table: {"public", "items"},
@@ -29,7 +40,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   }
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
-    ConsumerRegistry.register_consumer(self(), "test", stack_id)
+    register_fake_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
     writer = Storage.for_shape("test", storage) |> Storage.init_writer!(@shape)
@@ -1341,7 +1352,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       Storage.hibernate(writer)
 
-      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+      register_fake_consumer(self(), shape_handle, ctx.stack_id)
 
       {:ok, _pid} =
         Materializer.start_link(%{
@@ -1428,7 +1439,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         end)
 
       # Register it as the consumer
-      ConsumerRegistry.register_consumer(dying_consumer, dying_handle, stack_id)
+      register_fake_consumer(dying_consumer, dying_handle, stack_id)
 
       {:ok, pid} =
         Materializer.start_link(%{
@@ -1476,7 +1487,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
           end
         end)
 
-      ConsumerRegistry.register_consumer(dying_consumer, dying_handle, stack_id)
+      register_fake_consumer(dying_consumer, dying_handle, stack_id)
 
       {:ok, pid} =
         Materializer.start_link(%{

@@ -979,7 +979,7 @@ defmodule Electric.ShapeCacheTest do
 
       task = Task.async(ShapeCache, :await_snapshot_start, [shape_handle, ctx.stack_id])
 
-      consumer_pid = GenServer.whereis(Electric.Shapes.Consumer.name(ctx.stack_id, shape_handle))
+      consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
       await_for_consumer_to_have_waiters(consumer_pid)
 
       assert_receive {:waiting_point, ref, pid}
@@ -1323,10 +1323,15 @@ defmodule Electric.ShapeCacheTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      # Before restart: shape should have positions in the SubqueryIndex
+      # Before restart: shape should have positions in the SubqueryIndex. The
+      # index is keyed by the routing id (set by Filter.add_shape).
       index_before = SubqueryIndex.for_stack(ctx.stack_id)
       assert index_before != nil
-      assert SubqueryIndex.has_positions?(index_before, shape_handle)
+
+      {:ok, shape_id_before} =
+        Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
+
+      assert SubqueryIndex.has_positions?(index_before, shape_id_before)
 
       restart_shape_cache(ctx)
 
@@ -1339,7 +1344,13 @@ defmodule Electric.ShapeCacheTest do
       assert index_after != nil
 
       assert wait_until(200, fn ->
-               SubqueryIndex.has_positions?(index_after, shape_handle)
+               case Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle) do
+                 {:ok, shape_id_after} ->
+                   SubqueryIndex.has_positions?(index_after, shape_id_after)
+
+                 :error ->
+                   false
+               end
              end)
     end
 
@@ -1450,12 +1461,16 @@ defmodule Electric.ShapeCacheTest do
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 
-      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
-      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle)
+      # Resolve ids after restart, since they're re-minted from the shape db.
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, shape_handle)
+      {:ok, dep_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, dep_handle)
+
+      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_id)
+      refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_id)
 
       refute GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
 
-      assert {:ok, _pid1} = ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
+      assert {:ok, _pid1} = ShapeCache.start_consumer_for_id(shape_id, stack_id)
 
       # Materializer should be started
       assert Process.alive?(
@@ -1501,11 +1516,13 @@ defmodule Electric.ShapeCacheTest do
     |> Enum.map(fn handle ->
       Task.async(fn ->
         Enum.reduce_while(1..1000, [], fn _, _ ->
-          if _pid = Shapes.ConsumerRegistry.whereis(stack_id, handle) do
+          with {:ok, id} <- Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, handle),
+               pid when is_pid(pid) <- Shapes.ConsumerRegistry.whereis(stack_id, id) do
             {:halt, []}
           else
-            Process.sleep(1)
-            {:cont, []}
+            _ ->
+              Process.sleep(1)
+              {:cont, []}
           end
         end)
       end)

@@ -40,6 +40,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   def handle_continue(:start_snapshot, state) do
     %{
       shape_handle: shape_handle,
+      shape_id: shape_id,
       shape: shape,
       stack_id: stack_id,
       storage: storage
@@ -47,8 +48,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     if not is_nil(state.otel_ctx), do: OpenTelemetry.set_current_context(state.otel_ctx)
 
+    # Look the consumer up by its numeric routing id directly via the consumer
+    # registry. This intentionally avoids resolving through ShapeStatus so we
+    # can still reach the consumer to report a snapshot failure even after the
+    # shape's handle->id mapping has been removed (e.g. by a concurrent
+    # publication-driven cleanup).
     result =
-      case Shapes.Consumer.whereis(stack_id, shape_handle) do
+      case Shapes.ConsumerRegistry.whereis(stack_id, shape_id) do
         consumer when is_pid(consumer) ->
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",

@@ -245,13 +245,13 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec start_consumer_for_handle(shape_handle(), stack_id(), opts :: Access.t()) ::
+  @spec start_consumer_for_id(Electric.shape_id(), stack_id(), opts :: Access.t()) ::
           {:ok, pid()} | {:error, :no_shape}
-  def start_consumer_for_handle(shape_handle, stack_id, opts \\ [])
-      when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
+  def start_consumer_for_id(shape_id, stack_id, opts \\ [])
+      when is_integer(shape_id) and is_stack_id(stack_id) do
     GenServer.call(
       name(stack_id),
-      {:start_consumer_for_handle, shape_handle, opts[:otel_ctx]},
+      {:start_consumer_for_id, shape_id, opts[:otel_ctx]},
       @call_timeout
     )
   end
@@ -329,27 +329,27 @@ defmodule Electric.ShapeCache do
     {:reply, ShapeStatus.has_shape_handle?(state.stack_id, shape_handle), state}
   end
 
-  def handle_call({:start_consumer_for_handle, shape_handle, otel_ctx}, _from, state) do
+  def handle_call({:start_consumer_for_id, shape_id, otel_ctx}, _from, state) do
     # This is racy: it's possible for a shape to have been deleted while the
     # ShapeLogCollector is processing a transaction that includes it
-    # In this case fetch_shape_by_handle returns an error. ConsumerRegistry
-    # basically ignores the {:error, :no_shape} result - excluding the shape handle
+    # In this case fetch_shape_by_id returns an error. ConsumerRegistry
+    # basically ignores the {:error, :no_shape} result - excluding the shape
     # from the broadcast.
     if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
 
-    case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
-      {:ok, shape} ->
-        {
-          :reply,
-          restore_shape_and_dependencies(shape_handle, shape, %{
-            stack_id: state.stack_id,
-            action: :restore,
-            otel_ctx: otel_ctx,
-            feature_flags: state.feature_flags
-          }),
-          state
-        }
-
+    with {:ok, shape} <- ShapeStatus.fetch_shape_by_id(state.stack_id, shape_id),
+         {:ok, shape_handle} <- ShapeStatus.handle_for_id(state.stack_id, shape_id) do
+      {
+        :reply,
+        restore_shape_and_dependencies(shape_handle, shape, %{
+          stack_id: state.stack_id,
+          action: :restore,
+          otel_ctx: otel_ctx,
+          feature_flags: state.feature_flags
+        }),
+        state
+      }
+    else
       :error ->
         {:reply, {:error, :no_shape}, state}
     end
@@ -484,22 +484,25 @@ defmodule Electric.ShapeCache do
     |> build_shape_dependencies(true, MapSet.new())
     |> elem(0)
     |> Enum.reduce_while({:ok, %{}}, fn {handle, shape, start_shape_opts}, {:ok, acc} ->
-      case Electric.Shapes.ConsumerRegistry.whereis(opts.stack_id, handle) do
-        nil ->
-          with {:ok, shape_id} <- ShapeStatus.id_for_handle(opts.stack_id, handle),
-               {:ok, pid} <-
-                 start_shape(handle, shape_id, shape, Map.merge(opts, start_shape_opts)) do
-            {:cont, {:ok, Map.put(acc, handle, pid)}}
-          else
-            # Either the shape's id has vanished from ShapeStatus (a deletion
-            # race) or starting the consumer failed; in both cases we can't
-            # bring this handle up, so treat it as a start failure.
-            _ ->
-              {:halt, {:error, handle}}
-          end
+      with {:ok, shape_id} <- ShapeStatus.id_for_handle(opts.stack_id, handle) do
+        case Electric.Shapes.ConsumerRegistry.whereis(opts.stack_id, shape_id) do
+          nil ->
+            case start_shape(handle, shape_id, shape, Map.merge(opts, start_shape_opts)) do
+              {:ok, pid} ->
+                {:cont, {:ok, Map.put(acc, handle, pid)}}
 
-        pid when is_pid(pid) ->
-          {:cont, {:ok, Map.put(acc, handle, pid)}}
+              _ ->
+                {:halt, {:error, handle}}
+            end
+
+          pid when is_pid(pid) ->
+            {:cont, {:ok, Map.put(acc, handle, pid)}}
+        end
+      else
+        # The shape's id has vanished from ShapeStatus (a deletion race); we
+        # can't bring this handle up, so treat it as a start failure.
+        :error ->
+          {:halt, {:error, handle}}
       end
     end)
     |> case do

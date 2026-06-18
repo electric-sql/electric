@@ -201,6 +201,10 @@ defmodule Electric.Shapes.ConsumerTest do
         for {{shape_handle, shape}, index} <- Enum.with_index(ctx.shapes) do
           %{latest_offset: _offset} = shape_status(shape_handle, ctx)
 
+          # The consumer registers under its numeric id, so seed the handle->id
+          # mapping that the handle-based lookup helpers resolve through.
+          Electric.ShapeCache.ShapeStatus.put_handle_id(ctx.stack_id, shape_handle, 100 + index)
+
           {:ok, consumer} =
             start_supervised(
               {Shapes.Consumer,
@@ -1752,7 +1756,8 @@ defmodule Electric.Shapes.ConsumerTest do
       assert storage_meta(shape_meta, :shape_handle) == shape_handle
       assert storage_meta(shape_meta, :last_persisted_offset) == offset1
 
-      assert :ok == Consumer.stop(ctx.stack_id, shape_handle, "reason")
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
+      assert :ok == Consumer.stop(ctx.stack_id, shape_id, "reason")
 
       assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
 
@@ -1901,6 +1906,8 @@ defmodule Electric.Shapes.ConsumerTest do
       # the global flush offset from advancing.
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
 
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, shape_handle)
+
       :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
 
       ref = Shapes.Consumer.register_for_changes(stack_id, shape_handle)
@@ -1980,7 +1987,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # The deferred flush notification is sent after the commit. The exact
       # offset depends on alignment with txn_offset_mapping, so we only
       # verify that notify_flushed was called for this shape.
-      assert [{ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_handle, _offset]}] =
+      assert [{ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_id, _offset]}] =
                Support.Trace.collect_traced_calls()
 
       # Flush boundary advances.
@@ -2005,6 +2012,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # comes from the buffer-size trigger, making the test deterministic.
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, shape_handle)
       :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
 
       ref = Shapes.Consumer.register_for_changes(stack_id, shape_handle)
@@ -2084,7 +2092,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert [
                {ShapeLogCollector, :notify_flushed,
-                [^stack_id, ^shape_handle, ^commit_last_log_offset]}
+                [^stack_id, ^shape_id, ^commit_last_log_offset]}
              ] = Support.Trace.collect_traced_calls()
 
       # Flush boundary advances correctly.
@@ -2097,6 +2105,10 @@ defmodule Electric.Shapes.ConsumerTest do
          ctx do
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape2, ctx.stack_id)
+
+      {:ok, shape_id2} =
+        Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle2)
+
       ref1 = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle1)
       ref2 = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle2)
 
@@ -2169,7 +2181,7 @@ defmodule Electric.Shapes.ConsumerTest do
         end)
 
       assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{#{inspect(shape_handle2)} => :noproc}'
+               ~s'Consumer processes crashed or missing during broadcast: %{#{shape_id2} => :noproc}'
 
       assert_receive {^ref1, :new_changes, _}, @receive_timeout
       assert_receive {:flush_boundary_updated, 20}, @receive_timeout
@@ -2483,14 +2495,17 @@ defmodule Electric.Shapes.ConsumerTest do
       {shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
+
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       # The consumer should have seeded the SubqueryIndex during initialization
       index = SubqueryIndex.for_stack(ctx.stack_id)
       assert index != nil
 
-      # The shape should be registered with positions (by Filter.add_shape)
-      assert SubqueryIndex.has_positions?(index, shape_handle)
+      # The shape is registered with positions by Filter.add_shape, which is keyed
+      # by the routing id.
+      assert SubqueryIndex.has_positions?(index, shape_id)
 
       # The shape should be marked ready (no longer in fallback) once
       # the consumer has seeded the index. After await_snapshot_start returns
@@ -2501,11 +2516,11 @@ defmodule Electric.Shapes.ConsumerTest do
       # index is also modified by the Filter (which runs in the
       # ShapeLogCollector process). Check that the shape has positions
       # and that membership entries are correct (empty views for a fresh shape).
-      positions = SubqueryIndex.positions_for_shape(index, shape_handle)
+      positions = SubqueryIndex.positions_for_shape(index, shape_id)
       assert length(positions) > 0
 
       # Verify the index is accessible and has retained node registrations.
-      assert positions == SubqueryIndex.positions_for_shape(index, shape_handle)
+      assert positions == SubqueryIndex.positions_for_shape(index, shape_id)
     end
 
     test "consumer steady dependency move_in adds value to the subquery index", ctx do
@@ -2595,14 +2610,15 @@ defmodule Electric.Shapes.ConsumerTest do
       {shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
+
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       index = SubqueryIndex.for_stack(ctx.stack_id)
-      assert SubqueryIndex.has_positions?(index, shape_handle)
+      assert SubqueryIndex.has_positions?(index, shape_id)
 
       # Monitor the consumer so we know when cleanup finishes
-      consumer_name = Shapes.Consumer.name(ctx.stack_id, shape_handle)
-      consumer_pid = GenServer.whereis(consumer_name)
+      consumer_pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
       ref = Process.monitor(consumer_pid)
 
       expect_shape_status(remove_shape: fn _, ^shape_handle -> :ok end)
@@ -2616,7 +2632,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Process.sleep(100)
 
       # After cleanup, the shape's rows should be removed from the index
-      refute SubqueryIndex.has_positions?(index, shape_handle)
+      refute SubqueryIndex.has_positions?(index, shape_id)
     end
   end
 
@@ -2627,12 +2643,14 @@ defmodule Electric.Shapes.ConsumerTest do
   end
 
   defp assert_consumer_shutdown(stack_id, shape_handle, fun, timeout \\ 5000) do
+    pids =
+      [
+        Shapes.Consumer.whereis(stack_id, shape_handle),
+        GenServer.whereis(Shapes.Consumer.Snapshotter.name(stack_id, shape_handle))
+      ]
+
     monitors =
-      for name <- [
-            Shapes.Consumer.name(stack_id, shape_handle),
-            Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
-          ],
-          pid = GenServer.whereis(name) do
+      for pid when is_pid(pid) <- pids do
         ref = Process.monitor(pid)
         {ref, pid}
       end
@@ -2679,6 +2697,8 @@ defmodule Electric.Shapes.ConsumerTest do
     @tag process_spawn_opts: %{consumer: [fullsweep_after: 4, priority: :high]}
     test "spawn_opts are correctly passed to consumer process", ctx do
       support_test_storage_wrap(ctx, @shape_handle1, @shape1)
+
+      Electric.ShapeCache.ShapeStatus.put_handle_id(ctx.stack_id, @shape_handle1, 42)
 
       {:ok, consumer} =
         start_supervised(
