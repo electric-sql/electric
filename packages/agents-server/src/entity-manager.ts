@@ -81,6 +81,18 @@ type SpawnPersistResult = [
   PromiseSettledResult<number>,
 ]
 type SpawnPersistJob = () => Promise<SpawnPersistResult>
+
+function isRunFinishedWakeEvent(event: Record<string, unknown>): boolean {
+  if (event.type !== `run`) return false
+  const value = event.value as Record<string, unknown> | undefined
+  const headers = event.headers as Record<string, unknown> | undefined
+  const status = value?.status as string | undefined
+  const operation = headers?.operation as string | undefined
+  return (
+    operation === `update` && (status === `completed` || status === `failed`)
+  )
+}
+
 type WriteTokenValidator = (
   entity: ElectricAgentsEntity,
   token: string
@@ -3292,11 +3304,11 @@ export class EntityManager {
   ): Promise<void> {
     return await withSpan(`electric_agents.evaluateWakes`, async (span) => {
       span.setAttribute(ATTR.WAKE_SOURCE, sourceUrl)
-      const results = this.wakeRegistry.evaluate(
-        sourceUrl,
-        event,
-        this.tenantId
-      )
+      let results = this.wakeRegistry.evaluate(sourceUrl, event, this.tenantId)
+      if (results.length === 0 && isRunFinishedWakeEvent(event)) {
+        await this.wakeRegistry.loadRegistrations()
+        results = this.wakeRegistry.evaluate(sourceUrl, event, this.tenantId)
+      }
       span.setAttribute(`electric_agents.wake.subscriber_count`, results.length)
       const settled = await Promise.allSettled(
         results.map((result) => this.deliverWakeResult(result))

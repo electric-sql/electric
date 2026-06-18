@@ -694,6 +694,45 @@ describe(`Wake Registry`, () => {
     ).toBe(2)
   })
 
+  it(`reloads wake registrations and retries runFinished evaluation on cache miss`, async () => {
+    const wakeResult = {
+      tenantId: `default`,
+      subscriberUrl: `/parent/p1`,
+      registrationDbId: 12,
+      sourceEventKey: `run-1`,
+      wakeMessage: {
+        source: `/child/c1`,
+        timeout: false,
+        changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+      },
+      runFinishedStatus: `completed`,
+    }
+    const wakeRegistry = {
+      evaluate: vi
+        .fn()
+        .mockReturnValueOnce([])
+        .mockReturnValueOnce([wakeResult]),
+      loadRegistrations: vi.fn().mockResolvedValue(undefined),
+    }
+    const deliverWakeResult = vi.fn().mockResolvedValue(undefined)
+    const manager = {
+      tenantId: `default`,
+      wakeRegistry,
+      deliverWakeResult,
+    } as any
+
+    await EntityManager.prototype.evaluateWakes.call(manager, `/child/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(wakeRegistry.loadRegistrations).toHaveBeenCalledTimes(1)
+    expect(wakeRegistry.evaluate).toHaveBeenCalledTimes(2)
+    expect(deliverWakeResult).toHaveBeenCalledWith(wakeResult)
+  })
+
   it(`deliverWakeResult keys fanout by registrationDbId and sourceEventKey`, async () => {
     const appendIdempotent = vi.fn().mockResolvedValue(undefined)
     const manager = {
@@ -967,6 +1006,77 @@ describe(`Wake Registry Integration`, () => {
     )
     expect(subRes.status).toBeLessThan(300)
   }
+
+  it(`delivers concurrent runFinished wakes from multiple children to the same parent`, async () => {
+    const ts = Date.now()
+    const typeName = `wakemulti${ts}`
+
+    const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: typeName,
+        description: `multiple child runFinished wake test`,
+      }),
+    })
+    expect(typeRes.status).toBe(201)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
+    expect(parentRes.status).toBe(201)
+    const parent = (await parentRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const manager = getElectricAgentsManager()
+    const children: Array<{ url: string; streams: { main: string } }> = []
+    for (const childName of [`a`, `b`, `c`]) {
+      const childRes = await fetch(
+        `${baseUrl}/_electric/entities/${typeName}/child-${childName}-${ts}`,
+        {
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ parent: parent.url }),
+        }
+      )
+      expect(childRes.status).toBe(201)
+      const child = (await childRes.json()) as {
+        url: string
+        streams: { main: string }
+      }
+      children.push(child)
+      await manager.wakeRegistry.register({
+        subscriberUrl: parent.url,
+        sourceUrl: child.url,
+        condition: `runFinished`,
+        oneShot: false,
+      })
+    }
+
+    await Promise.all(
+      children.map((child, index) =>
+        manager.evaluateWakes(child.url, {
+          type: `run`,
+          key: `run-${index}`,
+          value: { status: `completed`, result: `done-${index}` },
+          headers: { operation: `update` },
+        })
+      )
+    )
+
+    const wakeEvents = await waitForWakeEvents(parent.streams.main, 3)
+    expect(wakeEvents).toHaveLength(3)
+    expect(new Set(wakeEvents.map((event) => event.value?.source))).toEqual(
+      new Set(children.map((child) => child.url))
+    )
+  }, 15_000)
 
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
     const ts = Date.now()
