@@ -566,11 +566,11 @@ function AgentRunView({
   isStreaming: boolean
 }): React.ReactElement {
   const { data: items = [] } = useLiveQuery(
-    (q) => (run.items ? q.from({ item: run.items as any }) : undefined),
+    (q) => (run.items ? q.from({ item: run.items }) : undefined),
     [run.items]
   )
   const { data: errors = [] } = useLiveQuery(
-    (q) => (run.errors ? q.from({ error: run.errors as any }) : undefined),
+    (q) => (run.errors ? q.from({ error: run.errors }) : undefined),
     [run.errors]
   )
 
@@ -687,7 +687,7 @@ export function ObserveView({
     [timelineRows]
   )
   const { data: entityStoppedRows = [] } = useLiveQuery(
-    (q) => q.from({ stopped: db.collections.entityStopped as any }),
+    (q) => q.from({ stopped: db.collections.entityStopped }),
     [db.collections.entityStopped]
   )
   const closed = entityStoppedRows.length > 0

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { createCollection, localOnlyCollectionOptions } from '@tanstack/db'
+import type { Collection, InitialQueryBuilder } from '@tanstack/db'
 import {
   AgentTextView,
   ObserveView,
@@ -14,9 +15,17 @@ import {
   formatTime,
   truncate,
 } from '../src/observe-ui'
+import type { EntityStreamDB } from '../src/entity-stream-db'
+
+type TimelineTestRow = { key: string }
+type EntityStoppedTestRow = {
+  key: string
+  timestamp: string
+  reason?: string
+}
 
 const runtimeMocks = vi.hoisted(() => ({
-  timelineRows: undefined as any,
+  timelineRows: undefined as Collection<TimelineTestRow, string> | undefined,
 }))
 
 vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
@@ -24,8 +33,8 @@ vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
     await importOriginal<typeof import(`@electric-ax/agents-runtime`)>()
   return {
     ...actual,
-    createEntityTimelineQuery: () => (q: any) =>
-      q.from({ row: runtimeMocks.timelineRows }),
+    createEntityTimelineQuery: () => (q: InitialQueryBuilder) =>
+      q.from({ row: runtimeMocks.timelineRows! }),
   }
 })
 
@@ -36,11 +45,11 @@ vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
 function createLocalCollection<TRow extends object>(
   id: string,
   getKey: (row: TRow) => string
-): any {
+): Collection<TRow, string> {
   return createCollection(
     localOnlyCollectionOptions({
       id: `test-${id}-${Math.random().toString(36).slice(2)}`,
-      getKey: getKey as any,
+      getKey,
       initialData: [],
     })
   )
@@ -99,17 +108,17 @@ describe(`ObserveView`, () => {
   it(`rerenders when an entity stopped event arrives without timeline events`, async () => {
     runtimeMocks.timelineRows = createLocalCollection(
       `timeline`,
-      (row: Record<string, unknown>) => String(row.$key ?? row.key ?? ``)
+      (row: TimelineTestRow) => row.key
     )
-    const entityStopped = createLocalCollection(
+    const entityStopped = createLocalCollection<EntityStoppedTestRow>(
       `stopped`,
-      (row: Record<string, unknown>) => String(row.key)
+      (row) => row.key
     )
     const db = {
       collections: {
         entityStopped,
       },
-    } as any
+    } as unknown as EntityStreamDB
     const { lastFrame, unmount } = render(
       <ObserveView
         db={db}
