@@ -82,6 +82,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           :process_memory,
           :process_bin_memory,
           :ets_memory,
+          :ets_table_memory,
           :get_system_load_average,
           :get_system_memory_usage
         ],
@@ -98,6 +99,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("process.bin_memory.max_ref_count", tags: [:process_type]),
       last_value("process.bin_memory.avg_ref_count", tags: [:process_type]),
       last_value("ets.memory.total", tags: [:table_type], unit: :byte),
+      last_value("ets.table.memory", tags: [:table_name, :table_type], unit: :byte),
+      last_value("ets.table.size", tags: [:table_name, :table_type]),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
       last_value("system.load_percent.avg1"),
@@ -211,6 +214,19 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     for %{type: type, memory: memory} <-
           ElectricTelemetry.EtsTables.top_by_type(ets_table_count) do
       :telemetry.execute([:ets, :memory], %{total: memory}, %{table_type: to_string(type)})
+    end
+  end
+
+  def ets_table_memory(%{
+        intervals_and_thresholds: %{top_ets_individual_count: individual_count}
+      }) do
+    for %{name: name, type: type, memory: memory, size: size} <-
+          ElectricTelemetry.EtsTables.top_tables(individual_count) do
+      :telemetry.execute(
+        [:ets, :table],
+        %{memory: memory, size: size},
+        %{table_name: to_string(name), table_type: to_string(type)}
+      )
     end
   end
 

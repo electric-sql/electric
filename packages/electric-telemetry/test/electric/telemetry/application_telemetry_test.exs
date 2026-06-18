@@ -72,4 +72,56 @@ defmodule ElectricTelemetry.ApplicationTelemetryTest do
       end
     end
   end
+
+  describe "ets_table_memory/1" do
+    test "emits a [:ets, :table] event per top table with memory/size and name/type tags" do
+      table = :ets.new(:"ApplicationTelemetryTest:ets_table_memory", [:public, :named_table])
+      for i <- 1..200, do: :ets.insert(table, {i, :binary.copy(<<0>>, 1000)})
+
+      ref = make_ref()
+      test_pid = self()
+      handler_id = {__MODULE__, :ets_table, ref}
+
+      :telemetry.attach(
+        handler_id,
+        [:ets, :table],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {ref, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      ApplicationTelemetry.ets_table_memory(%{
+        intervals_and_thresholds: %{top_ets_individual_count: 100}
+      })
+
+      events = collect_events(ref, [])
+
+      assert events != []
+
+      for {measurements, metadata} <- events do
+        assert %{memory: memory, size: size} = measurements
+        assert is_integer(memory) and memory > 0
+        assert is_integer(size) and size >= 0
+        assert %{table_name: name, table_type: type} = metadata
+        assert is_binary(name)
+        assert is_binary(type)
+      end
+
+      # Our named test table should be among the emitted tables.
+      assert Enum.any?(events, fn {_measurements, metadata} ->
+               metadata.table_name == "ApplicationTelemetryTest:ets_table_memory"
+             end)
+    end
+  end
+
+  defp collect_events(ref, acc) do
+    receive do
+      {^ref, measurements, metadata} -> collect_events(ref, [{measurements, metadata} | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
 end
