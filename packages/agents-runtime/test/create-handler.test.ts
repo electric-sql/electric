@@ -648,6 +648,23 @@ describe(`createRuntimeHandler`, () => {
     )
   })
 
+  it(`registerTypes includes URL and cause when registration fetch throws`, async () => {
+    defineEntity(`network-agent`, { handler: async () => {} })
+
+    vi.spyOn(globalThis, `fetch`).mockRejectedValue(
+      new Error(`fetch failed`, { cause: new Error(`ECONNREFUSED 127.0.0.1`) })
+    )
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+    })
+
+    await expect(handler.registerTypes()).rejects.toThrow(
+      `Failed to register type "network-agent" at http://localhost:3000/_electric/entity-types: fetch failed: ECONNREFUSED 127.0.0.1`
+    )
+  })
+
   it(`registers entity types with a webhook default dispatch policy`, async () => {
     defineEntity(`schema-agent`, {
       description: `Schema agent`,

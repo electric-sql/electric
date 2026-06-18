@@ -7,8 +7,10 @@
  * so we feed them directly to StreamDB without transformation.
  */
 
-import { createStreamDB } from '@durable-streams/state/db'
-import { appendPathToUrl, entityStateSchema } from '@electric-ax/agents-runtime'
+import {
+  appendPathToUrl,
+  createEntityStreamDB as createRuntimeEntityStreamDB,
+} from '@electric-ax/agents-runtime'
 import { entityApiUrl } from './entity-api.js'
 import type { EntityStreamDB } from '@electric-ax/agents-runtime'
 
@@ -57,14 +59,11 @@ export async function createEntityStreamDB(opts: {
   const streamPath = getMainStreamPath(entityUrl, entity)
   const streamUrl = appendPathToUrl(baseUrl, streamPath)
 
-  const db = createStreamDB({
+  const db = createRuntimeEntityStreamDB(streamUrl, undefined, undefined, {
     streamOptions: {
-      url: streamUrl,
       headers: requestHeaders,
-      contentType: `application/json`,
       ...(initialOffset ? { offset: initialOffset } : {}),
     },
-    state: entityStateSchema,
   })
 
   await db.preload()

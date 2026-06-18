@@ -86,7 +86,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     agentsServer = null
   })
 
-  it(`does not store the local pull-wake runner as a type default`, async () => {
+  it(`stores the local pull-wake runner as the built-in type default`, async () => {
     agentsServer = await startRecordingAgentsServer()
     builtinServer = new BuiltinAgentsServer({
       agentServerUrl: agentsServer.url,
@@ -97,11 +97,11 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     await builtinServer.start()
 
     expect(agentsServer.entityTypeBodies.length).toBeGreaterThan(0)
-    expect(
-      agentsServer.entityTypeBodies.some(
-        (body) => body.default_dispatch_policy !== undefined
-      )
-    ).toBe(false)
+    for (const body of agentsServer.entityTypeBodies) {
+      expect(body.default_dispatch_policy).toEqual({
+        targets: [{ type: `runner`, runnerId: `test-runner` }],
+      })
+    }
   })
 
   it(`grants all users default built-in entity type permissions`, async () => {

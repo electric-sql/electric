@@ -81,13 +81,13 @@ export function CredentialsPage(): React.ReactElement {
         description={
           isDesktop
             ? `Configure model providers for connected local runtimes. Changes save automatically and apply on the next runtime restart.`
-            : `Model providers are configured by the agents-server you're connected to. The web build inherits whatever providers the server was started with.`
+            : `Model providers are configured by the runtime connected to this server. Restart that runtime with provider credentials to change the available models.`
         }
       >
         {!isDesktop ? (
           <SettingsPanel>
             <Text size={2} tone="muted">
-              No editable provider keys in the web build.
+              Provider keys are not editable from the browser UI.
             </Text>
           </SettingsPanel>
         ) : !status ? (

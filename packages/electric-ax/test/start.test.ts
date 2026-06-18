@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
+import { hostname, userInfo } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
+  resolveBuiltinServerHeaders,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
   resolvePullWakeOwnerPrincipal,
@@ -116,16 +118,53 @@ describe(`resolvePullWakeOwnerPrincipal`, () => {
   it(`uses the agents identity when present`, () => {
     expect(
       resolvePullWakeOwnerPrincipal(
+        { ELECTRIC_AGENTS_IDENTITY: `a@example.com` },
+        {}
+      )
+    ).toBe(`/principal/user%3Aa%40example.com`)
+  })
+
+  it(`accepts a principal key as the agents identity`, () => {
+    expect(
+      resolvePullWakeOwnerPrincipal(
         { ELECTRIC_AGENTS_IDENTITY: `user:a@example.com` },
         {}
       )
     ).toBe(`/principal/user%3Aa%40example.com`)
   })
 
-  it(`falls back to the local builtin owner`, () => {
+  it(`falls back to the local CLI user owner`, () => {
     expect(resolvePullWakeOwnerPrincipal({}, {})).toBe(
-      `/principal/system%3Abuiltin-agents`
+      `/principal/${encodeURIComponent(`user:${userInfo().username}@${hostname()}`)}`
     )
+  })
+})
+
+describe(`resolveBuiltinServerHeaders`, () => {
+  it(`authenticates as the resolved default runner owner`, () => {
+    expect(
+      resolveBuiltinServerHeaders({}, {}, `/principal/system%3Abuiltin-agents`)
+    ).toEqual({
+      'electric-principal': `/principal/system%3Abuiltin-agents`,
+    })
+  })
+
+  it(`keeps additional headers while forcing the runner owner principal`, () => {
+    expect(
+      resolveBuiltinServerHeaders(
+        {
+          ELECTRIC_AGENTS_SERVER_HEADERS: JSON.stringify({
+            authorization: `Bearer token`,
+            'electric-principal': `user:wrong`,
+          }),
+        },
+        {},
+        `/principal/service%3Asvc-test`
+      )
+    ).toEqual({
+      authorization: `Bearer token`,
+      'electric-principal': `/principal/service%3Asvc-test`,
+    })
   })
 })
 
