@@ -24,26 +24,26 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
 
   describe "shape-level metadata" do
     test "register_shape stores polarity and fallback used by exact evaluation", %{table: table} do
-      SubqueryIndex.register_shape(table, "s1", make_plan())
+      SubqueryIndex.register_shape(table, 1, make_plan())
 
-      assert SubqueryIndex.fallback?(table, "s1")
-      assert SubqueryIndex.membership_or_fallback?(table, "s1", @subquery_ref, 99)
+      assert SubqueryIndex.fallback?(table, 1)
+      assert SubqueryIndex.membership_or_fallback?(table, 1, @subquery_ref, 99)
 
-      SubqueryIndex.register_shape(table, "s2", make_plan(polarity: :negated))
+      SubqueryIndex.register_shape(table, 2, make_plan(polarity: :negated))
 
-      refute SubqueryIndex.membership_or_fallback?(table, "s2", @subquery_ref, 99)
+      refute SubqueryIndex.membership_or_fallback?(table, 2, @subquery_ref, 99)
     end
 
     test "unregister_shape removes exact membership metadata", %{table: table} do
-      SubqueryIndex.register_shape(table, "s1", make_plan())
-      SubqueryIndex.add_value(table, "s1", @subquery_ref, 0, 5)
+      SubqueryIndex.register_shape(table, 1, make_plan())
+      SubqueryIndex.add_value(table, 1, @subquery_ref, 0, 5)
 
-      assert SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      assert SubqueryIndex.member?(table, 1, @subquery_ref, 5)
 
-      SubqueryIndex.unregister_shape(table, "s1")
+      SubqueryIndex.unregister_shape(table, 1)
 
-      refute SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
-      refute SubqueryIndex.fallback?(table, "s1")
+      refute SubqueryIndex.member?(table, 1, @subquery_ref, 5)
+      refute SubqueryIndex.fallback?(table, 1)
     end
   end
 
@@ -53,10 +53,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       table: table,
       condition_id: condition_id
     } do
-      register_node_shape(filter, table, condition_id, "s1")
+      register_node_shape(filter, table, condition_id, 1)
 
-      assert SubqueryIndex.has_positions?(table, "s1")
-      assert [{^condition_id, @field}] = SubqueryIndex.positions_for_shape(table, "s1")
+      assert SubqueryIndex.has_positions?(table, 1)
+      assert [{^condition_id, @field}] = SubqueryIndex.positions_for_shape(table, 1)
     end
 
     test "multiple shapes on the same node infer emptiness from node registrations", %{
@@ -64,14 +64,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       table: table,
       condition_id: condition_id
     } do
-      register_node_shape(filter, table, condition_id, "s1")
-      register_node_shape(filter, table, condition_id, "s2")
-      register_node_shape(filter, table, condition_id, "s3")
+      register_node_shape(filter, table, condition_id, 1)
+      register_node_shape(filter, table, condition_id, 2)
+      register_node_shape(filter, table, condition_id, 3)
 
       assert [
-               {{:node_shape, {^condition_id, @field}, "s1", []}, {0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}, "s2", []}, {0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}, "s3", []}, {0, :positive, _}}
+               {{:node_shape, {^condition_id, @field}, 1, []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, 2, []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, 3, []}, {0, :positive, _}}
              ] =
                Enum.sort(
                  :ets.select(table, [
@@ -80,15 +80,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                )
 
       assert :ok =
-               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
+               SubqueryIndex.remove_shape(filter, condition_id, 1, subquery_optimisation(), [])
 
-      assert MapSet.new(["s2", "s3"]) == SubqueryIndex.all_shape_ids(filter, condition_id, @field)
+      assert MapSet.new([2, 3]) == SubqueryIndex.all_shape_ids(filter, condition_id, @field)
 
       assert :ok =
-               SubqueryIndex.remove_shape(filter, condition_id, "s2", subquery_optimisation(), [])
+               SubqueryIndex.remove_shape(filter, condition_id, 2, subquery_optimisation(), [])
 
       assert :deleted =
-               SubqueryIndex.remove_shape(filter, condition_id, "s3", subquery_optimisation(), [])
+               SubqueryIndex.remove_shape(filter, condition_id, 3, subquery_optimisation(), [])
 
       assert [] ==
                :ets.select(table, [
@@ -103,14 +103,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       table: table,
       condition_id: condition_id
     } do
-      register_node_shape(filter, table, condition_id, "s1")
+      register_node_shape(filter, table, condition_id, 1)
 
-      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
-      SubqueryIndex.mark_ready(table, "s1")
+      SubqueryIndex.seed_membership(table, 1, @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, 1)
 
-      assert SubqueryIndex.member?(table, "s1", @subquery_ref, 5)
+      assert SubqueryIndex.member?(table, 1, @subquery_ref, 5)
 
-      assert MapSet.new(["s1"]) ==
+      assert MapSet.new([1]) ==
                SubqueryIndex.affected_shapes(
                  filter,
                  condition_id,
@@ -124,10 +124,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       table: table,
       condition_id: condition_id
     } do
-      register_node_shape(filter, table, condition_id, "s1", polarity: :negated)
+      register_node_shape(filter, table, condition_id, 1, polarity: :negated)
 
-      SubqueryIndex.seed_membership(table, "s1", @subquery_ref, 0, MapSet.new([5]))
-      SubqueryIndex.mark_ready(table, "s1")
+      SubqueryIndex.seed_membership(table, 1, @subquery_ref, 0, MapSet.new([5]))
+      SubqueryIndex.mark_ready(table, 1)
 
       refute MapSet.member?(
                SubqueryIndex.affected_shapes(
@@ -136,7 +136,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                  @field,
                  %{"par_id" => "5"}
                ),
-               "s1"
+               1
              )
 
       assert MapSet.member?(
@@ -146,7 +146,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
                  @field,
                  %{"par_id" => "99"}
                ),
-               "s1"
+               1
              )
     end
 
@@ -155,17 +155,17 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       table: table,
       condition_id: condition_id
     } do
-      register_node_shape(filter, table, condition_id, "s1")
-      SubqueryIndex.add_value(table, "s1", @subquery_ref, 0, 5)
+      register_node_shape(filter, table, condition_id, 1)
+      SubqueryIndex.add_value(table, 1, @subquery_ref, 0, 5)
 
       assert :deleted =
-               SubqueryIndex.remove_shape(filter, condition_id, "s1", subquery_optimisation(), [])
+               SubqueryIndex.remove_shape(filter, condition_id, 1, subquery_optimisation(), [])
 
-      refute SubqueryIndex.has_positions?(table, "s1")
+      refute SubqueryIndex.has_positions?(table, 1)
 
-      SubqueryIndex.unregister_shape(table, "s1")
+      SubqueryIndex.unregister_shape(table, 1)
 
-      refute SubqueryIndex.fallback?(table, "s1")
+      refute SubqueryIndex.fallback?(table, 1)
     end
   end
 
@@ -359,16 +359,16 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         table = Filter.subquery_index(filter)
         condition_id = make_ref()
         WhereCondition.init(filter, condition_id)
-        register_node_shape(filter, table, condition_id, "s")
-        seed(table, "s", Enum.to_list(1..v))
+        register_node_shape(filter, table, condition_id, 100)
+        seed(table, 100, Enum.to_list(1..v))
         {condition_id, filter}
       end
 
       {cid_small, filter_small} = measure.(20)
-      small = reductions(fn -> remove_one(filter_small, cid_small, "s") end)
+      small = reductions(fn -> remove_one(filter_small, cid_small, 100) end)
 
       {cid_big, filter_big} = measure.(20 * 50)
-      big = reductions(fn -> remove_one(filter_big, cid_big, "s") end)
+      big = reductions(fn -> remove_one(filter_big, cid_big, 100) end)
 
       assert big > small * 5,
              "expected removal to scale with view size, got #{small} -> #{big}"

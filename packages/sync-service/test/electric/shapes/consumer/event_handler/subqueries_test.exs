@@ -65,23 +65,23 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "returns unsupported_subquery when dependency moves are configured to invalidate" do
       handler = new_handler(dependency_move_policy: :invalidate_on_dependency_move)
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:error, :unsupported_subquery} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
     end
 
     test "negated subquery turns dependency move-in into an outer move-out" do
       handler = new_handler(shape: negated_shape())
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Steady{views: %{["$sublink", "0"] => view}} = _handler, plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert view == MapSet.new([1])
@@ -98,14 +98,14 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "negated subquery turns dependency move-out into a buffered outer move-in" do
       handler = new_handler(shape: negated_shape(), subquery_view: MapSet.new([1]))
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       # Case B: negated move-out → remove the value when buffering starts so the
       # negated index reflects the post-move exclusion set while buffering.
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [], move_out: [{1, "1"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [], move_out: [{1, "1"}]}}
                )
 
       assert [
@@ -153,7 +153,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "splices buffered transactions around the snapshot visibility boundary" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler,
               [
@@ -163,7 +163,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
               ]} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -200,12 +200,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "splices move-in query rows between emitted pre and post boundary changes" do
       handler = new_handler(subquery_view: MapSet.new([1]))
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -245,12 +245,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "splices updates that become a delete before the boundary and an insert after it" do
       handler = new_handler(subquery_view: MapSet.new([1]))
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -290,12 +290,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "uses lsn updates to splice at the current buffer tail" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -329,12 +329,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "waits for an lsn update even when the move-in query completes with an empty buffer" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -364,12 +364,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "keeps an empty stored move-in snapshot as an effect so execution can clean it up" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -399,12 +399,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "uses an lsn update that arrived before the move-in query completed" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -434,12 +434,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "keeps the newest seen lsn when an older update arrives later" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -472,18 +472,18 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "defers queued move outs until after splice and starts the next move in" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -527,7 +527,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "queued second move-in emits buffering effects only after it is dequeued" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler,
               [
@@ -537,13 +537,13 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
               ]} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}, queue: queue} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: []}}
                )
 
       assert {[{2, "2"}], _} = Map.fetch!(queue.move_in, 0)
@@ -574,18 +574,18 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "chained move-in resolves without needing a new lsn broadcast" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: [{1, "1"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -616,18 +616,18 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "applies a queued move out for the active move-in value after splice" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [], move_out: [{1, "1"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [], move_out: [{1, "1"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -661,13 +661,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "batches consecutive move ins into a single active move in" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle,
-                  %{move_in: [{1, "1"}, {2, "2"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}, {2, "2"}], move_out: []}}
                )
 
       assert %Buffering{
@@ -684,24 +683,24 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "cancels pending inverse ops while buffering" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{2, "2"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [], move_out: [{2, "2"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [], move_out: [{2, "2"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -731,24 +730,24 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "merges queued move outs into a single control message after splice" do
       handler = new_handler(subquery_view: MapSet.new([2]))
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [], move_out: [{1, "1"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [], move_out: [{1, "1"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, []} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [], move_out: [{2, "2"}]}}
+                 {:materializer_changes, dep_id, %{move_in: [], move_out: [{2, "2"}]}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -785,12 +784,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "returns {:error, :buffer_overflow} when buffered transactions exceed the limit" do
       handler = new_handler(buffer_max_transactions: 3)
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -815,12 +814,12 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
     test "returns truncate error while buffering once splice completes" do
       handler = new_handler()
-      dep_handle = dep_handle(handler)
+      dep_id = dep_id(handler)
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
                EventHandler.handle_event(
                  handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+                 {:materializer_changes, dep_id, %{move_in: [{1, "1"}], move_out: []}}
                )
 
       assert {:ok, %Buffering{active_move: %ActiveMove{}} = handler, _plan} =
@@ -839,11 +838,11 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
                EventHandler.handle_event(handler, global_last_seen_lsn(10))
     end
 
-    test "raises on dependency handle mismatch" do
-      assert_raise ArgumentError, ~r/unexpected dependency handle/, fn ->
+    test "raises on dependency id mismatch" do
+      assert_raise ArgumentError, ~r/unexpected dependency id/, fn ->
         new_handler()
         |> EventHandler.handle_event(
-          {:materializer_changes, "wrong", %{move_in: [], move_out: []}}
+          {:materializer_changes, 999_999, %{move_in: [], move_out: []}}
         )
       end
     end
@@ -863,10 +862,13 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
 
   # -- Helpers --
 
+  # The RefResolver is keyed on the dependency's numeric routing id (not its
+  # handle), matching the id carried in {:materializer_changes, dep_id, ...}.
+  @dep_id 1
+
   defp new_handler(opts \\ []) do
     shape = Keyword.get(opts, :shape, shape())
     {:ok, dnf_plan} = DnfPlan.compile(shape)
-    dep_handle = hd(shape.shape_dependencies_handles)
 
     %Steady{
       shape_info: %ShapeInfo{
@@ -875,7 +877,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
         shape_handle: "shape-handle",
         dnf_plan: dnf_plan,
         ref_resolver:
-          RefResolver.new(%{dep_handle => {0, ["$sublink", "0"]}}, %{0 => ["$sublink", "0"]}),
+          RefResolver.new(%{@dep_id => {0, ["$sublink", "0"]}}, %{0 => ["$sublink", "0"]}),
         buffer_max_transactions: Keyword.get(opts, :buffer_max_transactions, 1000),
         dependency_move_policy:
           Keyword.get(opts, :dependency_move_policy, :stream_dependency_moves)
@@ -884,8 +886,8 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
     }
   end
 
-  defp dep_handle(handler) do
-    handler.shape_info.ref_resolver.handle_to_ref |> Map.keys() |> hd()
+  defp dep_id(handler) do
+    handler.shape_info.ref_resolver.id_to_ref |> Map.keys() |> hd()
   end
 
   defp view_for(views, ref \\ ["$sublink", "0"]) when is_map(views) do

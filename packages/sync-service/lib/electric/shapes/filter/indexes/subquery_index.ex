@@ -12,7 +12,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   # materialized view of subquery membership aligned with the view that shape
   # currently needs, without re-evaluating subqueries globally.
 
-  # The same table also stores exact `shape_handle + subquery_ref + typed_value`
+  # The same table also stores exact `shape_id + subquery_ref + typed_value`
   # membership rows used by `WhereClause.includes_record?/3` when the filter
   # needs to verify subquery membership for a specific shape.
 
@@ -71,8 +71,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Node-local routing metadata is registered by `add_shape/4` when the filter
   adds the shape to a concrete subquery node.
   """
-  @spec register_shape(t(), term(), DnfPlan.t()) :: :ok
-  def register_shape(table, shape_handle, %DnfPlan{} = plan) do
+  @spec register_shape(t(), Electric.shape_id(), DnfPlan.t()) :: :ok
+  def register_shape(table, shape_id, %DnfPlan{} = plan) do
     polarities =
       plan.positions
       |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
@@ -81,10 +81,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       end)
 
     for {subquery_ref, polarity} <- polarities do
-      :ets.insert(table, {{:polarity, shape_handle, subquery_ref}, polarity})
+      :ets.insert(table, {{:polarity, shape_id, subquery_ref}, polarity})
     end
 
-    :ets.insert(table, {{:fallback, shape_handle}, true})
+    :ets.insert(table, {{:fallback, shape_id}, true})
 
     :ok
   end
@@ -92,13 +92,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Remove all exact membership metadata for a shape.
   """
-  @spec unregister_shape(t(), term()) :: :ok
-  def unregister_shape(table, shape_handle) do
-    delete_by_key_prefix(table, {:membership, shape_handle, :_, :_})
-    delete_by_key_prefix(table, {:polarity, shape_handle, :_})
-    delete_by_key_prefix(table, {:shape_node, shape_handle, :_, :_})
-    delete_by_key_prefix(table, {:shape_dep_node, shape_handle, :_, :_, :_})
-    :ets.delete(table, {:fallback, shape_handle})
+  @spec unregister_shape(t(), Electric.shape_id()) :: :ok
+  def unregister_shape(table, shape_id) do
+    delete_by_key_prefix(table, {:membership, shape_id, :_, :_})
+    delete_by_key_prefix(table, {:polarity, shape_id, :_})
+    delete_by_key_prefix(table, {:shape_node, shape_id, :_, :_})
+    delete_by_key_prefix(table, {:shape_dep_node, shape_id, :_, :_, :_})
+    :ets.delete(table, {:fallback, shape_id})
     :ok
   end
 
@@ -212,10 +212,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Seed membership entries from a dependency view.
   """
-  @spec seed_membership(t(), term(), [String.t()], non_neg_integer(), MapSet.t()) :: :ok
-  def seed_membership(table, shape_handle, subquery_ref, dep_index, view) do
+  @spec seed_membership(t(), Electric.shape_id(), [String.t()], non_neg_integer(), MapSet.t()) ::
+          :ok
+  def seed_membership(table, shape_id, subquery_ref, dep_index, view) do
     for value <- view do
-      add_value(table, shape_handle, subquery_ref, dep_index, value)
+      add_value(table, shape_id, subquery_ref, dep_index, value)
     end
 
     :ok
@@ -224,13 +225,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Mark a shape as ready for indexed routing.
   """
-  @spec mark_ready(t(), term()) :: :ok
-  def mark_ready(table, shape_handle) do
-    :ets.delete(table, {:fallback, shape_handle})
+  @spec mark_ready(t(), Electric.shape_id()) :: :ok
+  def mark_ready(table, shape_id) do
+    :ets.delete(table, {:fallback, shape_id})
 
     for {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} <-
-          nodes_for_shape(table, shape_handle) do
-      delete_by_key_prefix(table, {:node_fallback, node_id, shape_handle, :_})
+          nodes_for_shape(table, shape_id) do
+      delete_by_key_prefix(table, {:node_fallback, node_id, shape_id, :_})
     end
 
     :ok
@@ -239,30 +240,30 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Add a value to both the node-local routing index and the exact membership set.
   """
-  @spec add_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
-  def add_value(table, shape_handle, subquery_ref, dep_index, value) do
+  @spec add_value(t(), Electric.shape_id(), [String.t()], non_neg_integer(), term()) :: :ok
+  def add_value(table, shape_id, subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
-          nodes_for_shape_dependency(table, shape_handle, dep_index) do
+          nodes_for_shape_dependency(table, shape_id, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.insert(table, {{tag, node_id, value, shape_handle, next_condition_id}, true})
+      :ets.insert(table, {{tag, node_id, value, shape_id, next_condition_id}, true})
     end
 
-    :ets.insert(table, {{:membership, shape_handle, subquery_ref, value}, true})
+    :ets.insert(table, {{:membership, shape_id, subquery_ref, value}, true})
     :ok
   end
 
   @doc """
   Remove a value from both the node-local routing index and the exact membership set.
   """
-  @spec remove_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
-  def remove_value(table, shape_handle, subquery_ref, dep_index, value) do
+  @spec remove_value(t(), Electric.shape_id(), [String.t()], non_neg_integer(), term()) :: :ok
+  def remove_value(table, shape_id, subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
-          nodes_for_shape_dependency(table, shape_handle, dep_index) do
+          nodes_for_shape_dependency(table, shape_id, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.delete(table, {tag, node_id, value, shape_handle, next_condition_id})
+      :ets.delete(table, {tag, node_id, value, shape_id, next_condition_id})
     end
 
-    :ets.delete(table, {:membership, shape_handle, subquery_ref, value})
+    :ets.delete(table, {:membership, shape_id, subquery_ref, value})
     :ok
   end
 
@@ -318,21 +319,21 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Check if a specific shape has a value in its current dependency view
   for a canonical subquery ref.
   """
-  @spec member?(t(), term(), [String.t()], term()) :: boolean()
-  def member?(table, shape_handle, subquery_ref, typed_value) do
-    :ets.member(table, {:membership, shape_handle, subquery_ref, typed_value})
+  @spec member?(t(), Electric.shape_id(), [String.t()], term()) :: boolean()
+  def member?(table, shape_id, subquery_ref, typed_value) do
+    :ets.member(table, {:membership, shape_id, subquery_ref, typed_value})
   end
 
   @doc """
   Check subquery membership for exact evaluation, falling back to the shape's
   dependency polarity while the shape is still unseeded.
   """
-  @spec membership_or_fallback?(t(), term(), [String.t()], term()) :: boolean()
-  def membership_or_fallback?(table, shape_handle, subquery_ref, typed_value) do
-    if shape_ready?(table, shape_handle) do
-      member?(table, shape_handle, subquery_ref, typed_value)
+  @spec membership_or_fallback?(t(), Electric.shape_id(), [String.t()], term()) :: boolean()
+  def membership_or_fallback?(table, shape_id, subquery_ref, typed_value) do
+    if shape_ready?(table, shape_id) do
+      member?(table, shape_id, subquery_ref, typed_value)
     else
-      case polarity_for_shape_ref(table, shape_handle, subquery_ref) do
+      case polarity_for_shape_ref(table, shape_id, subquery_ref) do
         :positive -> true
         :negated -> false
       end
@@ -342,26 +343,26 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Check if a shape is in the fallback set.
   """
-  @spec fallback?(t(), term()) :: boolean()
-  def fallback?(table, shape_handle) do
-    :ets.member(table, {:fallback, shape_handle})
+  @spec fallback?(t(), Electric.shape_id()) :: boolean()
+  def fallback?(table, shape_id) do
+    :ets.member(table, {:fallback, shape_id})
   end
 
   @doc """
   Check if a shape has any registered subquery nodes.
   """
-  @spec has_positions?(t(), term()) :: boolean()
-  def has_positions?(table, shape_handle) do
-    nodes_for_shape(table, shape_handle) != []
+  @spec has_positions?(t(), Electric.shape_id()) :: boolean()
+  def has_positions?(table, shape_id) do
+    nodes_for_shape(table, shape_id) != []
   end
 
   @doc """
   Return the registered node ids for a shape.
   """
-  @spec positions_for_shape(t(), term()) :: [node_id()]
-  def positions_for_shape(table, shape_handle) do
+  @spec positions_for_shape(t(), Electric.shape_id()) :: [node_id()]
+  def positions_for_shape(table, shape_id) do
     table
-    |> nodes_for_shape(shape_handle)
+    |> nodes_for_shape(shape_id)
     |> Enum.map(fn {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} ->
       node_id
     end)
@@ -449,16 +450,16 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     |> MapSet.new()
   end
 
-  defp nodes_for_shape(table, shape_handle) do
+  defp nodes_for_shape(table, shape_id) do
     :ets.select(table, [
-      {{{:shape_node, shape_handle, :"$1", :"$2"}, {:"$3", :"$4", :"$5"}}, [],
+      {{{:shape_node, shape_id, :"$1", :"$2"}, {:"$3", :"$4", :"$5"}}, [],
        [{{:"$1", :"$3", :"$4", :"$5", :"$2"}}]}
     ])
   end
 
-  defp nodes_for_shape_dependency(table, shape_handle, dep_index) do
+  defp nodes_for_shape_dependency(table, shape_id, dep_index) do
     :ets.select(table, [
-      {{{:shape_dep_node, shape_handle, dep_index, :"$1", :"$2"}, {:"$3", :"$4"}}, [],
+      {{{:shape_dep_node, shape_id, dep_index, :"$1", :"$2"}, {:"$3", :"$4"}}, [],
        [{{:"$1", :"$3", :"$4", :"$2"}}]}
     ])
   end
@@ -498,18 +499,18 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end
   end
 
-  defp shape_ready?(table, shape_handle) do
-    not fallback?(table, shape_handle)
+  defp shape_ready?(table, shape_id) do
+    not fallback?(table, shape_id)
   end
 
-  defp polarity_for_shape_ref(table, shape_handle, subquery_ref) do
-    case :ets.lookup(table, {:polarity, shape_handle, subquery_ref}) do
+  defp polarity_for_shape_ref(table, shape_id, subquery_ref) do
+    case :ets.lookup(table, {:polarity, shape_id, subquery_ref}) do
       [{_, polarity}] ->
         polarity
 
       [] ->
         raise ArgumentError,
-              "missing polarity for shape #{inspect(shape_handle)} and ref #{inspect(subquery_ref)}"
+              "missing polarity for shape #{inspect(shape_id)} and ref #{inspect(subquery_ref)}"
     end
   end
 end

@@ -233,7 +233,7 @@ defmodule Electric.Shapes.Consumer.Effects do
     fun = if op == :add, do: &SubqueryIndex.add_value/5, else: &SubqueryIndex.remove_value/5
 
     for {value, _original} <- values do
-      fun.(index, state.shape_handle, subquery_ref, dep_index, value)
+      fun.(index, state.shape_id, subquery_ref, dep_index, value)
     end
 
     acc

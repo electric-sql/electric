@@ -54,14 +54,14 @@ defmodule Electric.Shapes.Consumer.SetupEffects do
 
           SubqueryIndex.seed_membership(
             index,
-            state.shape_handle,
+            state.shape_id,
             ref,
             dep_index,
             view
           )
         end
 
-        SubqueryIndex.mark_ready(index, state.shape_handle)
+        SubqueryIndex.mark_ready(index, state.shape_id)
         {:ok, state}
     end
   end

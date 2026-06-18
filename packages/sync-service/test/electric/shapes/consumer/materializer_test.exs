@@ -40,7 +40,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   }
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
-    register_fake_consumer(self(), "test", stack_id)
+    shape_id = register_fake_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
     writer = Storage.for_shape("test", storage) |> Storage.init_writer!(@shape)
@@ -59,15 +59,21 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     Storage.for_shape("test", storage)
     |> then(&Storage.make_new_snapshot!(snapshot_data, &1))
 
-    {:ok, shape_handle: "test", shape_storage: Storage.for_shape("test", storage), writer: writer}
+    {:ok,
+     shape_handle: "test",
+     shape_id: shape_id,
+     shape_storage: Storage.for_shape("test", storage),
+     writer: writer}
   end
 
   test "can get ready",
-       %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} = ctx do
+       %{storage: storage, stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id} =
+         ctx do
     {:ok, _pid} =
       Materializer.start_link(%{
         stack_id: stack_id,
         shape_handle: shape_handle,
+        shape_id: shape_id,
         storage: storage,
         columns: ["value"],
         materialized_type: {:array, :int8}
@@ -84,11 +90,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   end
 
   test "new changes are materialized correctly",
-       %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} = ctx do
+       %{storage: storage, stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id} =
+         ctx do
     {:ok, _pid} =
       Materializer.start_link(%{
         stack_id: stack_id,
         shape_handle: shape_handle,
+        shape_id: shape_id,
         storage: storage,
         columns: ["value"],
         materialized_type: {:array, :int8}
@@ -1292,6 +1300,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       Materializer.start_link(%{
         stack_id: ctx.stack_id,
         shape_handle: ctx.shape_handle,
+        shape_id: ctx.shape_id,
         storage: ctx.storage,
         columns: Keyword.get(opts, :columns, ["value"]),
         materialized_type: Keyword.get(opts, :materialized_type, {:array, :int8})
@@ -1352,12 +1361,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       Storage.hibernate(writer)
 
-      register_fake_consumer(self(), shape_handle, ctx.stack_id)
+      shape_id = register_fake_consumer(self(), shape_handle, ctx.stack_id)
 
       {:ok, _pid} =
         Materializer.start_link(%{
           stack_id: ctx.stack_id,
           shape_handle: shape_handle,
+          shape_id: shape_id,
           storage: ctx.storage,
           columns: ["value"],
           materialized_type: {:array, :int8}
@@ -1368,7 +1378,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       # Return offset BEFORE the record so the Materializer reads nothing from storage
       respond_to_call(:subscribe_materializer, {:ok, LogOffset.before_all()})
 
-      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      mat_ctx = %{stack_id: ctx.stack_id, shape_id: shape_id}
 
       assert Materializer.wait_until_ready(mat_ctx) == :ok
 
@@ -1392,7 +1402,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     # and subscribe_materializer. See concurrency_analysis/MATERIALIZER_RACE_ANALYSIS.md
 
     test "shuts down gracefully when await_snapshot_start returns error",
-         %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} do
+         %{storage: storage, stack_id: stack_id, shape_handle: shape_handle, shape_id: shape_id} do
       # Trap exits so the test process doesn't die when Materializer shuts down
       Process.flag(:trap_exit, true)
 
@@ -1400,6 +1410,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         Materializer.start_link(%{
           stack_id: stack_id,
           shape_handle: shape_handle,
+          shape_id: shape_id,
           storage: storage,
           columns: ["value"],
           materialized_type: {:array, :int8}
@@ -1439,12 +1450,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         end)
 
       # Register it as the consumer
-      register_fake_consumer(dying_consumer, dying_handle, stack_id)
+      shape_id = register_fake_consumer(dying_consumer, dying_handle, stack_id)
 
       {:ok, pid} =
         Materializer.start_link(%{
           stack_id: stack_id,
           shape_handle: dying_handle,
+          shape_id: shape_id,
           storage: storage,
           columns: ["value"],
           materialized_type: {:array, :int8}
@@ -1487,12 +1499,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
           end
         end)
 
-      register_fake_consumer(dying_consumer, dying_handle, stack_id)
+      shape_id = register_fake_consumer(dying_consumer, dying_handle, stack_id)
 
       {:ok, pid} =
         Materializer.start_link(%{
           stack_id: stack_id,
           shape_handle: dying_handle,
+          shape_id: shape_id,
           storage: storage,
           columns: ["value"],
           materialized_type: {:array, :int8}

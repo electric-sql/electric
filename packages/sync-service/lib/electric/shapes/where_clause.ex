@@ -50,11 +50,11 @@ defmodule Electric.Shapes.WhereClause do
   Used for filter-side exact verification: checks whether a specific
   shape currently contains a typed value for a canonical subquery ref.
   """
-  @spec subquery_member_from_index(SubqueryIndex.t(), term()) ::
+  @spec subquery_member_from_index(SubqueryIndex.t(), Electric.shape_id()) ::
           ([String.t()], term() -> boolean())
-  def subquery_member_from_index(index, shape_handle) do
+  def subquery_member_from_index(index, shape_id) do
     fn subquery_ref, typed_value ->
-      SubqueryIndex.membership_or_fallback?(index, shape_handle, subquery_ref, typed_value)
+      SubqueryIndex.membership_or_fallback?(index, shape_id, subquery_ref, typed_value)
     end
   end
 end

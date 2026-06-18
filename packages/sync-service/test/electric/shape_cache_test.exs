@@ -1302,11 +1302,11 @@ defmodule Electric.ShapeCacheTest do
 
       assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
 
+      {:ok, dep_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, dep_handle)
+
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(
-                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-               )
+               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_id))
              )
 
       # Register this test as the connection manager to get "consumers ready" notification
@@ -1362,11 +1362,11 @@ defmodule Electric.ShapeCacheTest do
 
       assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
 
+      {:ok, dep_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, dep_handle)
+
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(
-                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-               )
+               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_id))
              )
 
       restart_shape_cache(ctx)
@@ -1451,9 +1451,13 @@ defmodule Electric.ShapeCacheTest do
 
       assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 
+      {:ok, dep_id_before} = Electric.ShapeCache.ShapeStatus.id_for_handle(stack_id, dep_handle)
+
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
+               GenServer.whereis(
+                 Electric.Shapes.Consumer.Materializer.name(stack_id, dep_id_before)
+               )
              )
 
       # Register this test as the connection manager to get "consumers ready" notification
@@ -1468,13 +1472,13 @@ defmodule Electric.ShapeCacheTest do
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_id)
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_id)
 
-      refute GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
+      refute GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_id))
 
       assert {:ok, _pid1} = ShapeCache.start_consumer_for_id(shape_id, stack_id)
 
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
+               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_id))
              )
     end
   end

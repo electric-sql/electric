@@ -84,8 +84,8 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
     |> maybe_splice()
   end
 
-  def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_handle, payload}) do
-    subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
+  def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_id, payload}) do
+    subquery_ref = RefResolver.ref_from_dep_id!(state.shape_info.ref_resolver, dep_id)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     dep_view = Views.current(state.active_move.views_after_move, subquery_ref)
 

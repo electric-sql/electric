@@ -2428,6 +2428,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
       [dep_handle] = shape.shape_dependencies_handles
+      {:ok, dep_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, dep_handle)
 
       consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
@@ -2436,7 +2437,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       send(
         consumer_pid,
-        {:materializer_changes, dep_handle,
+        {:materializer_changes, dep_id,
          %{
            move_in: [{1, "1"}],
            move_out: []
@@ -2547,9 +2548,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       index = SubqueryIndex.for_stack(ctx.stack_id)
       {:ok, _shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      {:ok, shape_id} = Electric.ShapeCache.ShapeStatus.id_for_handle(ctx.stack_id, shape_handle)
 
       # Before any dependency changes, the index has empty membership
-      refute SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      refute SubqueryIndex.member?(index, shape_id, ["$sublink", "0"], 1)
 
       # Send a new record for the dependency table to trigger a move_in
       ShapeLogCollector.handle_event(
@@ -2568,7 +2570,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # During buffering, the value should have been added to the index
       # (union for positive dependency: before ∪ after)
-      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      assert SubqueryIndex.member?(index, shape_id, ["$sublink", "0"], 1)
 
       # Complete the move_in query to transition back to steady state
       send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
@@ -2601,7 +2603,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
       # After move_in completes, value should still be in the index (now steady state)
-      assert SubqueryIndex.member?(index, shape_handle, ["$sublink", "0"], 1)
+      assert SubqueryIndex.member?(index, shape_id, ["$sublink", "0"], 1)
     end
 
     test "consumer cleanup removes shape rows from the subquery index", ctx do

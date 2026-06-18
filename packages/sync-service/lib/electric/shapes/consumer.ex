@@ -1086,7 +1086,7 @@ defmodule Electric.Shapes.Consumer do
          changes_or_bounds,
          opts
        ) do
-    Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds, opts)
+    Materializer.new_changes(Map.take(state, [:stack_id, :shape_id]), changes_or_bounds, opts)
   end
 
   defp notify_materializer_of_new_changes(_state, _changes_or_bounds, _opts), do: :ok
@@ -1251,9 +1251,13 @@ defmodule Electric.Shapes.Consumer do
 
   defp all_materializers_alive?(state) do
     Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
-      name = Materializer.name(state.stack_id, shape_handle)
-
-      with pid when is_pid(pid) <- GenServer.whereis(name),
+      # Dependency materializers are addressed by the dependency's routing id.
+      # The dependency shape exists in ShapeStatus before this consumer starts
+      # (deps are created/restored first), so a missing id means the dependency
+      # has gone away — treat it the same as a dead materializer.
+      with {:ok, shape_id} <- ShapeCache.ShapeStatus.id_for_handle(state.stack_id, shape_handle),
+           name = Materializer.name(state.stack_id, shape_id),
+           pid when is_pid(pid) <- GenServer.whereis(name),
            true <- Process.alive?(pid) do
         Process.monitor(pid,
           tag: {:dependency_materializer_down, shape_handle}

@@ -40,13 +40,13 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
         %__MODULE__{
           shape_info: %ShapeInfo{dependency_move_policy: :invalidate_on_dependency_move}
         },
-        {:materializer_changes, _dep_handle, _payload}
+        {:materializer_changes, _dep_id, _payload}
       ) do
     {:error, :unsupported_subquery}
   end
 
-  def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_handle, payload}) do
-    subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
+  def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_id, payload}) do
+    subquery_ref = RefResolver.ref_from_dep_id!(state.shape_info.ref_resolver, dep_id)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
     dep_view = Views.current(state.views, subquery_ref)
     next_state = %{state | queue: MoveQueue.enqueue(state.queue, dep_index, payload, dep_view)}

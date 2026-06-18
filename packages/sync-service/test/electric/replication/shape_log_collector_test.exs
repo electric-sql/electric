@@ -1433,6 +1433,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         {Support.StubMaterializer,
          stack_id: ctx.stack_id,
          shape_handle: "inner-shape-handle",
+         shape_id: shape_id_for("inner-shape-handle"),
          initial_values: MapSet.new([])}
       )
 
