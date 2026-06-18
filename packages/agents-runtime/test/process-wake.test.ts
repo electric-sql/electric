@@ -2062,6 +2062,160 @@ describe(`processWake`, () => {
     ])
   })
 
+  it(`combines multiple pending wake events into one handler wake`, async () => {
+    const wakePayloads: Array<unknown> = []
+    defineEntity(`test-agent`, {
+      handler: (_ctx, wake) => {
+        wakePayloads.push(wake.payload)
+      },
+    })
+
+    setTimeout(() => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(
+            `wake`,
+            `wake-1`,
+            `insert`,
+            {
+              source: `/child/1`,
+              changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+            },
+            { offset: `1_0` }
+          ),
+          ev(
+            `wake`,
+            `wake-2`,
+            `insert`,
+            {
+              source: `/child/2`,
+              changes: [{ collection: `runs`, kind: `update`, key: `run-2` }],
+            },
+            { offset: `2_0` }
+          ),
+        ],
+        offset: `2_0`,
+      })
+    }, 50)
+
+    await processWake(makeNotification({ triggerEvent: `inbox` }), {
+      ...BASE_CONFIG,
+      idleTimeout: 300,
+    })
+
+    expect(wakePayloads).toEqual([
+      {
+        type: `wake_batch`,
+        sources: [`/child/1`, `/child/2`],
+        wakes: [
+          {
+            timestamp: `2026-03-20T00:00:00.000Z`,
+            source: `/child/1`,
+            timeout: false,
+            changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+          },
+          {
+            timestamp: `2026-03-20T00:00:00.000Z`,
+            source: `/child/2`,
+            timeout: false,
+            changes: [{ collection: `runs`, kind: `update`, key: `run-2` }],
+          },
+        ],
+        changes: [
+          { collection: `runs`, kind: `update`, key: `run-1` },
+          { collection: `runs`, kind: `update`, key: `run-2` },
+        ],
+      },
+    ])
+
+    const doneCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const lastDoneCall = doneCalls[doneCalls.length - 1]!
+    const body = JSON.parse(lastDoneCall[1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `2_0` },
+    ])
+  })
+
+  it(`combines multiple wake events that accumulated during catch-up`, async () => {
+    const wakePayloads: Array<unknown> = []
+    defineEntity(`test-agent`, {
+      handler: (_ctx, wake) => {
+        wakePayloads.push(wake.payload)
+      },
+    })
+
+    mockDbPreload.mockImplementationOnce(async () => {
+      mockEntityOnBatch.current?.({
+        items: [
+          ev(`entity_created`, `created-1`, `insert`, {}, { offset: `0_0` }),
+          ev(
+            `wake`,
+            `wake-1`,
+            `insert`,
+            {
+              source: `/child/1`,
+              changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+            },
+            { offset: `1_0` }
+          ),
+          ev(
+            `wake`,
+            `wake-2`,
+            `insert`,
+            {
+              source: `/child/2`,
+              changes: [{ collection: `runs`, kind: `update`, key: `run-2` }],
+            },
+            { offset: `2_0` }
+          ),
+        ],
+        offset: `2_0`,
+      })
+    })
+
+    await processWake(makeNotification({ triggerEvent: `wake` }), BASE_CONFIG)
+
+    expect(wakePayloads).toEqual([
+      {
+        type: `wake_batch`,
+        sources: [`/child/1`, `/child/2`],
+        wakes: [
+          {
+            timestamp: `2026-03-20T00:00:00.000Z`,
+            source: `/child/1`,
+            timeout: false,
+            changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+          },
+          {
+            timestamp: `2026-03-20T00:00:00.000Z`,
+            source: `/child/2`,
+            timeout: false,
+            changes: [{ collection: `runs`, kind: `update`, key: `run-2` }],
+          },
+        ],
+        changes: [
+          { collection: `runs`, kind: `update`, key: `run-1` },
+          { collection: `runs`, kind: `update`, key: `run-2` },
+        ],
+      },
+    ])
+
+    const doneCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes(`/_electric/wakes/wake-abc`)
+    )
+    const lastDoneCall = doneCalls[doneCalls.length - 1]!
+    const body = JSON.parse(lastDoneCall[1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `2_0` },
+    ])
+  })
+
   it(`runs the handler immediately when catch-up already includes an inbox message`, async () => {
     const wakePayloads: Array<unknown> = []
 
@@ -2311,7 +2465,7 @@ describe(`processWake`, () => {
     ])
   })
 
-  it(`collapses consecutive pending wake batches into one handler pass using the newest wake`, async () => {
+  it(`collapses consecutive pending wake batches into one batched handler pass`, async () => {
     const wakeSummaries: Array<string> = []
     let firstPassSeenResolve: (() => void) | null = null
     const firstPassSeen = new Promise<void>((resolve) => {
@@ -2326,9 +2480,10 @@ describe(`processWake`, () => {
 
     defineEntity(`test-agent`, {
       handler: async (_ctx, wake) => {
+        const payload = wake.payload as { sources?: Array<string> } | undefined
         wakeSummaries.push(
           wake.type === `wake`
-            ? `wake:${wake.source}`
+            ? `wake:${payload?.sources?.join(`,`) ?? wake.source}`
             : `message:${String(wake.payload ?? ``)}`
         )
 
@@ -2366,7 +2521,10 @@ describe(`processWake`, () => {
     releaseFirstPass()
     await wakePromise
 
-    expect(wakeSummaries).toEqual([`message:`, `wake:/child/second`])
+    expect(wakeSummaries).toEqual([
+      `message:`,
+      `wake:/child/first,/child/second`,
+    ])
 
     const doneCalls = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes(`/_electric/wakes/wake-abc`)
@@ -2457,7 +2615,7 @@ describe(`processWake`, () => {
     ])
   })
 
-  it(`collapses wake batches only until a later message batch and then handles the message next`, async () => {
+  it(`carries pending wake batches into a later message handler pass`, async () => {
     const wakeSummaries: Array<string> = []
     let firstPassSeenResolve: (() => void) | null = null
     const firstPassSeen = new Promise<void>((resolve) => {
@@ -2471,11 +2629,20 @@ describe(`processWake`, () => {
     })
 
     defineEntity(`test-agent`, {
-      handler: async (_ctx, wake) => {
+      handler: async (ctx, wake) => {
+        const payload = wake.payload as { sources?: Array<string> } | undefined
+        const eventWakeSources = ctx.events
+          .filter((event) => event.type === `wake`)
+          .map(
+            (event) => (event.value as { source?: string } | undefined)?.source
+          )
+          .filter((source): source is string => typeof source === `string`)
         wakeSummaries.push(
           wake.type === `wake`
-            ? `wake:${wake.source}`
-            : `message:${String(wake.payload ?? ``)}`
+            ? `wake:${payload?.sources?.join(`,`) ?? wake.source}`
+            : eventWakeSources.length > 0
+              ? `message:${String(wake.payload ?? ``)}+wakes:${eventWakeSources.join(`,`)}`
+              : `message:${String(wake.payload ?? ``)}`
         )
 
         if (wakeSummaries.length === 1) {
@@ -2530,8 +2697,7 @@ describe(`processWake`, () => {
 
     expect(wakeSummaries).toEqual([
       `message:`,
-      `wake:/child/second`,
-      `message:follow-up`,
+      `message:follow-up+wakes:/child/first,/child/second`,
     ])
 
     const doneCalls = fetchMock.mock.calls.filter(([url]) =>
@@ -2561,9 +2727,10 @@ describe(`processWake`, () => {
 
     defineEntity(`test-agent`, {
       handler: async (_ctx, wake) => {
+        const payload = wake.payload as { sources?: Array<string> } | undefined
         wakeSummaries.push(
           wake.type === `wake`
-            ? `wake:${wake.source}`
+            ? `wake:${payload?.sources?.join(`,`) ?? wake.source}`
             : `message:${String(wake.payload ?? ``)}`
         )
 
@@ -2625,9 +2792,10 @@ describe(`processWake`, () => {
 
     defineEntity(`test-agent`, {
       handler: async (_ctx, wake) => {
+        const payload = wake.payload as { sources?: Array<string> } | undefined
         wakeSummaries.push(
           wake.type === `wake`
-            ? `wake:${wake.source}`
+            ? `wake:${payload?.sources?.join(`,`) ?? wake.source}`
             : `message:${String(wake.payload ?? ``)}`
         )
 
