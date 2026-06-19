@@ -189,7 +189,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       :telemetry.execute(
         [:process, :memory],
         %{total: map.proc_mem},
-        %{process_type: to_string(map.type)}
+        %{process_type: map.type}
       )
     end
   end
@@ -205,7 +205,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           max_ref_count: map.max_ref_count,
           avg_ref_count: map.avg_ref_count
         },
-        %{process_type: to_string(map.type)}
+        %{process_type: map.type}
       )
     end
   end
