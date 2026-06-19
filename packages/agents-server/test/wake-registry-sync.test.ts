@@ -4,23 +4,21 @@ import { eq } from 'drizzle-orm'
 import { createDb } from '../src/db'
 import { wakeRegistrations } from '../src/db/schema'
 import { WakeRegistry } from '../src/wake-registry'
-import { configureElectricAgentsTestBackendEnv } from './test-backend-env'
-import type { createDb as createDbType } from '../src/db'
+import {
+  TEST_ELECTRIC_URL,
+  TEST_POSTGRES_URL,
+  ensureElectricAgentsTestBackend,
+} from './test-backend'
 
-configureElectricAgentsTestBackendEnv(`agent-server-sync`, 10)
-
-type DbConnection = ReturnType<typeof createDbType>
+type DbConnection = ReturnType<typeof createDb>
 
 let connection: DbConnection
 let db: DbConnection[`db`]
-let testElectricUrl: string
 
 describe(`WakeRegistry Electric collection sync`, () => {
   beforeAll(async () => {
-    const backend = await import(`./test-backend`)
-    await backend.resetElectricAgentsTestBackend()
-    testElectricUrl = backend.TEST_ELECTRIC_URL
-    connection = createDb(backend.TEST_POSTGRES_URL)
+    await ensureElectricAgentsTestBackend()
+    connection = createDb(TEST_POSTGRES_URL)
     db = connection.db
   }, 60_000)
 
@@ -43,7 +41,7 @@ describe(`WakeRegistry Electric collection sync`, () => {
       .returning()
 
     const registry = new WakeRegistry(db as any)
-    await registry.startSync(testElectricUrl)
+    await registry.startSync(TEST_ELECTRIC_URL)
 
     try {
       let results: Awaited<ReturnType<WakeRegistry[`evaluate`]>> = []
