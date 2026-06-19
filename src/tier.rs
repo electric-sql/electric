@@ -354,6 +354,14 @@ impl Store {
             m.offloading = true;
         }
         let res = self.seal_loop(st).await;
+        // Reclaim the redundant sealed prefix from the live file once it crosses
+        // the threshold. Inside the same guarded window as sealing, so the two
+        // never touch the live file or `file_base` concurrently.
+        let compact_res = if res.is_ok() {
+            self.maybe_compact(st).await
+        } else {
+            Ok(())
+        };
         {
             let mut m = st.tier.manifest.lock().unwrap();
             m.offloading = false;
@@ -361,6 +369,124 @@ impl Store {
         if let Err(e) = res {
             tracing::warn!(stream = %st.path, error = %e, "tier seal pass failed; will retry on next append");
         }
+        if let Err(e) = compact_res {
+            tracing::warn!(stream = %st.path, error = %e, "tier compaction failed; will retry on next append");
+        }
+    }
+
+    /// If the reclaimable sealed prefix (`sealed_offset − file_base`) has reached
+    /// the configured `compact_bytes`, rewrite the live data file to drop it.
+    /// Called inside the seal guard, so it is mutually exclusive with sealing.
+    /// No-op when `compact_bytes == 0` or nothing is reclaimable.
+    async fn maybe_compact(self: &Arc<Self>, st: &Arc<StreamState>) -> std::io::Result<()> {
+        let threshold = self.tier_config.compact_bytes;
+        if threshold == 0 {
+            return Ok(());
+        }
+        let (sealed, file_base) = {
+            let m = st.tier.manifest.lock().unwrap();
+            let s = st.shared.read().unwrap();
+            (m.sealed_offset.max(st.base_offset), s.file_base)
+        };
+        if sealed <= file_base || sealed - file_base < threshold {
+            return Ok(());
+        }
+        self.compact_one(st, sealed).await
+    }
+
+    /// Rewrite the live data file from `[old_file_base, tail)` to `[cut, tail)`,
+    /// reclaiming the redundant sealed prefix `[old_file_base, cut)` (which is
+    /// already served from chunk files / remote objects via `resolve_range`).
+    /// Holds the appender lock for the whole pass so `tail` is frozen; crash-safe
+    /// via a `pending_compaction` intent persisted before the destructive rename
+    /// (see `recover_one_inner`). The redundant prefix is reclaimed regardless of
+    /// Local/Remote placement — every offset below `cut` is segment-backed.
+    async fn compact_one(self: &Arc<Self>, st: &Arc<StreamState>, cut: u64) -> std::io::Result<()> {
+        let mut ap = st.appender.lock().await;
+        let (old_base, tail, old_file) = {
+            let s = st.shared.read().unwrap();
+            (s.file_base, s.tail, s.file.clone())
+        };
+        // Re-check under the appender lock: nothing to reclaim, or an inconsistent
+        // watermark (sealed should never exceed the frozen tail).
+        if cut <= old_base || cut > tail {
+            return Ok(());
+        }
+        let residual = tail - cut; // hot-tail bytes to keep
+        let read_from = cut - old_base; // file-local offset of the residual
+        let tmp_path = st.file_path.with_extension("compact.tmp");
+        let live_path = st.file_path.clone();
+
+        // 1) Write the residual tail to a temp file; fsync the file + its dir.
+        {
+            let of = old_file.clone();
+            let tp = tmp_path.clone();
+            tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+                use std::io::Write;
+                use std::os::unix::fs::FileExt;
+                let mut buf = vec![0u8; residual as usize];
+                of.read_exact_at(&mut buf, read_from)?;
+                let mut f = std::fs::File::create(&tp)?;
+                f.write_all(&buf)?;
+                f.sync_all()?;
+                crate::store::fsync_parent_dir(&tp)
+            })
+            .await
+            .map_err(std::io::Error::other)??;
+        }
+
+        // 2) Persist the compaction intent BEFORE the destructive rename, so a
+        //    crash anywhere after this is recoverable (tail is frozen).
+        *st.compaction.lock().unwrap() = Some(crate::store::PendingCompaction {
+            new_file_base: cut,
+            tail,
+        });
+        {
+            let stc = st.clone();
+            tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+                .await
+                .map_err(std::io::Error::other)??;
+        }
+
+        // 3) Atomic content swap, made crash-durable. In-flight readers keep the
+        //    old fd (the old inode stays readable until they drop it).
+        {
+            let tp = tmp_path.clone();
+            let lp = live_path.clone();
+            tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+                std::fs::rename(&tp, &lp)?;
+                crate::store::fsync_parent_dir(&lp)
+            })
+            .await
+            .map_err(std::io::Error::other)??;
+        }
+
+        // 4) Open the compacted file and publish (file, file_base) for readers as
+        //    one consistent swap; repoint the appender's write handle. Under the
+        //    appender lock, so no append observes a half-swapped state.
+        let new_file = Arc::new(
+            OpenOptions::new()
+                .read(true)
+                .append(true)
+                .open(&live_path)?,
+        );
+        {
+            let mut s = st.shared.write().unwrap();
+            s.file = new_file.clone();
+            s.file_base = cut;
+        }
+        ap.file = new_file;
+        ap.written = residual;
+
+        // 5) Clear the intent durably; the live file now matches `file_base`.
+        *st.compaction.lock().unwrap() = None;
+        {
+            let stc = st.clone();
+            tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+                .await
+                .map_err(std::io::Error::other)??;
+        }
+        Ok(())
     }
 
     async fn seal_loop(self: &Arc<Self>, st: &Arc<StreamState>) -> std::io::Result<()> {

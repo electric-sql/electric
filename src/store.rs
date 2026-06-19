@@ -1297,6 +1297,114 @@ mod tier_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[tokio::test]
+    async fn compaction_reclaims_live_file() {
+        // With compaction on, once the reclaimable sealed prefix crosses
+        // `compact_bytes` the live data file is rewritten to hold only the hot
+        // tail `[sealed_offset, tail)`; reads of the full history stay exact.
+        let dir = tmp_dir("compact-reclaim");
+        let mut cfg = local_tier(&dir, 64 * 1024); // 64 KiB segments
+        cfg.compact_bytes = 128 * 1024; // compact once ≥128 KiB is reclaimable
+        let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let scfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s/compact", scfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // 500 KiB → seals 7×64 KiB (448 KiB), leaving a 52 KiB hot tail.
+        let total = 500 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+
+        store.maybe_seal(&st).await; // seals + offloads + compacts
+
+        let (sealed, n_segs) = {
+            let m = st.tier.manifest.lock().unwrap();
+            (m.sealed_offset, m.segments.len())
+        };
+        let (tail, file_base) = {
+            let s = st.shared.read().unwrap();
+            (s.tail, s.file_base)
+        };
+        assert!(sealed >= 128 * 1024, "expected a reclaimable sealed prefix, got {sealed}");
+        assert_eq!(file_base, sealed, "file_base advanced to the sealed watermark");
+
+        let live_size = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(live_size, tail - sealed, "live file holds only the hot tail");
+        assert!(
+            live_size < total as u64,
+            "live file ({live_size}) must be smaller than the full stream ({total})"
+        );
+
+        // Full catch-up read is byte-identical across the compacted (cold) prefix
+        // and the live tail.
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "round-trip after compaction");
+
+        // A read spanning the cold/hot boundary is exact.
+        let mid = sealed - 100;
+        let got2 = read_logical(&st, mid, sealed + 100).await;
+        assert_eq!(got2, payload[mid as usize..(sealed + 100) as usize]);
+
+        // Compaction never touches the manifest.
+        assert!(n_segs >= 1, "manifest still lists the sealed segments");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn compaction_respects_threshold() {
+        // Below `compact_bytes` the live file is left intact (file_base unmoved),
+        // and reads remain exact — compaction is purely a reclaim, never required
+        // for correctness.
+        let dir = tmp_dir("compact-threshold");
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 10 * 1024 * 1024; // 10 MiB — far above this stream
+        let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let scfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s/nothresh", scfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let total = 200 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+        store.maybe_seal(&st).await;
+
+        let file_base = st.shared.read().unwrap().file_base;
+        assert_eq!(file_base, 0, "below threshold → no compaction");
+        let live_size = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(live_size, total as u64, "live file retains the full stream");
+
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "reads exact without compaction");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A BlobStore whose uploads always fail — used to leave a sealed segment in
     /// the `Local` (not-yet-offloaded) state.
     struct FailingBlobStore;
