@@ -42,9 +42,18 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   defp exporter_child_specs(opts) do
     metrics = metrics(opts)
 
-    # Metrics that should reach Prometheus only, e.g. stack-level metrics that the other
-    # reporters already export per-stack. Appending them here avoids double-reporting.
-    prometheus_metrics = metrics ++ Map.get(opts, :additional_prometheus_metrics, [])
+    # `ets.table.*` are high-cardinality per-table gauges tagged by the raw table name
+    # (which embeds per-shape/stack ids). That's the intended trade-off for OTel/Honeycomb
+    # and is harmless for StatsD (series are cleared between OTel exports and sent per-scrape
+    # over StatsD), but `TelemetryMetricsPrometheus.Core` keeps every series in its registry
+    # with no TTL — so a rotating top-N set would accumulate stale series indefinitely. Keep
+    # these off the Prometheus `/metrics` path; its `ets.memory.total` (by `table_type`) stays.
+    #
+    # `additional_prometheus_metrics` are, conversely, Prometheus-only extras (stack-level
+    # metrics the other reporters already export per-stack) appended to avoid double-reporting.
+    prometheus_metrics =
+      Enum.reject(metrics, &prometheus_excluded?/1) ++
+        Map.get(opts, :additional_prometheus_metrics, [])
 
     [
       Reporters.CallHomeReporter.child_spec(
@@ -56,6 +65,11 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       Reporters.Statsd.child_spec(opts, metrics: metrics)
     ]
   end
+
+  # Per-table ETS gauges are excluded from the (TTL-less) Prometheus registry; see
+  # `exporter_child_specs/1`. They still flow to OTel and StatsD.
+  defp prometheus_excluded?(%{name: [:ets, :table | _]}), do: true
+  defp prometheus_excluded?(_), do: false
 
   @impl ElectricTelemetry.Poller
   def builtin_periodic_measurements(telemetry_opts) do

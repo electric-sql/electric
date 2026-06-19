@@ -35,6 +35,37 @@ defmodule ElectricTelemetry.ApplicationTelemetryTest do
     end
   end
 
+  describe "ets.table.* metric routing" do
+    setup do
+      {:ok, opts} =
+        ElectricTelemetry.validate_options(
+          instance_id: "test-instance",
+          version: "1.0.0",
+          reporters: [prometheus?: true, statsd_host: "localhost", otel_metrics?: true]
+        )
+
+      {:ok, {_flags, children}} = ApplicationTelemetry.init(opts)
+      %{children: children}
+    end
+
+    test "reach OTel and StatsD but are kept off the Prometheus registry", %{children: children} do
+      ets_table? = &(&1.name in [[:ets, :table, :memory], [:ets, :table, :size]])
+
+      assert Enum.any?(reporter_metrics(children, OtelMetricExporter), ets_table?)
+      assert Enum.any?(reporter_metrics(children, TelemetryMetricsStatsd), ets_table?)
+      refute Enum.any?(reporter_metrics(children, :prometheus_metrics), ets_table?)
+    end
+
+    test "the bounded ets.memory.total (by table_type) still reaches Prometheus", %{
+      children: children
+    } do
+      assert Enum.any?(
+               reporter_metrics(children, :prometheus_metrics),
+               &(&1.name == [:ets, :memory, :total])
+             )
+    end
+  end
+
   # `Supervisor.init/2` normalises child specs into maps, nesting the reporter's start args
   # (which carry `:metrics`) inside `:start`. Reporters are identified by their child spec id.
   defp reporter_metrics(children, id) do
