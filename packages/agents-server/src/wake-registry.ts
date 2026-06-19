@@ -483,6 +483,20 @@ export class WakeRegistry {
     this.timeoutDelivered.clear()
   }
 
+  private async allocateRegistrationId(): Promise<number> {
+    if (this.mode !== `electric`) {
+      return this.allocateLocalId()
+    }
+
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const id = await this.allocateRuntimeId()
+      const existing = await this.rowsByPredicate((row) => row.id === id)
+      if (existing.length === 0) return id
+    }
+
+    throw new Error(`Failed to allocate unused wake registration id`)
+  }
+
   private async allocateRuntimeId(): Promise<number> {
     const rows = await this.db.execute(
       sql<{
@@ -614,10 +628,7 @@ export class WakeRegistry {
       )
       if (existing.length > 0) return
     }
-    const id =
-      this.mode === `electric`
-        ? await this.allocateRuntimeId()
-        : this.allocateLocalId()
+    const id = await this.allocateRegistrationId()
     const tx = this.registerAction(
       this.normalizeRegistration(reg, tenantId, id)
     )

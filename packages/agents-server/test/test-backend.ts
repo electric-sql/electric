@@ -19,17 +19,30 @@ export const TEST_POSTGRES_URL =
 export const TEST_ELECTRIC_URL =
   process.env.ELECTRIC_URL ?? `http://localhost:3060`
 
-const hasExplicitBackendConfig =
-  process.env.ELECTRIC_AGENTS_TEST_BACKEND_MANAGED !== `1` &&
-  (process.env.DATABASE_URL !== undefined ||
-    process.env.ELECTRIC_URL !== undefined ||
-    process.env.CLICKHOUSE_URL !== undefined)
+function currentPostgresUrl(): string {
+  return (
+    process.env.DATABASE_URL ??
+    `postgres://electric_agents:electric_agents@localhost:5432/electric_agents`
+  )
+}
 
-let ensureBackendPromise: Promise<void> | null = null
-const resetLockDir = path.join(
-  os.tmpdir(),
-  `${getElectricAgentsComposeProject()}-agent-server-test-backend.lock`
-)
+function hasExplicitBackendConfig(): boolean {
+  return (
+    process.env.ELECTRIC_AGENTS_TEST_BACKEND_MANAGED !== `1` &&
+    (process.env.DATABASE_URL !== undefined ||
+      process.env.ELECTRIC_URL !== undefined ||
+      process.env.CLICKHOUSE_URL !== undefined)
+  )
+}
+
+const ensureBackendPromises = new Map<string, Promise<void>>()
+
+function currentResetLockDir(): string {
+  return path.join(
+    os.tmpdir(),
+    `${getElectricAgentsComposeProject()}-agent-server-test-backend.lock`
+  )
+}
 
 async function startElectricAgentsTestBackend(): Promise<void> {
   await execFileAsync(
@@ -164,7 +177,7 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
 
   if (process.env.ELECTRIC_AGENTS_TEST_BACKEND_MANAGED === `1`) {
     await stopElectricAgentsTestBackendAndRemoveVolumes()
-    ensureBackendPromise = null
+    ensureBackendPromises.delete(postgresUrl)
     await ensureElectricAgentsTestBackend()
     await runMigrations(postgresUrl)
     if (await matchesCurrentSchema()) {
@@ -178,14 +191,16 @@ async function ensureExpectedSchema(postgresUrl: string): Promise<void> {
   )
 }
 export async function ensureElectricAgentsTestBackend(): Promise<void> {
-  if (ensureBackendPromise) {
-    await ensureBackendPromise
+  const postgresUrl = currentPostgresUrl()
+  const existing = ensureBackendPromises.get(postgresUrl)
+  if (existing) {
+    await existing
     return
   }
 
-  ensureBackendPromise = (async () => {
+  const ensureBackendPromise = (async () => {
     try {
-      const pg = postgres(TEST_POSTGRES_URL, {
+      const pg = postgres(postgresUrl, {
         max: 1,
         onnotice: () => {},
         connect_timeout: 2,
@@ -197,29 +212,31 @@ export async function ensureElectricAgentsTestBackend(): Promise<void> {
         await pg.end({ timeout: 2 })
       }
     } catch (error) {
-      if (hasExplicitBackendConfig) {
+      if (hasExplicitBackendConfig()) {
         const details = error instanceof Error ? error.message : String(error)
         throw new Error(
-          `Explicit Electric Agents test backend is unreachable at ${TEST_POSTGRES_URL}: ${details}`
+          `Explicit Electric Agents test backend is unreachable at ${postgresUrl}: ${details}`
         )
       }
       await startElectricAgentsTestBackend()
     }
   })()
+  ensureBackendPromises.set(postgresUrl, ensureBackendPromise)
 
   try {
     await ensureBackendPromise
   } catch (error) {
-    ensureBackendPromise = null
+    ensureBackendPromises.delete(postgresUrl)
     throw error
   }
 }
 
 export async function resetElectricAgentsTestBackend(): Promise<void> {
   await ensureElectricAgentsTestBackend()
+  const postgresUrl = currentPostgresUrl()
 
   await withResetLock(async () => {
-    const pg = postgres(TEST_POSTGRES_URL, {
+    const pg = postgres(postgresUrl, {
       max: 1,
       onnotice: () => {},
     })
@@ -234,12 +251,13 @@ export async function resetElectricAgentsTestBackend(): Promise<void> {
       await pg.end()
     }
 
-    await runMigrations(TEST_POSTGRES_URL)
-    await ensureExpectedSchema(TEST_POSTGRES_URL)
+    await runMigrations(postgresUrl)
+    await ensureExpectedSchema(postgresUrl)
   })
 }
 
 async function withResetLock<T>(fn: () => Promise<T>): Promise<T> {
+  const resetLockDir = currentResetLockDir()
   for (;;) {
     try {
       await mkdir(resetLockDir)

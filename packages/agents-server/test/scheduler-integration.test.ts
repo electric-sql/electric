@@ -9,7 +9,9 @@ import {
 } from './test-utils'
 import { configureElectricAgentsTestBackendEnv } from './test-backend-env'
 
-configureElectricAgentsTestBackendEnv(`agent-server-scheduler`, 20)
+configureElectricAgentsTestBackendEnv(`agent-server-scheduler`, 20, {
+  force: true,
+})
 
 let TEST_ELECTRIC_URL = ``
 let TEST_POSTGRES_URL = ``
@@ -88,8 +90,8 @@ describe(`Scheduler Integration`, () => {
 
   beforeAll(async () => {
     const backend = await import(`./test-backend`)
-    TEST_ELECTRIC_URL = backend.TEST_ELECTRIC_URL
-    TEST_POSTGRES_URL = backend.TEST_POSTGRES_URL
+    TEST_ELECTRIC_URL = process.env.ELECTRIC_URL ?? backend.TEST_ELECTRIC_URL
+    TEST_POSTGRES_URL = process.env.DATABASE_URL ?? backend.TEST_POSTGRES_URL
     resetElectricAgentsTestBackend = backend.resetElectricAgentsTestBackend
 
     dsServer = new DurableStreamTestServer({
