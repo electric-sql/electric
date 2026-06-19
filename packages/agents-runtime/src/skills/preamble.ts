@@ -5,7 +5,6 @@ export interface PreambleFields {
   arguments?: Array<string>
   argumentHint?: string
   userInvocable?: boolean
-  max?: number
 }
 
 export function parsePreamble(content: string): PreambleFields {
@@ -82,11 +81,6 @@ export function parsePreamble(content: string): PreambleFields {
       case `user-invocable`:
         result.userInvocable = rawValue === `true`
         break
-      case `max`: {
-        const num = parseInt(rawValue, 10)
-        if (!Number.isNaN(num) && num > 0) result.max = num
-        break
-      }
     }
   }
 
