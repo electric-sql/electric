@@ -555,10 +555,11 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
     use std::io::Write;
     (&*ap.file).write_all(wire)?;
     ap.written += wire.len() as u64;
-    let tail = st.base_offset + ap.written;
+    let tail;
     let closed;
     {
         let mut s = st.shared.write().unwrap();
+        tail = s.file_base + ap.written;
         s.tail = tail;
         s.last_access = SystemTime::now();
         closed = s.closed_durable;
@@ -1170,9 +1171,10 @@ where
 
     // ---- commit: advance tail, invalidate cache, publish, group-commit fsync ----
     ap.written += n;
-    let tail = st.base_offset + ap.written;
+    let tail;
     {
         let mut s = st.shared.write().unwrap();
+        tail = s.file_base + ap.written;
         s.tail = tail;
         s.last_access = SystemTime::now();
         if let Some(p) = &producer {

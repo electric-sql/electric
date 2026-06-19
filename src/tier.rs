@@ -361,21 +361,20 @@ impl Store {
             // between the current sealed watermark and the tail, capped at one
             // segment. We need the appender lock briefly to read a consistent
             // (written) length and the file-local region.
-            let (sealed_offset, tail, base) = {
+            let (sealed_offset, tail, file_base, file) = {
                 let m = st.tier.manifest.lock().unwrap();
                 let s = st.shared.read().unwrap();
-                (m.sealed_offset.max(st.base_offset), s.tail, st.base_offset)
+                (m.sealed_offset.max(st.base_offset), s.tail, s.file_base, s.file.clone())
             };
             let unsealed = tail.saturating_sub(sealed_offset);
             if unsealed < seg_bytes {
                 return Ok(());
             }
             // Candidate cut length within the live file region [sealed, tail).
-            let file_lo = sealed_offset - base; // file-local start of unsealed
+            let file_lo = sealed_offset - file_base; // file-local start of unsealed
             let want = seg_bytes;
             // Read the candidate region from the live file to find the boundary.
             let region_len = want.min(unsealed);
-            let file = st.file.clone();
             let region = tokio::task::spawn_blocking(move || {
                 use std::os::unix::fs::FileExt;
                 let mut buf = vec![0u8; region_len as usize];
@@ -681,9 +680,16 @@ pub fn resolve_range(st: &Arc<StreamState>, start: u64, end: u64, out: &mut Vec<
     // Live region: [max(lo, sealed_offset), end) is in the live data file.
     let live_lo = lo.max(sealed_offset);
     if end > live_lo {
+        // Read the live file handle and its base as a consistent pair — compaction
+        // swaps both together under `shared.write()`, so a torn read here would
+        // map to the wrong file position.
+        let (file, file_base) = {
+            let s = st.shared.read().unwrap();
+            (s.file.clone(), s.file_base)
+        };
         out.push(ResolvedSlice::Local(Segment {
-            file: st.file.clone(),
-            file_start: live_lo - st.base_offset,
+            file,
+            file_start: live_lo - file_base,
             len: end - live_lo,
         }));
     }

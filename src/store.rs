@@ -48,8 +48,19 @@ pub struct StreamConfig {
 }
 
 pub struct Shared {
-    /// Logical tail offset (base_offset + bytes written to this stream's own file).
+    /// Logical tail offset (file_base + bytes written to this stream's own file).
     pub tail: u64,
+    /// Logical offset of the live data file's first byte. Equals `base_offset`
+    /// until the first compaction, then advances to the sealed watermark as the
+    /// redundant sealed prefix is reclaimed. Live-region reads map
+    /// `file_pos = logical - file_base`. Distinct from `base_offset`, the
+    /// immutable fork point. Invariant: base_offset ≤ file_base ≤ sealed_offset ≤ tail.
+    pub file_base: u64,
+    /// Shared handle to the live data file for lock-free positioned reads. Held
+    /// here (not on `StreamState`) so compaction can swap it together with
+    /// `file_base` under one `shared.write()`, giving concurrent readers a
+    /// consistent (file, file_base) pair.
+    pub file: Arc<File>,
     /// Writer-facing close intent: set under the appender lock the instant a
     /// close is accepted (so subsequent appends are rejected) and persisted to
     /// the sidecar. NOT what readers observe — see `closed_durable`.
@@ -162,8 +173,11 @@ impl SyncCoalescer {
                 #[cfg(not(feature = "telemetry"))]
                 let batch = 0u64;
                 // Sync covers everything written at the time the fsync starts
-                // (file-local bytes: logical tail minus the fork base).
-                let covers = stream.shared.read().unwrap().tail - stream.base_offset;
+                // (file-local bytes: logical tail minus the live file's base).
+                let covers = {
+                    let s = stream.shared.read().unwrap();
+                    s.tail - s.file_base
+                };
                 let f = file.clone();
                 let t = crate::telemetry::Timer::start();
                 // Releases leadership if this future is cancelled mid-fsync.
@@ -266,9 +280,10 @@ pub struct StreamState {
     pub config: StreamConfig,
     pub is_json: bool,
     pub file_path: PathBuf,
-    /// Shared handle to the data file for lock-free positioned reads.
-    pub file: Arc<File>,
     /// Logical offset where this stream's own file starts (fork point; 0 for roots).
+    /// Immutable for the stream's lifetime; offsets below it route to `parent`.
+    /// The live data file's *physical* start is `Shared::file_base`, which may
+    /// advance past `base_offset` as compaction reclaims the sealed prefix.
     pub base_offset: u64,
     /// Fork source: ranges below base_offset are read through this chain.
     pub parent: Option<Arc<StreamState>>,
@@ -299,6 +314,23 @@ pub struct StreamState {
     /// Remote tier handle, cloned from the Store. None when tiering is off, so
     /// the read path stays a pure local-fd path in the default build.
     pub blobstore: Option<crate::blobstore::SharedBlobStore>,
+    /// In-flight live-file compaction intent. `Some` only during a compaction
+    /// pass (between the intent meta-write and its clear). Persisted by
+    /// `Meta::capture` so a crash mid-compaction is recoverable. See tier.rs.
+    pub compaction: StdMutex<Option<PendingCompaction>>,
+}
+
+/// Crash-recovery intent for a live-file compaction in progress. While set, the
+/// live data file is being swapped from `[old_file_base, tail)` to
+/// `[new_file_base, tail)`; because compaction holds the appender lock end to
+/// end, `tail` is frozen, so on boot the on-disk file ends at `tail` whichever
+/// side of the rename the crash fell on. Recovery sets
+/// `file_base = tail - file_size`, which resolves to the correct base for either
+/// file. See `recover_one_inner`.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct PendingCompaction {
+    pub new_file_base: u64,
+    pub tail: u64,
 }
 
 /// Upper bound on the resident tail chunk (bytes). Larger appends are served
@@ -522,6 +554,8 @@ impl Store {
             },
             None => None,
         };
+        // Clean up any leftover compaction temp file from a crash mid-rewrite.
+        let _ = std::fs::remove_file(data_path.with_extension("compact.tmp"));
         let file = Arc::new(
             OpenOptions::new()
                 .read(true)
@@ -530,7 +564,19 @@ impl Store {
                 .ok()?,
         );
         let written = file.metadata().ok()?.len();
-        let tail = meta.base_offset + written;
+        // `file_base` is the live file's logical start. With a `pending_compaction`
+        // intent the rewrite may have crashed mid-flight; because `tail` was frozen
+        // under the appender lock, the on-disk file ends at `tail` on either side of
+        // the rename, so `file_base = tail - file_size` recovers the right base for
+        // whichever file is present. Otherwise trust the persisted `file_base`
+        // (defaulting to `base_offset` for pre-compaction sidecars).
+        let (file_base, tail) = match meta.pending_compaction {
+            Some(p) if p.tail >= written => (p.tail - written, p.tail),
+            _ => {
+                let fb = meta.file_base.unwrap_or(meta.base_offset);
+                (fb, fb + written)
+            }
+        };
         let (tail_tx, _) = watch::channel(Tail {
             bytes: tail,
             closed: meta.closed,
@@ -540,12 +586,13 @@ impl Store {
             path: path.to_string(),
             is_json: is_json_content_type(&meta.content_type),
             file_path: data_path.clone(),
-            file: file.clone(),
             base_offset: meta.base_offset,
             parent,
-            appender: AsyncMutex::new(Appender { file, written }),
+            appender: AsyncMutex::new(Appender { file: file.clone(), written }),
             shared: RwLock::new(Shared {
                 tail,
+                file_base,
+                file,
                 closed: meta.closed,
                 closed_durable: meta.closed,
                 closed_by: meta.closed_by.clone(),
@@ -566,6 +613,10 @@ impl Store {
                 &self.segments_dir(),
             ),
             blobstore: self.blobstore.clone(),
+            // A `pending_compaction` intent is re-derived deterministically from
+            // the file size each boot (see `file_base` above), so the in-memory
+            // cell starts clear; the next meta write persists the cleared marker.
+            compaction: StdMutex::new(None),
             config: StreamConfig {
                 content_type: meta.content_type.clone(),
                 ttl_seconds: meta.ttl_seconds,
@@ -703,12 +754,13 @@ impl Store {
             path: path.to_string(),
             is_json,
             file_path,
-            file: file.clone(),
             base_offset,
             parent: parent.clone(),
-            appender: AsyncMutex::new(Appender { file, written: 0 }),
+            appender: AsyncMutex::new(Appender { file: file.clone(), written: 0 }),
             shared: RwLock::new(Shared {
                 tail: base_offset,
+                file_base: base_offset,
+                file,
                 closed,
                 closed_durable: closed,
                 closed_by: None,
@@ -725,6 +777,7 @@ impl Store {
             last_chunk: RwLock::new(None),
             tier: crate::tier::TierState::default(),
             blobstore: self.blobstore.clone(),
+            compaction: StdMutex::new(None),
             config,
         });
         match self.streams.entry(path.to_string()) {
@@ -906,6 +959,15 @@ pub struct Meta {
     pub segments: Vec<MetaSegment>,
     #[serde(default)]
     pub sealed_offset: u64,
+    /// Logical start of the live data file (compaction watermark). `None` in
+    /// pre-compaction sidecars → recovery falls back to `base_offset`, so old
+    /// sidecars stay fully compatible.
+    #[serde(default)]
+    pub file_base: Option<u64>,
+    /// Set only while a compaction is mid-flight; drives crash recovery. Cleared
+    /// once the rewrite + swap completes durably.
+    #[serde(default)]
+    pub pending_compaction: Option<PendingCompaction>,
 }
 
 /// Serialized form of a sealed-segment manifest entry.
@@ -972,6 +1034,8 @@ impl Meta {
                     .collect()
             },
             sealed_offset: st.tier.manifest.lock().unwrap().sealed_offset,
+            file_base: Some(s.file_base),
+            pending_compaction: *st.compaction.lock().unwrap(),
         }
     }
 }
@@ -1131,8 +1195,9 @@ mod tier_tests {
         let mut ap = st.appender.lock().await;
         (&*ap.file).write_all(wire).unwrap();
         ap.written += wire.len() as u64;
-        let tail = st.base_offset + ap.written;
-        st.shared.write().unwrap().tail = tail;
+        let mut s = st.shared.write().unwrap();
+        let tail = s.file_base + ap.written;
+        s.tail = tail;
     }
 
     /// Read a logical range back through the placement-aware resolver, exactly as
