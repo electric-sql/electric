@@ -39,7 +39,6 @@ const QUICKSTART_META: SkillMeta = {
   description: `A quickstart`,
   whenToUse: `When learning`,
   keywords: [`quickstart`],
-  max: 10_000,
   charCount: 500,
   contentHash: `abc123`,
   source: `/skills/quickstart.md`,
@@ -112,9 +111,9 @@ describe(`skill tools`, () => {
     })
   })
 
-  it(`use_skill truncates and warns when content exceeds max`, async () => {
+  it(`use_skill loads full content for large skills`, async () => {
     const bigContent = `x`.repeat(15_000)
-    const meta = { ...QUICKSTART_META, max: 10_000, charCount: 15_000 }
+    const meta = { ...QUICKSTART_META, charCount: 15_000 }
     const registry = createMockRegistry({
       quickstart: { meta, content: bigContent },
     })
@@ -125,13 +124,12 @@ describe(`skill tools`, () => {
     const result = await useTool.execute(`tc1`, { name: `quickstart` })
 
     const insertedContent = ctx.insertContext.mock.calls[0]![1].content
-    // Content is truncated to max (10,000) — no wrapper prefix in insertContext
-    expect(insertedContent).toContain(`x`.repeat(100))
-    expect(insertedContent.length).toBe(10_000)
-    // Tool result contains truncation warning
+    expect(insertedContent).toBe(bigContent)
+    expect(result.details).toMatchObject({ loaded: true, chars: 15_000 })
+    expect(result.details).not.toHaveProperty(`truncated`)
     expect(result.content[0]).toMatchObject({
       type: `text`,
-      text: expect.stringContaining(`truncated`),
+      text: expect.not.stringContaining(`truncated`),
     })
   })
 

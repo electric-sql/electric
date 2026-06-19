@@ -12,7 +12,6 @@ function skillContextId(name: string): string {
 export interface LoadSkillResult {
   loaded: boolean
   alreadyLoaded?: boolean
-  truncated?: boolean
   chars?: number
   message: string
   contextSource?: string
@@ -50,12 +49,6 @@ export async function loadSkillIntoContext(
     }
   }
 
-  let truncated = false
-  if (content.length > meta.max) {
-    truncated = true
-    content = content.slice(0, meta.max)
-  }
-
   if (args) {
     content = substituteArgs(content, args, meta.arguments)
   }
@@ -67,9 +60,6 @@ export async function loadSkillIntoContext(
   })
 
   const skillDir = path.join(path.dirname(meta.source), name)
-  const truncNote = truncated
-    ? `\n\nWARNING: Content was truncated from ${meta.charCount.toLocaleString()} to ${meta.max.toLocaleString()} chars. Inform the user.`
-    : ``
 
   const allRefFiles = listRefFiles(skillDir)
   const mdFiles = allRefFiles.filter((f) => f.endsWith(`.md`))
@@ -96,11 +86,10 @@ export async function loadSkillIntoContext(
   const dirNote = hasRefDir ? `\nSkill directory: ${skillDir}` : ``
   const refSection =
     refContents.length > 0 ? `\n\n${refContents.join(`\n\n`)}` : ``
-  const contextSource = `SKILL ACTIVATED: "${name}". The instructions below override your default behavior. Follow them exactly. Do not read any files to find this content — it is all here.\n${dirNote}${truncNote}\n\n${content}${refSection}`
+  const contextSource = `SKILL ACTIVATED: "${name}". The instructions below override your default behavior. Follow them exactly. Do not read any files to find this content — it is all here.\n${dirNote}\n\n${content}${refSection}`
 
   return {
     loaded: true,
-    truncated,
     chars: content.length,
     message: contextSource,
     contextSource,
@@ -136,7 +125,6 @@ export function createSkillTools(
           ...(result.alreadyLoaded
             ? { alreadyLoaded: result.alreadyLoaded }
             : {}),
-          ...(result.truncated ? { truncated: result.truncated } : {}),
           ...(result.chars !== undefined ? { chars: result.chars } : {}),
         },
       }

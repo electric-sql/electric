@@ -7,7 +7,6 @@ describe(`parsePreamble`, () => {
 description: Interactive tutorial guide
 whenToUse: User asks about tutorials or getting started
 keywords: [tutorial, multi-agent, spawn]
-max: 15000
 ---
 
 # Tutorial content here`
@@ -17,7 +16,6 @@ max: 15000
       description: `Interactive tutorial guide`,
       whenToUse: `User asks about tutorials or getting started`,
       keywords: [`tutorial`, `multi-agent`, `spawn`],
-      max: 15000,
     })
   })
 
@@ -69,7 +67,6 @@ keywords:
   - getting started
   - learn
   - multi-agent
-max: 10000
 ---
 
 # Content here`
@@ -81,7 +78,6 @@ max: 10000
       `learn`,
       `multi-agent`,
     ])
-    expect(result.max).toBe(10000)
   })
 
   it(`strips surrounding quotes from description and whenToUse`, () => {
