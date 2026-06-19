@@ -43,9 +43,10 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     metrics = metrics(opts)
 
     # `ets.table.*` are high-cardinality per-table gauges tagged by the raw table name
-    # (which embeds per-shape/stack ids). That's the intended trade-off for OTel/Honeycomb
-    # and is harmless for StatsD (series are cleared between OTel exports and sent per-scrape
-    # over StatsD), but `TelemetryMetricsPrometheus.Core` keeps every series in its registry
+    # (which embeds per-shape/stack ids). That rotating top-N set is the intended trade-off
+    # for OTel/Honeycomb (the exporter clears its series between exports) and is harmless for
+    # StatsD (each value is pushed as it's emitted, so nothing accumulates in-process). But
+    # `TelemetryMetricsPrometheus.Core` keeps every series in its registry
     # with no TTL — so a rotating top-N set would accumulate stale series indefinitely. Keep
     # these off the Prometheus `/metrics` path; its `ets.memory.total` (by `table_type`) stays.
     #
