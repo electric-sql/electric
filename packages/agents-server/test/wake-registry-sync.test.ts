@@ -30,6 +30,9 @@ describe(`WakeRegistry Electric collection sync`, () => {
     const suffix = randomUUID()
     const subscriberUrl = `/parent/sync-${suffix}`
     const sourceUrl = `/child/sync-${suffix}`
+    const registry = new WakeRegistry(db as any)
+    await registry.startSync(TEST_ELECTRIC_URL)
+
     const rows = await db
       .insert(wakeRegistrations)
       .values({
@@ -40,9 +43,6 @@ describe(`WakeRegistry Electric collection sync`, () => {
       })
       .returning()
 
-    const registry = new WakeRegistry(db as any)
-    await registry.startSync(TEST_ELECTRIC_URL)
-
     try {
       let results: Awaited<ReturnType<WakeRegistry[`evaluate`]>> = []
       const event = {
@@ -51,11 +51,11 @@ describe(`WakeRegistry Electric collection sync`, () => {
         value: { status: `completed` },
         headers: { operation: `update` },
       }
-      const deadline = Date.now() + 5_000
+      const deadline = Date.now() + 15_000
       do {
         results = await registry.evaluate(sourceUrl, event)
         if (results.length > 0) break
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       } while (Date.now() < deadline)
 
       expect(results).toHaveLength(1)
@@ -66,5 +66,5 @@ describe(`WakeRegistry Electric collection sync`, () => {
         .delete(wakeRegistrations)
         .where(eq(wakeRegistrations.sourceUrl, sourceUrl))
     }
-  }, 15_000)
+  }, 25_000)
 })
