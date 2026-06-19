@@ -382,14 +382,9 @@ export function createPullWakeRunner(
         return
       }
 
-      const deferredEvent = deferredEvents.shift()!
-      if (deferredEvents.length === 0) {
-        deferredWakeEventsByStreamPath.delete(streamPath)
-      }
+      const deferredEvent = deferredEvents[0]!
+      deferredWakeEventsByStreamPath.delete(streamPath)
       spawnClaimActor(deferredEvent, signal)
-      if (deferredEvents.length > 0) {
-        scheduleDeferredWakeRetry(streamPath, signal)
-      }
     }
 
     const timer = setTimeout(retry, DEFERRED_WAKE_RETRY_MS)
