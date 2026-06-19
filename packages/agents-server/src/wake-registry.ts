@@ -297,7 +297,17 @@ export class WakeRegistry {
           if (txid === undefined) {
             throw new WakeRegistrationConflictError(row)
           }
-          await this.requireCollection().utils.awaitTxId(txid, 10_000)
+          try {
+            await this.requireCollection().utils.awaitTxId(txid, 10_000)
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.name === `TimeoutWaitingForTxIdError`
+            ) {
+              return { txid }
+            }
+            throw error
+          }
           return { txid }
         }
         throw new Error(`WakeRegistry registerAction called before startup`)
