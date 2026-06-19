@@ -254,15 +254,22 @@ Key properties:
   group-commit fsync. Offload is strictly _post-durability_: seal → upload →
   `head`-verify → durably flip `local → remote` → _only then_ unlink the staged
   chunk file. So a read never routes to an object that isn't there.
-- **Chunk reclaim only; live-file reclaim deferred.** Sealed segments are separate
-  chunk files, so reclaiming a chunk is an `unlink` — safe even under an in-flight
-  read (Unix keeps an open fd readable after unlink). The live data file's sealed
-  region is **not** reclaimed: hole-punching (`fallocate`) a shared file races with
-  the engine's in-flight lazy reads (`sendfile` / `Body::FileRange`) into the
-  just-sealed tail, which would read zeros from the freed blocks. Safe live-file
-  reclaim needs read/punch coordination (epoch/refcount) or compaction and is a
-  planned follow-up; until then the live file retains the sealed prefix (extra disk,
-  no correctness or race risk).
+- **Chunk reclaim + live-file compaction.** Sealed segments are separate chunk
+  files, so reclaiming a chunk is an `unlink` — safe even under an in-flight read
+  (Unix keeps an open fd readable after unlink). The live data file's redundant
+  sealed prefix is reclaimed by **compaction**: once it exceeds
+  `--tier-compact-bytes` (default 64 MiB), the file is rewritten to hold only the
+  hot tail `[sealed_offset, tail)`. Compaction runs under the per-stream appender
+  lock (so `tail` is frozen): it writes the residual tail to a temp file, persists
+  a `pending_compaction` intent, atomically renames it over the live file, then
+  swaps the read handle together with its logical base (`file_base`) for readers as
+  one consistent pair. In-flight reads drain off the old fd (the same
+  unlink-after-open safety), so reads stay lock-free and never observe freed
+  blocks — which is why compaction replaces the earlier `fallocate` hole-punch that
+  raced those lazy reads. A crash mid-compaction recovers from the intent
+  (`file_base = tail − file_size`). Trade-off: bounded write-amplification (the hot
+  tail is rewritten once per threshold); tune or disable with `--tier-compact-bytes`
+  (`0` disables).
 - **JSON-safe sealing.** A JSON seal boundary always lands on a whole-value
   boundary (a byte-level scanner that ignores commas/brackets inside strings and
   honours escapes), so a sealed segment still reads back wrapped as `[ … ]`.
