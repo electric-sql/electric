@@ -213,7 +213,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def ets_memory(%{intervals_and_thresholds: %{top_ets_table_count: ets_table_count}}) do
     for %{type: type, memory: memory} <-
           ElectricTelemetry.EtsTables.top_by_type(ets_table_count) do
-      :telemetry.execute([:ets, :memory], %{total: memory}, %{table_type: to_string(type)})
+      :telemetry.execute([:ets, :memory], %{total: memory}, %{table_type: type})
     end
   end
 
@@ -225,7 +225,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       :telemetry.execute(
         [:ets, :table],
         %{memory: memory, size: size},
-        %{table_name: to_string(name), table_type: to_string(type)}
+        %{table_name: name, table_type: type}
       )
     end
   end

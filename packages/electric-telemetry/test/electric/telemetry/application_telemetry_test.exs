@@ -105,14 +105,16 @@ defmodule ElectricTelemetry.ApplicationTelemetryTest do
         assert %{memory: memory, size: size} = measurements
         assert is_integer(memory) and memory > 0
         assert is_integer(size) and size >= 0
+        # Tag values are left as-is (atom name, string type); every reporter
+        # stringifies tag values itself, so no to_string/1 at the call site.
         assert %{table_name: name, table_type: type} = metadata
-        assert is_binary(name)
+        assert is_atom(name)
         assert is_binary(type)
       end
 
       # Our named test table should be among the emitted tables.
       assert Enum.any?(events, fn {_measurements, metadata} ->
-               metadata.table_name == "ApplicationTelemetryTest:ets_table_memory"
+               metadata.table_name == :"ApplicationTelemetryTest:ets_table_memory"
              end)
     end
   end
