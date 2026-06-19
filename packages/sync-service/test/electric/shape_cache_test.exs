@@ -22,7 +22,8 @@ defmodule Electric.ShapeCacheTest do
       assert_shape_cleanup: 1,
       patch_shape_status: 1,
       patch_shape_cache: 1,
-      complete_txn_fragment: 3
+      complete_txn_fragment: 3,
+      wait_until: 2
     ]
 
   @stub_inspector Support.StubInspector.new(
@@ -1338,9 +1339,10 @@ defmodule Electric.ShapeCacheTest do
       index_after = SubqueryIndex.for_stack(ctx.stack_id)
       assert index_after != nil
 
-      assert wait_until(200, fn ->
-               SubqueryIndex.has_positions?(index_after, shape_handle)
-             end)
+      assert wait_until(
+               fn -> SubqueryIndex.has_positions?(index_after, shape_handle) end,
+               200
+             )
     end
 
     test "restores shapes with subqueries and their materializers when backup missing", ctx do
@@ -1387,22 +1389,6 @@ defmodule Electric.ShapeCacheTest do
               "shape_task_supervisor"
             ] do
         :ok = stop_supervised(name)
-      end
-    end
-
-    defp wait_until(timeout_ms, fun, started_at \\ System.monotonic_time(:millisecond))
-
-    defp wait_until(timeout_ms, fun, started_at) do
-      cond do
-        fun.() ->
-          true
-
-        System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
-          false
-
-        true ->
-          Process.sleep(10)
-          wait_until(timeout_ms, fun, started_at)
       end
     end
   end
