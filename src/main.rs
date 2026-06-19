@@ -74,6 +74,9 @@ fn main() {
             "--tier-segment-bytes" => {
                 tier.segment_bytes = parse_val(args.next(), "--tier-segment-bytes");
             }
+            "--tier-compact-bytes" => {
+                tier.compact_bytes = parse_val(args.next(), "--tier-compact-bytes");
+            }
             "--tier-key-prefix" => tier.key_prefix = val(args.next(), "--tier-key-prefix"),
             "--tier-endpoint" => tier.endpoint = Some(val(args.next(), "--tier-endpoint")),
             "--tier-region" => tier.region = Some(val(args.next(), "--tier-region")),

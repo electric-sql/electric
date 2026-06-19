@@ -34,6 +34,12 @@ use crate::store::{write_meta_sync, Segment, Store, StreamState};
 /// enough to amortise per-object overhead, small enough to cache and range-read.
 pub const DEFAULT_SEGMENT_BYTES: u64 = 8 * 1024 * 1024;
 
+/// Default live-file compaction threshold: 64 MiB of reclaimable sealed prefix.
+/// Compaction rewrites the (bounded) hot tail once per threshold, so a larger
+/// value lowers write-amplification at the cost of more redundant local disk
+/// between compactions. `0` disables.
+pub const DEFAULT_COMPACT_BYTES: u64 = 64 * 1024 * 1024;
+
 /// Where a sealed segment's bytes currently live.
 #[derive(Clone, Debug)]
 pub enum Placement {
@@ -174,6 +180,10 @@ pub enum TierKind {
 pub struct TierConfig {
     pub kind: TierKind,
     pub segment_bytes: u64,
+    /// Live-file compaction threshold: once a stream's reclaimable sealed prefix
+    /// (`sealed_offset − file_base`) reaches this many bytes, the live data file
+    /// is rewritten to drop that redundant prefix. `0` disables compaction.
+    pub compact_bytes: u64,
     pub key_prefix: String,
     // S3 connection (only meaningful when kind == S3).
     pub endpoint: Option<String>,
@@ -193,6 +203,7 @@ impl Default for TierConfig {
         TierConfig {
             kind: TierKind::Off,
             segment_bytes: DEFAULT_SEGMENT_BYTES,
+            compact_bytes: DEFAULT_COMPACT_BYTES,
             key_prefix: String::new(),
             endpoint: None,
             region: None,
