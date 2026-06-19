@@ -37,6 +37,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @negative_cache_sweep_interval_ms 60_000
 
   alias Electric.Postgres.Inspector
+  alias Electric.Telemetry.OpenTelemetry
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
 
@@ -151,6 +152,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     state =
       %{
+        stack_id: opts.stack_id,
         pg_inspector_table: pg_inspector_table,
         pg_pool: opts.pool,
         persistent_kv: opts.persistent_kv,
@@ -298,7 +300,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       :error ->
         %{ref: ref} =
           Task.Supervisor.async_nolink(state.task_sup, fn ->
-            fetch_for_key(key, state.pg_pool)
+            fetch_for_key(key, state.pg_pool, state.stack_id)
           end)
 
         entry = %{waiters: [waiter], ref: ref}
@@ -322,12 +324,38 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
-  defp fetch_for_key({:rel, rel}, pool), do: fetch_from_db(rel, pool)
-  defp fetch_for_key({:oid, oid}, pool), do: fetch_from_db(oid, pool)
+  # A cache miss runs the DB lookup in a detached worker, so it's outside the
+  # request's trace; and one lookup serves every coalesced waiter, so it can't
+  # belong to a single request anyway. Record it as a standalone span to expose
+  # catalog-query latency and outcome in prod (there is no other signal isolating
+  # these queries).
+  defp fetch_for_key(key, pool, stack_id) do
+    OpenTelemetry.with_span(
+      "inspector.fetch_db",
+      [{"inspector.key_type", key_type(key)}],
+      stack_id,
+      fn ->
+        result = do_fetch_for_key(key, pool)
+        OpenTelemetry.add_span_attributes(%{"inspector.result" => fetch_outcome(result)})
+        result
+      end
+    )
+  end
 
-  defp fetch_for_key(:supported_features, pool) do
+  defp do_fetch_for_key({:rel, rel}, pool), do: fetch_from_db(rel, pool)
+  defp do_fetch_for_key({:oid, oid}, pool), do: fetch_from_db(oid, pool)
+
+  defp do_fetch_for_key(:supported_features, pool) do
     wrap_in_db_errors(fn -> DirectInspector.load_supported_features(pool) end)
   end
+
+  defp key_type({:rel, _}), do: "relation"
+  defp key_type({:oid, _}), do: "oid"
+  defp key_type(:supported_features), do: "supported_features"
+
+  defp fetch_outcome({:ok, :table_not_found}), do: "table_not_found"
+  defp fetch_outcome({:ok, _}), do: "ok"
+  defp fetch_outcome({:error, _}), do: "error"
 
   defp apply_fill_result(state, :supported_features, {:ok, features}) do
     state |> store_supported_features(features) |> persist_data()

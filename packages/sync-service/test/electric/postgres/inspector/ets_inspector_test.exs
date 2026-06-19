@@ -784,6 +784,41 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
   end
 
+  describe "telemetry" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+
+    test "emits a span around each DB lookup tagged with the key type", %{opts: opts} do
+      test_pid = self()
+      handler_id = {:inspector_fetch_db_span, opts[:stack_id]}
+
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:electric, :inspector, :fetch_db, :start],
+          [:electric, :inspector, :fetch_db, :stop]
+        ],
+        fn event, measurements, metadata, _ ->
+          send(test_pid, {:fetch_db_span, List.last(event), measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, _} = EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      # The key type is recorded on the span (start metadata)...
+      assert_receive {:fetch_db_span, :start, _, %{"inspector.key_type" => "relation"}}
+      # ...and the span is timed (stop measurements carry the duration).
+      assert_receive {:fetch_db_span, :stop, %{duration: duration}, _}
+      assert is_integer(duration) and duration > 0
+    end
+  end
+
   defp with_items_oid(%{db_conn: conn}) do
     %{rows: [[oid]]} =
       Postgrex.query!(conn, "SELECT oid FROM pg_class WHERE relname = 'items'", [])
