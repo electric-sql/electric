@@ -31,6 +31,7 @@ function event(operation: `insert` | `update` | `delete`, key = operation) {
 describe(`pgSync wake delivery matching`, () => {
   it(`insert wakes insert subscriber and delete does not wake insert-only subscriber`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,
@@ -59,6 +60,7 @@ describe(`pgSync wake delivery matching`, () => {
 
   it(`splits two subscribers on the same source by operation`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,
@@ -94,6 +96,7 @@ describe(`pgSync wake delivery matching`, () => {
 
   it(`filters pgSync events by collection`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,

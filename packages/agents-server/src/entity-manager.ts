@@ -431,7 +431,7 @@ export class EntityManager {
     electricSecret?: string
   ): Promise<void> {
     if (!electricUrl) {
-      throw new Error(`Electric URL is required to start WakeRegistry`)
+      throw new Error(`WakeRegistry runtime requires an Electric URL`)
     }
     await this.wakeRegistry.startSync(electricUrl, electricSecret)
   }
