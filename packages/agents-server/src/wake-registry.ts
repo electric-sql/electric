@@ -409,7 +409,7 @@ export class WakeRegistry {
     this.mode = `electric`
     this.registrationsCollection = createCollection(
       electricCollectionOptions({
-        id: `wake-registrations:${this.tenantId ?? `all`}`,
+        id: `wake-registrations:${this.tenantId ?? `all`}:${electricUrlWithPath(electricUrl, `/v1/shape`).toString()}`,
         getKey: (row: any) => row.id as number,
         shapeOptions: {
           url: electricUrlWithPath(electricUrl, `/v1/shape`).toString(),
