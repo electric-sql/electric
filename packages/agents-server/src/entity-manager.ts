@@ -4078,9 +4078,19 @@ export class EntityManager {
     // Ensure the backing stream exists
     const exists = await this.streamClient.exists(streamPath)
     if (!exists) {
-      await this.streamClient.create(streamPath, {
-        contentType: `application/json`,
-      })
+      try {
+        await this.streamClient.create(streamPath, {
+          contentType: `application/json`,
+        })
+      } catch (err) {
+        const status =
+          err instanceof Error && `status` in err
+            ? (err as { status?: unknown }).status
+            : undefined
+        if (status !== 409 && !/\b409\b/.test(String(err))) {
+          throw err
+        }
+      }
     }
 
     const fireAt = getNextCronFireAt(spec.expression, spec.timezone)
