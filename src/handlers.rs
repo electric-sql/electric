@@ -457,9 +457,21 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
         }
     };
 
-    let result = match store.create(&path, config, parent, base_offset) {
-        Ok(r) => r,
-        Err(e) => return text_response(500, &e.to_string()),
+    // Run create on the blocking pool: it opens the data file and does a durable
+    // (fsync) `.meta` write, which would otherwise block an async worker for the
+    // whole fsync. Under concurrent stream creation that throttles creates to
+    // ~(worker_count / fsync_latency) and times them out (the "stream creation
+    // doesn't scale past ~200 PUTs" finding). On the blocking pool many creates
+    // fsync concurrently and the async workers stay free to dispatch.
+    let result = {
+        let store = store.clone();
+        match tokio::task::spawn_blocking(move || store.create(&path, config, parent, base_offset))
+            .await
+        {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => return text_response(500, &e.to_string()),
+            Err(_) => return text_response(500, "create task failed"),
+        }
     };
     match result {
         CreateResult::Conflict => text_response(409, "stream exists with different configuration"),
