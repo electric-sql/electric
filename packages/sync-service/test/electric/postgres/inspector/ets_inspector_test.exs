@@ -732,6 +732,8 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     setup [:with_persistent_kv, :with_basic_tables, :with_sql_execute]
 
     setup ctx do
+      start_supervised!({Task.Supervisor, name: EtsInspector.task_supervisor_name(ctx.stack_id)})
+
       server =
         start_supervised!(
           {EtsInspector,

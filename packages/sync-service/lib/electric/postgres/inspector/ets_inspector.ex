@@ -39,6 +39,17 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
+  @doc """
+  Name of the `Task.Supervisor` that runs the inspector's DB-lookup workers.
+
+  Declared as a sibling child of the inspector in `Electric.StackSupervisor`
+  rather than started ad-hoc from `init/1`, so the process hierarchy stays
+  visible in the supervision tree.
+  """
+  def task_supervisor_name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__.TaskSupervisor)
+  end
+
   def start_link(opts) do
     {:ok, pid} =
       GenServer.start_link(
@@ -130,15 +141,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     persistence_key = "#{opts.stack_id}:ets_inspector_state"
 
-    {:ok, task_sup} = Task.Supervisor.start_link()
-
     state =
       %{
         pg_inspector_table: pg_inspector_table,
         pg_pool: opts.pool,
         persistent_kv: opts.persistent_kv,
         persistence_key: persistence_key,
-        task_sup: task_sup,
+        task_sup: task_supervisor_name(opts.stack_id),
         in_flight: %{},
         in_flight_refs: %{},
         negative_cache_ttl_ms:
