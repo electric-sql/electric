@@ -179,12 +179,14 @@ function withRegisteredManifestEntry(
   }
 }
 
-async function latestNewRunKey(
+async function latestStartedNewRunKey(
   db: EntityStreamDBWithActions,
   existingRunKeys: ReadonlySet<string>
 ): Promise<string | undefined> {
   const runs = await queryOnce((q) => q.from({ runs: db.collections.runs }))
-  return runs.filter((run) => !existingRunKeys.has(run.key)).at(-1)?.key
+  return runs
+    .filter((run) => !existingRunKeys.has(run.key) && run.status === `started`)
+    .at(-1)?.key
 }
 
 async function resolveHeadersProvider(
@@ -551,7 +553,29 @@ export async function processWake(
       failBackgroundWake(error, `WRITE_FAILED`)
     },
   })
+  const producedRunStatuses = new Map<
+    string,
+    `started` | `completed` | `failed`
+  >()
+  const producedRunOrder: Array<string> = []
   const writeEvent = (event: ChangeEvent): void => {
+    if (
+      event.type === `run` &&
+      event.value &&
+      typeof event.value === `object`
+    ) {
+      const status = (event.value as { status?: unknown }).status
+      if (
+        status === `started` ||
+        status === `completed` ||
+        status === `failed`
+      ) {
+        if (!producedRunStatuses.has(event.key)) {
+          producedRunOrder.push(event.key)
+        }
+        producedRunStatuses.set(event.key, status)
+      }
+    }
     producer.append(JSON.stringify(event))
   }
 
@@ -2285,7 +2309,22 @@ export async function processWake(
             ? setupErr.code
             : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
-        const failedRunKey = await latestNewRunKey(db, existingRunKeys)
+        const failedRunKey =
+          (await latestStartedNewRunKey(db, existingRunKeys)) ??
+          [...producedRunOrder]
+            .reverse()
+            .find((key) => producedRunStatuses.get(key) === `started`)
+        if (failedRunKey) {
+          writeEvent(
+            entityStateSchema.runs.update({
+              key: failedRunKey,
+              value: {
+                status: `failed`,
+                finish_reason: `error`,
+              } as never,
+            }) as ChangeEvent
+          )
+        }
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,

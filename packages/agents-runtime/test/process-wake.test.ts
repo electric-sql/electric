@@ -208,7 +208,9 @@ vi.mock(`../src/entity-stream-db`, () => ({
               ? errors
               : event.type === `signal`
                 ? signals
-                : undefined
+                : event.type === `run`
+                  ? runs
+                  : undefined
         if (!collection) {
           return
         }
@@ -503,6 +505,72 @@ describe(`processWake`, () => {
   afterEach(() => {
     vi.useRealTimers()
     fetchMock.mockRestore()
+  })
+
+  it(`marks a newly-started run failed when the handler throws before ending it`, async () => {
+    defineEntity(`test-agent`, {
+      handler: (ctx) => {
+        ctx.recordRun()
+        throw new Error(`boom after run start`)
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `boom after run start`
+    )
+
+    const events = mockProducerAppend.mock.calls.map(([body]) =>
+      JSON.parse(String(body))
+    ) as Array<ChangeEvent>
+    const startedRun = events.find(
+      (event) =>
+        event.type === `run` &&
+        event.headers.operation === `insert` &&
+        (event.value as { status?: string }).status === `started`
+    )
+
+    expect(startedRun).toBeDefined()
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: `run`,
+        key: startedRun!.key,
+        headers: expect.objectContaining({ operation: `update` }),
+        value: expect.objectContaining({
+          status: `failed`,
+          finish_reason: `error`,
+        }),
+      })
+    )
+  })
+
+  it(`does not mark a completed run failed when later handler cleanup throws`, async () => {
+    defineEntity(`test-agent`, {
+      handler: (ctx) => {
+        ctx.db.collections.runs.insert({
+          key: `externally-visible-run`,
+          status: `completed`,
+          finish_reason: `stop`,
+        })
+        throw new Error(`boom after completed run`)
+      },
+    })
+
+    await expect(processWake(makeNotification(), BASE_CONFIG)).rejects.toThrow(
+      `boom after completed run`
+    )
+
+    const events = mockProducerAppend.mock.calls.map(([body]) =>
+      JSON.parse(String(body))
+    ) as Array<ChangeEvent>
+
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: `run`,
+        key: `externally-visible-run`,
+        headers: expect.objectContaining({ operation: `update` }),
+        value: expect.objectContaining({ status: `failed` }),
+      })
+    )
   })
 
   it(`returns null without acking for unknown entity types`, async () => {
