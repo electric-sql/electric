@@ -92,6 +92,47 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
   })
 
+  it(`drops optimistic register row when runtime insert conflicts invisibly`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    ;(registry as any).allocateRuntimeId = async () => 42
+    ;(registry as any).persistInsert = async () => undefined
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/conflict`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/conflict`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(0)
+  })
+
+  it(`does not await an invisible txid when runtime timeout update matches no rows`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/stale-timeout`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 1_000,
+    })
+    ;(registry as any).mode = `electric`
+    ;(registry as any).persistTimeoutConsumed = async () => undefined
+
+    await expect(
+      (registry as any).markTimeoutConsumed(1, `default`)
+    ).resolves.toBeUndefined()
+  })
+
   it(`timeout effect delivers timeout wake once and marks row consumed`, async () => {
     const registry = await createLocalRegistry()
     const delivered: Array<WakeEvalResult> = []

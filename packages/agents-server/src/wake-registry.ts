@@ -17,6 +17,20 @@ import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type { Collection } from '@tanstack/db'
 
+class WakeRegistrationConflictError extends Error {
+  constructor() {
+    super(`Wake registration insert conflicted with an existing row`)
+    this.name = `WakeRegistrationConflictError`
+  }
+}
+
+class WakeRegistrationStaleError extends Error {
+  constructor() {
+    super(`Wake registration row was no longer present`)
+    this.name = `WakeRegistrationStaleError`
+  }
+}
+
 export interface WakeRegistration {
   tenantId?: string
   subscriberUrl: string
@@ -278,8 +292,7 @@ export class WakeRegistry {
         if (this.mode === `electric`) {
           const txid = await this.persistInsert(row)
           if (txid === undefined) {
-            this.requireCollection().utils.acceptMutations(transaction)
-            return
+            throw new WakeRegistrationConflictError()
           }
           await this.requireCollection().utils.awaitTxId(txid, 10_000)
           return { txid }
@@ -333,6 +346,9 @@ export class WakeRegistry {
           ...row,
           timeoutConsumed: true,
         })
+        if (txid === undefined) {
+          throw new WakeRegistrationStaleError()
+        }
         await this.requireCollection().utils.awaitTxId(txid, 10_000)
         return { txid }
       }
@@ -496,18 +512,9 @@ export class WakeRegistry {
     })
   }
 
-  private async currentTxidInTransaction(tx: any): Promise<string> {
-    const rows = await tx.execute(
-      sql<{ txid: string }>`select pg_current_xact_id()::xid::text as txid`
-    )
-    return Array.isArray(rows)
-      ? rows[0]!.txid
-      : ((rows as any).rows?.[0]?.txid ?? (rows as any)[0]!.txid)
-  }
-
   private async persistTimeoutConsumed(
     row: WakeRegistrationCollectionRow
-  ): Promise<number> {
+  ): Promise<number | undefined> {
     return await this.db.transaction(async (tx) => {
       const rows = await tx
         .update(wakeRegistrations)
@@ -519,7 +526,7 @@ export class WakeRegistry {
           )
         )
         .returning({ txid: sql<string>`pg_current_xact_id()::xid::text` })
-      return Number(rows[0]?.txid ?? (await this.currentTxidInTransaction(tx)))
+      return rows[0]?.txid === undefined ? undefined : Number(rows[0].txid)
     })
   }
 
@@ -577,7 +584,12 @@ export class WakeRegistry {
     const tx = this.registerAction(
       this.normalizeRegistration(reg, tenantId, id)
     )
-    await tx.isPersisted.promise
+    try {
+      await tx.isPersisted.promise
+    } catch (error) {
+      if (error instanceof WakeRegistrationConflictError) return
+      throw error
+    }
   }
 
   private startTimeoutTimer(reg: WakeRegistrationCollectionRow): void {
@@ -607,7 +619,12 @@ export class WakeRegistry {
       ) as WakeRegistrationCollectionRow | undefined
       if (!normalized) return
       const tx = this.markTimeoutConsumedAction({ row: normalized })
-      await tx.isPersisted.promise
+      try {
+        await tx.isPersisted.promise
+      } catch (error) {
+        if (error instanceof WakeRegistrationStaleError) return
+        throw error
+      }
       return
     }
     await this.db
@@ -875,111 +892,113 @@ export class WakeRegistry {
     tenantId?: string
   ): Promise<Array<WakeEvalResult>> {
     const resolvedTenantId = this.resolveTenantId(tenantId)
-    {
-      const queriedRegs = await queryOnce((q) =>
-        q
-          .from({ reg: this.requireCollection() })
-          .where(({ reg }) =>
-            dbAnd(
-              dbEq(reg.tenantId, resolvedTenantId),
-              dbEq(reg.sourceUrl, sourceUrl)
-            )
+    const queriedRegs = await queryOnce((q) =>
+      q
+        .from({ reg: this.requireCollection() })
+        .where(({ reg }) =>
+          dbAnd(
+            dbEq(reg.tenantId, resolvedTenantId),
+            dbEq(reg.sourceUrl, sourceUrl)
           )
-      )
-      const regs = queriedRegs.map(
-        (queriedReg) =>
-          ((queriedReg as { reg?: WakeRegistrationCollectionRow }).reg ??
-            queriedReg) as WakeRegistrationCollectionRow
-      )
-      if (regs.length === 0) return []
+        )
+    )
+    const regs = queriedRegs.map(
+      (queriedReg) =>
+        ((queriedReg as { reg?: WakeRegistrationCollectionRow }).reg ??
+          queriedReg) as WakeRegistrationCollectionRow
+    )
+    if (regs.length === 0) return []
 
-      const results: Array<WakeEvalResult> = []
-      const oneShotRows: Array<WakeRegistrationCollectionRow> = []
+    const results: Array<WakeEvalResult> = []
+    const oneShotRows: Array<WakeRegistrationCollectionRow> = []
 
-      for (const reg of regs) {
-        const match = this.matchCondition(reg, event)
-        if (!match) continue
+    for (const reg of regs) {
+      const match = this.matchCondition(reg, event)
+      if (!match) continue
 
-        const timerKey = this.registrationKey(reg)
-        const timeoutTimer = this.timeoutTimers.get(timerKey)
-        if (timeoutTimer) {
-          clearTimeout(timeoutTimer)
-          this.timeoutTimers.delete(timerKey)
-          void this.markTimeoutConsumed(reg.id, reg.tenantId)
-        }
-
-        if (reg.debounceMs > 0) {
-          const buffer = this.debounceBuffers.get(timerKey) ?? []
-          buffer.push(match.change)
-          this.debounceBuffers.set(timerKey, buffer)
-
-          if (match.runFinishedStatus) {
-            this.debounceRunStatus.set(timerKey, match.runFinishedStatus)
-          }
-
-          const existing = this.debounceTimers.get(timerKey)
-          if (existing) clearTimeout(existing)
-
-          const timer = setTimeout(() => {
-            this.debounceTimers.delete(timerKey)
-            const flushed = this.debounceBuffers.get(timerKey)
-            if (flushed && flushed.length > 0) {
-              this.debounceBuffers.delete(timerKey)
-              const runStatus = this.debounceRunStatus.get(timerKey)
-              this.debounceRunStatus.delete(timerKey)
-              this.deliverDebounce({
-                tenantId: reg.tenantId,
-                subscriberUrl: reg.subscriberUrl,
-                registrationDbId: reg.id,
-                sourceEventKey: flushed[flushed.length - 1]!.key,
-                wakeMessage: {
-                  source: sourceUrl,
-                  timeout: false,
-                  changes: flushed,
-                },
-                runFinishedStatus: runStatus,
-                includeResponse: reg.includeResponse,
-              })
-            }
-          }, reg.debounceMs)
-          this.debounceTimers.set(timerKey, timer)
-        } else {
-          results.push({
-            tenantId: reg.tenantId,
-            subscriberUrl: reg.subscriberUrl,
-            registrationDbId: reg.id,
-            sourceEventKey: wakeSourceEventId(event),
-            wakeMessage: {
-              source: sourceUrl,
-              timeout: false,
-              changes: [match.change],
-            },
-            runFinishedStatus: match.runFinishedStatus,
-            includeResponse: reg.includeResponse,
-          })
-        }
-
-        if (reg.oneShot) {
-          oneShotRows.push(reg)
-        }
-      }
-
-      if (oneShotRows.length > 0) {
-        const tx = this.deleteRowsAction({
-          rows: oneShotRows,
-          persist: { kind: `oneShot` },
-        })
-        void tx.isPersisted.promise.catch((error) => {
+      const timerKey = this.registrationKey(reg)
+      const timeoutTimer = this.timeoutTimers.get(timerKey)
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer)
+        this.timeoutTimers.delete(timerKey)
+        void this.markTimeoutConsumed(reg.id, reg.tenantId).catch((error) => {
           console.warn(
-            `[wake-registry] failed to persist one-shot cleanup:`,
+            `[wake-registry] failed to persist timeout consumption:`,
             error
           )
         })
       }
 
-      return results
+      if (reg.debounceMs > 0) {
+        const buffer = this.debounceBuffers.get(timerKey) ?? []
+        buffer.push(match.change)
+        this.debounceBuffers.set(timerKey, buffer)
+
+        if (match.runFinishedStatus) {
+          this.debounceRunStatus.set(timerKey, match.runFinishedStatus)
+        }
+
+        const existing = this.debounceTimers.get(timerKey)
+        if (existing) clearTimeout(existing)
+
+        const timer = setTimeout(() => {
+          this.debounceTimers.delete(timerKey)
+          const flushed = this.debounceBuffers.get(timerKey)
+          if (flushed && flushed.length > 0) {
+            this.debounceBuffers.delete(timerKey)
+            const runStatus = this.debounceRunStatus.get(timerKey)
+            this.debounceRunStatus.delete(timerKey)
+            this.deliverDebounce({
+              tenantId: reg.tenantId,
+              subscriberUrl: reg.subscriberUrl,
+              registrationDbId: reg.id,
+              sourceEventKey: flushed[flushed.length - 1]!.key,
+              wakeMessage: {
+                source: sourceUrl,
+                timeout: false,
+                changes: flushed,
+              },
+              runFinishedStatus: runStatus,
+              includeResponse: reg.includeResponse,
+            })
+          }
+        }, reg.debounceMs)
+        this.debounceTimers.set(timerKey, timer)
+      } else {
+        results.push({
+          tenantId: reg.tenantId,
+          subscriberUrl: reg.subscriberUrl,
+          registrationDbId: reg.id,
+          sourceEventKey: wakeSourceEventId(event),
+          wakeMessage: {
+            source: sourceUrl,
+            timeout: false,
+            changes: [match.change],
+          },
+          runFinishedStatus: match.runFinishedStatus,
+          includeResponse: reg.includeResponse,
+        })
+      }
+
+      if (reg.oneShot) {
+        oneShotRows.push(reg)
+      }
     }
-    return []
+
+    if (oneShotRows.length > 0) {
+      const tx = this.deleteRowsAction({
+        rows: oneShotRows,
+        persist: { kind: `oneShot` },
+      })
+      void tx.isPersisted.promise.catch((error) => {
+        console.warn(
+          `[wake-registry] failed to persist one-shot cleanup:`,
+          error
+        )
+      })
+    }
+
+    return results
   }
 
   /** Flush any pending debounce buffers for a subscriber and return them. */
