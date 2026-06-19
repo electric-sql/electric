@@ -13,9 +13,17 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   import Electric, only: :macros
   require Logger
 
-  # Bound a single relation/column lookup so a degraded pool cannot keep the
-  # inspector busy for Postgrex's 15s default. A shape request that waits this
-  # long has almost certainly already missed its HTTP budget.
+  # Inspector lookups run on the shared metadata pool, which holds at most 4
+  # connections (see `Electric.Connection.Manager.pool_sizes/1`). With request
+  # coalescing a single in-flight key holds one of those connections for the
+  # whole lookup, so a handful of distinct cold-cache keys hitting a degraded
+  # Postgres can pin the entire metadata pool — starving the connection
+  # manager's own admin queries that share it. Cap each lookup well below
+  # Postgrex's inherited 15s default so a slow connection is returned to the
+  # pool promptly and the failure gets negative-cached instead of held open.
+  # Healthy catalog reads are milliseconds, so 5s is ample headroom; this is
+  # deliberately a pool-protection bound, not the caller's request budget (a
+  # shape request tolerates its full long-poll timeout, 20-60s).
   @fetch_db_timeout 5_000
 
   # How long terminal negative results (table-not-found, connection errors) are
