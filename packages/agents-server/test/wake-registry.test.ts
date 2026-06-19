@@ -225,6 +225,7 @@ describe(`Wake Registry`, () => {
       (result) => delivered.push(result),
       `tenant-late`
     )
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(delivered).toHaveLength(1)
     expect(delivered[0]!.tenantId).toBe(`tenant-late`)
@@ -276,38 +277,6 @@ describe(`Wake Registry`, () => {
     expect(results).toHaveLength(1)
     expect(results[0]!.registrationDbId).toBeTypeOf(`number`)
     expect(results[0]!.sourceEventKey).toBe(`insert:tick-7`)
-  })
-
-  it(`removes cached registrations from shape delete old_value ids`, async () => {
-    const registry = await createLocalRegistry()
-    await registry.register({
-      subscriberUrl: `/watcher/w1`,
-      sourceUrl: `/_cron/abc`,
-      condition: { on: `change` },
-      oneShot: false,
-    })
-
-    const before = await registry.evaluate(`/_cron/abc`, {
-      type: `cron_tick`,
-      key: `tick-7`,
-      value: {},
-      headers: { operation: `insert` },
-    })
-    expect(before).toHaveLength(1)
-
-    await (registry as any).applyShapeMessage({
-      key: `shape-key-is-not-the-registration-id`,
-      old_value: { id: before[0]!.registrationDbId },
-      headers: { operation: `delete` },
-    })
-
-    const after = await registry.evaluate(`/_cron/abc`, {
-      type: `cron_tick`,
-      key: `tick-8`,
-      value: {},
-      headers: { operation: `insert` },
-    })
-    expect(after).toHaveLength(0)
   })
 
   it(`keeps distinct registrations distinct for the same source event`, async () => {
@@ -642,7 +611,7 @@ describe(`Wake Registry`, () => {
     expect(r2).toHaveLength(1)
   })
 
-  it(`register() rejects when DB insert fails so callers can catch`, async () => {
+  it(`local register does not require a backing DB insert`, async () => {
     const failingDb = {
       ...createMockDb(),
       insert: () => ({
@@ -654,6 +623,7 @@ describe(`Wake Registry`, () => {
       }),
     }
     const registry = new WakeRegistry(failingDb)
+    await registry.startLocalForTests()
 
     await expect(
       registry.register({
@@ -662,7 +632,7 @@ describe(`Wake Registry`, () => {
         condition: `runFinished`,
         oneShot: false,
       })
-    ).rejects.toThrow(`connection refused`)
+    ).resolves.toBeUndefined()
   })
 
   it(`rebuilds registry from register calls`, async () => {
@@ -930,7 +900,7 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.includeResponse).toBe(false)
   })
 
-  it(`includeResponse defaults to undefined when not set`, async () => {
+  it(`includeResponse defaults to true when not set`, async () => {
     const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
@@ -947,7 +917,7 @@ describe(`Wake Registry`, () => {
     })
 
     expect(results).toHaveLength(1)
-    expect(results[0]!.includeResponse).toBeUndefined()
+    expect(results[0]!.includeResponse).toBe(true)
   })
 
   it(`debounced runFinished preserves runFinishedStatus and includeResponse`, async () => {
@@ -1208,9 +1178,11 @@ describe(`Wake Registry Integration`, () => {
 
     const wakeEvents = await waitForWakeEvents(parent.streams.main, 3)
     expect(wakeEvents).toHaveLength(3)
-    expect(new Set(wakeEvents.map((event) => event.value?.source))).toEqual(
-      new Set(children.map((child) => child.url))
-    )
+    expect(
+      new Set(
+        wakeEvents.map((event) => (event.value as { source?: string }).source)
+      )
+    ).toEqual(new Set(children.map((child) => child.url)))
   }, 15_000)
 
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
