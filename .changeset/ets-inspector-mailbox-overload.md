@@ -2,4 +2,9 @@
 '@core/sync-service': patch
 ---
 
-Bound the EtsInspector's mailbox and DB-attempt amplification under cold-start bursts and database degradation. Concurrent lookups of the same relation/oid/feature key now coalesce onto a single in-flight database call instead of each re-running it, terminal results (table-not-found and connection errors) are cached briefly so a burst against a failing key drains the mailbox instead of refilling it, and each relation/column lookup is bounded by an explicit transaction timeout. Each database lookup is now also recorded as an `inspector.fetch_db` span so its latency and outcome are observable (issue #4370).
+Stop the EtsInspector from overloading its mailbox and re-running database lookups during cold-start bursts or while Postgres is degraded (#4370):
+
+- Concurrent lookups of the same relation, oid, or feature now share a single database call instead of each running their own.
+- Failed lookups (table-not-found and connection errors) are cached briefly, so a burst against a failing key stops hammering the database.
+- Each lookup has an explicit transaction timeout.
+- Each lookup is recorded as an `inspector.fetch_db` span so its latency and outcome are visible in telemetry.
