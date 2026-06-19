@@ -7,11 +7,13 @@ import {
   readStreamEvents,
   waitFor,
 } from './test-utils'
-import {
-  TEST_ELECTRIC_URL,
-  TEST_POSTGRES_URL,
-  resetElectricAgentsTestBackend,
-} from './test-backend'
+import { configureElectricAgentsTestBackendEnv } from './test-backend-env'
+
+configureElectricAgentsTestBackendEnv(`agent-server-scheduler`, 20)
+
+let TEST_ELECTRIC_URL = ``
+let TEST_POSTGRES_URL = ``
+let resetElectricAgentsTestBackend: () => Promise<void>
 
 describe(`Scheduler Integration`, () => {
   let dsServer: DurableStreamTestServer
@@ -85,6 +87,11 @@ describe(`Scheduler Integration`, () => {
   }
 
   beforeAll(async () => {
+    const backend = await import(`./test-backend`)
+    TEST_ELECTRIC_URL = backend.TEST_ELECTRIC_URL
+    TEST_POSTGRES_URL = backend.TEST_POSTGRES_URL
+    resetElectricAgentsTestBackend = backend.resetElectricAgentsTestBackend
+
     dsServer = new DurableStreamTestServer({
       port: 0,
       longPollTimeout: 500,
@@ -289,7 +296,7 @@ describe(`Scheduler Integration`, () => {
         }),
       }
     )
-    expect(scheduleRes.status).toBe(200)
+    expect(scheduleRes.status, await scheduleRes.clone().text()).toBe(200)
 
     await waitFor(
       async () => {

@@ -97,6 +97,7 @@ describe(`Wake Registry`, () => {
     ;(registry as any).mode = `electric`
     ;(registry as any).allocateRuntimeId = async () => 42
     ;(registry as any).persistInsert = async () => undefined
+    ;(registry as any).waitForRegistrationVisible = async () => {}
 
     await registry.register({
       subscriberUrl: `/parent/p1`,

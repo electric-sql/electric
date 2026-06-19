@@ -18,7 +18,7 @@ import type { DrizzleDB } from './db/index.js'
 import type { Collection } from '@tanstack/db'
 
 class WakeRegistrationConflictError extends Error {
-  constructor() {
+  constructor(readonly row: WakeRegistrationCollectionRow) {
     super(`Wake registration insert conflicted with an existing row`)
     this.name = `WakeRegistrationConflictError`
   }
@@ -140,6 +140,8 @@ function sqlStringLiteral(value: string): string {
   return `'${value.replace(/'/g, `''`)}'`
 }
 
+let nextWakeRegistryCollectionInstance = 1
+
 export class WakeRegistry {
   private db: DrizzleDB
   private registrationsCollection: Collection<
@@ -160,6 +162,7 @@ export class WakeRegistry {
   private timeoutDelivered = new Set<number>()
   private timeoutCallbacks = new Map<string, WakeTimeoutCallback>()
   private debounceCallbacks = new Map<string, WakeDebounceCallback>()
+  private readonly collectionInstance = nextWakeRegistryCollectionInstance++
 
   constructor(
     db: DrizzleDB,
@@ -292,7 +295,7 @@ export class WakeRegistry {
         if (this.mode === `electric`) {
           const txid = await this.persistInsert(row)
           if (txid === undefined) {
-            throw new WakeRegistrationConflictError()
+            throw new WakeRegistrationConflictError(row)
           }
           await this.requireCollection().utils.awaitTxId(txid, 10_000)
           return { txid }
@@ -409,7 +412,7 @@ export class WakeRegistry {
     this.mode = `electric`
     this.registrationsCollection = createCollection(
       electricCollectionOptions({
-        id: `wake-registrations:${this.tenantId ?? `all`}:${electricUrlWithPath(electricUrl, `/v1/shape`).toString()}`,
+        id: `wake-registrations:${this.tenantId ?? `all`}:${electricUrlWithPath(electricUrl, `/v1/shape`).toString()}:${this.collectionInstance}`,
         getKey: (row: any) => row.id as number,
         shapeOptions: {
           url: electricUrlWithPath(electricUrl, `/v1/shape`).toString(),
@@ -552,21 +555,45 @@ export class WakeRegistry {
     })
   }
 
+  private registrationRowsMatch(
+    row: WakeRegistrationCollectionRow,
+    other: WakeRegistrationCollectionRow
+  ): boolean {
+    return (
+      row.tenantId === other.tenantId &&
+      row.subscriberUrl === other.subscriberUrl &&
+      row.sourceUrl === other.sourceUrl &&
+      JSON.stringify(row.condition) === JSON.stringify(other.condition) &&
+      row.debounceMs === other.debounceMs &&
+      row.timeoutMs === other.timeoutMs &&
+      row.oneShot === other.oneShot &&
+      row.manifestKey === other.manifestKey
+    )
+  }
+
   private registrationMatches(
     row: WakeRegistrationCollectionRow,
     reg: WakeRegistration,
     tenantId: string
   ): boolean {
-    return (
-      row.tenantId === tenantId &&
-      row.subscriberUrl === reg.subscriberUrl &&
-      row.sourceUrl === reg.sourceUrl &&
-      JSON.stringify(row.condition) === JSON.stringify(reg.condition) &&
-      row.debounceMs === (reg.debounceMs ?? 0) &&
-      row.timeoutMs === (reg.timeoutMs ?? 0) &&
-      row.oneShot === reg.oneShot &&
-      row.manifestKey === (reg.manifestKey ?? null)
+    return this.registrationRowsMatch(
+      row,
+      this.normalizeRegistration(reg, tenantId, row.id)
     )
+  }
+
+  private async waitForRegistrationVisible(
+    row: WakeRegistrationCollectionRow,
+    timeoutMs = 10_000
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    do {
+      const rows = await this.rowsByPredicate((candidate) =>
+        this.registrationRowsMatch(candidate, row)
+      )
+      if (rows.length > 0) return
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    } while (Date.now() < deadline)
   }
 
   async register(reg: WakeRegistration): Promise<void> {
@@ -587,7 +614,10 @@ export class WakeRegistry {
     try {
       await tx.isPersisted.promise
     } catch (error) {
-      if (error instanceof WakeRegistrationConflictError) return
+      if (error instanceof WakeRegistrationConflictError) {
+        await this.waitForRegistrationVisible(error.row)
+        return
+      }
       throw error
     }
   }
