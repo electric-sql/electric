@@ -113,7 +113,24 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(s) => s,
-            Err(_) => continue,
+            Err(e) => {
+                // Back off instead of busy-looping. fd exhaustion (EMFILE/ENFILE —
+                // the per-process / system open-file limit, commonly the default
+                // `ulimit -n` of 1024) would otherwise spin this loop at ~100% CPU,
+                // accepting nothing and starving the runtime — including health
+                // checks — until load drops. That is the "hangs above ~1024
+                // connections and doesn't recover" failure. Sleeping frees the core
+                // and lets in-flight connections close and release fds.
+                let fd_exhausted =
+                    matches!(e.raw_os_error(), Some(libc::EMFILE) | Some(libc::ENFILE));
+                let backoff = if fd_exhausted {
+                    std::time::Duration::from_millis(50)
+                } else {
+                    std::time::Duration::from_millis(5)
+                };
+                tokio::time::sleep(backoff).await;
+                continue;
+            }
         };
         let _ = stream.set_nodelay(true);
         // At capacity: drop the new connection rather than queue unboundedly.

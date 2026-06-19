@@ -31,7 +31,38 @@ fn parse_val<T: std::str::FromStr>(o: Option<String>, flag: &str) -> T {
     })
 }
 
+/// Raise the open-file-descriptor soft limit to the hard limit at startup. Each
+/// connection costs ≥1 fd (plus per-stream data-file fds), so the default soft
+/// limit (commonly 1024) caps concurrency far below what the server can handle
+/// and makes `accept()` fail with EMFILE under load. Best-effort: errors are
+/// ignored (the accept loop also backs off on EMFILE as a safety net).
+#[cfg(unix)]
+fn raise_nofile_limit() {
+    unsafe {
+        let mut lim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) != 0 {
+            return;
+        }
+        // macOS rejects RLIM_INFINITY for NOFILE (and caps at kern.maxfilesperproc);
+        // pick a high concrete target so the raise succeeds across platforms.
+        let target = if lim.rlim_max == libc::RLIM_INFINITY {
+            1_048_576
+        } else {
+            lim.rlim_max
+        };
+        if lim.rlim_cur < target {
+            lim.rlim_cur = target;
+            let _ = libc::setrlimit(libc::RLIMIT_NOFILE, &lim);
+        }
+    }
+}
+
 fn main() {
+    #[cfg(unix)]
+    raise_nofile_limit();
     let mut port: u16 = 4437; // protocol default (PROTOCOL.md §13.1)
     let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
