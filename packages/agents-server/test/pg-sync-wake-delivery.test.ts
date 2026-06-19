@@ -38,7 +38,7 @@ describe(`pgSync wake delivery matching`, () => {
       oneShot: false,
     })
 
-    const insertResults = registry.evaluate(
+    const insertResults = await registry.evaluate(
       `/_electric/pg-sync/test`,
       event(`insert`),
       `default`
@@ -49,7 +49,11 @@ describe(`pgSync wake delivery matching`, () => {
       oldValue: { id: `entity-1`, status: `spawning` },
     })
     expect(
-      registry.evaluate(`/_electric/pg-sync/test`, event(`delete`), `default`)
+      await registry.evaluate(
+        `/_electric/pg-sync/test`,
+        event(`delete`),
+        `default`
+      )
     ).toEqual([])
   })
 
@@ -69,14 +73,22 @@ describe(`pgSync wake delivery matching`, () => {
     })
 
     expect(
-      registry
-        .evaluate(`/_electric/pg-sync/test`, event(`insert`), `default`)
-        .map((r) => r.subscriberUrl)
+      (
+        await registry.evaluate(
+          `/_electric/pg-sync/test`,
+          event(`insert`),
+          `default`
+        )
+      ).map((r) => r.subscriberUrl)
     ).toEqual([`/horton/a`])
     expect(
-      registry
-        .evaluate(`/_electric/pg-sync/test`, event(`delete`), `default`)
-        .map((r) => r.subscriberUrl)
+      (
+        await registry.evaluate(
+          `/_electric/pg-sync/test`,
+          event(`delete`),
+          `default`
+        )
+      ).map((r) => r.subscriberUrl)
     ).toEqual([`/horton/b`])
   })
 
@@ -90,10 +102,14 @@ describe(`pgSync wake delivery matching`, () => {
     })
 
     expect(
-      registry.evaluate(`/_electric/pg-sync/test`, event(`insert`), `default`)
+      await registry.evaluate(
+        `/_electric/pg-sync/test`,
+        event(`insert`),
+        `default`
+      )
     ).toHaveLength(1)
     expect(
-      registry.evaluate(
+      await registry.evaluate(
         `/_electric/pg-sync/test`,
         { ...event(`insert`), type: `other` },
         `default`

@@ -3,6 +3,14 @@ import {
   isChangeMessage,
   isControlMessage,
 } from '@electric-sql/client'
+import {
+  and as dbAnd,
+  createCollection,
+  createOptimisticAction,
+  eq as dbEq,
+  localOnlyCollectionOptions,
+  queryOnce,
+} from '@tanstack/db'
 import { and, eq } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './utils/log.js'
@@ -10,6 +18,7 @@ import { electricUrlWithPath } from './utils/electric-url.js'
 import { DEFAULT_TENANT_ID } from './tenant.js'
 import type { DrizzleDB } from './db/index.js'
 import type { Message, Row, Value } from '@electric-sql/client'
+import type { Collection } from '@tanstack/db'
 
 export interface WakeRegistration {
   tenantId?: string
@@ -57,6 +66,23 @@ export interface WakeEvalResult {
 
 export type WakeTimeoutCallback = (result: WakeEvalResult) => void
 export type WakeDebounceCallback = (result: WakeEvalResult) => void
+
+export interface WakeRegistrationCollectionRow {
+  id: number
+  tenantId: string
+  subscriberUrl: string
+  sourceUrl: string
+  condition: WakeRegistration[`condition`]
+  debounceMs: number
+  timeoutMs: number
+  oneShot: boolean
+  timeoutConsumed: boolean
+  includeResponse: boolean
+  manifestKey: string | null
+  createdAt: Date
+}
+
+type WakeRegistryMode = `unstarted` | `local-test` | `electric`
 
 interface CachedWakeRegistration extends WakeRegistration {
   tenantId: string
@@ -107,6 +133,13 @@ function sqlStringLiteral(value: string): string {
 
 export class WakeRegistry {
   private db: DrizzleDB
+  private registrationsCollection: Collection<
+    WakeRegistrationCollectionRow,
+    number,
+    any
+  > | null = null
+  private mode: WakeRegistryMode = `unstarted`
+  private nextLocalId = 1
   private registrationCache = new Map<string, Array<CachedWakeRegistration>>()
   private debounceTimers = new Map<string, NodeJS.Timeout>()
   private debounceBuffers = new Map<
@@ -132,6 +165,87 @@ export class WakeRegistry {
     this.db = db
   }
 
+  requireCollection(): Collection<WakeRegistrationCollectionRow, number, any> {
+    if (!this.registrationsCollection) {
+      throw new Error(`WakeRegistry has not been started`)
+    }
+    return this.registrationsCollection
+  }
+
+  async startLocalForTests(): Promise<void> {
+    if (this.registrationsCollection) return
+    this.mode = `local-test`
+    this.registrationsCollection = createCollection(
+      localOnlyCollectionOptions<WakeRegistrationCollectionRow, number>({
+        id: `wake-registrations-local:${this.tenantId ?? `all`}`,
+        getKey: (row) => row.id,
+        initialData: [],
+      })
+    )
+    await this.requireCollection().preload()
+  }
+
+  private allocateLocalId(): number {
+    return this.nextLocalId++
+  }
+
+  private normalizeRegistration(
+    reg: WakeRegistration,
+    tenantId: string,
+    id: number
+  ): WakeRegistrationCollectionRow {
+    return {
+      id,
+      tenantId,
+      subscriberUrl: reg.subscriberUrl,
+      sourceUrl: reg.sourceUrl,
+      condition: reg.condition,
+      debounceMs: reg.debounceMs ?? 0,
+      timeoutMs: reg.timeoutMs ?? 0,
+      oneShot: reg.oneShot,
+      timeoutConsumed: false,
+      includeResponse: reg.includeResponse !== false,
+      manifestKey: reg.manifestKey ?? null,
+      createdAt: new Date(),
+    }
+  }
+
+  private collectionRowAsCached(
+    row: WakeRegistrationCollectionRow
+  ): CachedWakeRegistration {
+    return {
+      tenantId: row.tenantId,
+      subscriberUrl: row.subscriberUrl,
+      sourceUrl: row.sourceUrl,
+      condition: row.condition,
+      debounceMs: row.debounceMs || undefined,
+      timeoutMs: row.timeoutMs || undefined,
+      oneShot: row.oneShot,
+      includeResponse: row.includeResponse === false ? false : undefined,
+      manifestKey: row.manifestKey ?? undefined,
+      dbId: row.id,
+      createdAt: row.createdAt,
+      timeoutConsumed: row.timeoutConsumed,
+    }
+  }
+
+  private registerAction =
+    createOptimisticAction<WakeRegistrationCollectionRow>({
+      onMutate: (row) => {
+        this.requireCollection().insert(row)
+        this.syncTimeoutTimer(this.collectionRowAsCached(row))
+      },
+      mutationFn: async (_row, { transaction }) => {
+        if (this.mode === `local-test`) {
+          this.requireCollection().utils.acceptMutations(transaction)
+          return
+        }
+        throw new Error(
+          `WakeRegistry registerAction runtime persistence is not initialized`
+        )
+      },
+    })
+
   setTimeoutCallback(cb: WakeTimeoutCallback, tenantId?: string): void {
     const resolvedTenantId = this.resolveTenantId(tenantId)
     this.timeoutCallbacks.set(resolvedTenantId, cb)
@@ -152,7 +266,9 @@ export class WakeRegistry {
     return `${tenantId}:${sourceUrl}`
   }
 
-  private registrationKey(reg: CachedWakeRegistration): string {
+  private registrationKey(
+    reg: CachedWakeRegistration | WakeRegistrationCollectionRow
+  ): string {
     return [
       reg.tenantId,
       reg.subscriberUrl,
@@ -327,6 +443,14 @@ export class WakeRegistry {
 
   async register(reg: WakeRegistration): Promise<void> {
     const tenantId = this.resolveTenantId(reg.tenantId)
+    if (this.registrationsCollection) {
+      const id = this.allocateLocalId()
+      const tx = this.registerAction(
+        this.normalizeRegistration(reg, tenantId, id)
+      )
+      await tx.isPersisted.promise
+      return
+    }
     const result = await this.db
       .insert(wakeRegistrations)
       .values({
@@ -580,6 +704,15 @@ export class WakeRegistry {
     this.registrationCache.clear()
   }
 
+  private replaceCachedRegistrations(
+    registrations: Array<CachedWakeRegistration>
+  ): void {
+    this.resetCachedRegistrations()
+    for (const registration of registrations) {
+      this.upsertCachedRegistration(registration)
+    }
+  }
+
   private findCachedRegistration(
     dbId: number
   ): { cacheKey: string; index: number; reg: CachedWakeRegistration } | null {
@@ -762,12 +895,113 @@ export class WakeRegistry {
     this.upsertCachedRegistration(this.normalizeShapeRow(message.value))
   }
 
-  evaluate(
+  async evaluate(
     sourceUrl: string,
     event: Record<string, unknown>,
     tenantId?: string
-  ): Array<WakeEvalResult> {
+  ): Promise<Array<WakeEvalResult>> {
     const resolvedTenantId = this.resolveTenantId(tenantId)
+    if (this.registrationsCollection) {
+      const queriedRegs = await queryOnce((q) =>
+        q
+          .from({ reg: this.requireCollection() })
+          .where(({ reg }) =>
+            dbAnd(
+              dbEq(reg.tenantId, resolvedTenantId),
+              dbEq(reg.sourceUrl, sourceUrl)
+            )
+          )
+      )
+      const regs = queriedRegs.map(
+        (queriedReg) =>
+          ((queriedReg as { reg?: WakeRegistrationCollectionRow }).reg ??
+            queriedReg) as WakeRegistrationCollectionRow
+      )
+      if (regs.length === 0) return []
+
+      const results: Array<WakeEvalResult> = []
+      const oneShotIds: Array<number> = []
+
+      for (const reg of regs) {
+        const match = this.matchCondition(reg, event)
+        if (!match) continue
+
+        const timerKey = this.registrationKey(reg)
+        const timeoutTimer = this.timeoutTimers.get(timerKey)
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer)
+          this.timeoutTimers.delete(timerKey)
+          void this.markTimeoutConsumed(reg.id, reg.tenantId)
+        }
+
+        if (reg.debounceMs > 0) {
+          const buffer = this.debounceBuffers.get(timerKey) ?? []
+          buffer.push(match.change)
+          this.debounceBuffers.set(timerKey, buffer)
+
+          if (match.runFinishedStatus) {
+            this.debounceRunStatus.set(timerKey, match.runFinishedStatus)
+          }
+
+          const existing = this.debounceTimers.get(timerKey)
+          if (existing) clearTimeout(existing)
+
+          const timer = setTimeout(() => {
+            this.debounceTimers.delete(timerKey)
+            const flushed = this.debounceBuffers.get(timerKey)
+            if (flushed && flushed.length > 0) {
+              this.debounceBuffers.delete(timerKey)
+              const runStatus = this.debounceRunStatus.get(timerKey)
+              this.debounceRunStatus.delete(timerKey)
+              this.deliverDebounce({
+                tenantId: reg.tenantId,
+                subscriberUrl: reg.subscriberUrl,
+                registrationDbId: reg.id,
+                sourceEventKey: flushed[flushed.length - 1]!.key,
+                wakeMessage: {
+                  source: sourceUrl,
+                  timeout: false,
+                  changes: flushed,
+                },
+                runFinishedStatus: runStatus,
+                includeResponse: reg.includeResponse,
+              })
+            }
+          }, reg.debounceMs)
+          this.debounceTimers.set(timerKey, timer)
+        } else {
+          results.push({
+            tenantId: reg.tenantId,
+            subscriberUrl: reg.subscriberUrl,
+            registrationDbId: reg.id,
+            sourceEventKey: wakeSourceEventId(event),
+            wakeMessage: {
+              source: sourceUrl,
+              timeout: false,
+              changes: [match.change],
+            },
+            runFinishedStatus: match.runFinishedStatus,
+            includeResponse: reg.includeResponse,
+          })
+        }
+
+        if (reg.oneShot) {
+          oneShotIds.push(reg.id)
+        }
+      }
+
+      for (let j = oneShotIds.length - 1; j >= 0; j--) {
+        const id = oneShotIds[j]!
+        const removed = regs.find((reg) => reg.id === id)
+        if (removed) {
+          this.clearRegistrationState(this.collectionRowAsCached(removed))
+          this.timeoutDelivered.delete(removed.id)
+          this.requireCollection().delete(removed.id)
+        }
+      }
+
+      return results
+    }
     const cacheKey = this.cacheKey(resolvedTenantId, sourceUrl)
     const regs = this.registrationCache.get(cacheKey)
     if (!regs || regs.length === 0) return []
@@ -906,7 +1140,7 @@ export class WakeRegistry {
   }
 
   private matchCondition(
-    reg: WakeRegistration,
+    reg: WakeRegistration | WakeRegistrationCollectionRow,
     event: Record<string, unknown>
   ): {
     change: WakeEvalResult[`wakeMessage`][`changes`][number]

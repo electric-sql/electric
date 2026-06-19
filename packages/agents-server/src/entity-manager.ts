@@ -3304,10 +3304,18 @@ export class EntityManager {
   ): Promise<void> {
     return await withSpan(`electric_agents.evaluateWakes`, async (span) => {
       span.setAttribute(ATTR.WAKE_SOURCE, sourceUrl)
-      let results = this.wakeRegistry.evaluate(sourceUrl, event, this.tenantId)
+      let results = await this.wakeRegistry.evaluate(
+        sourceUrl,
+        event,
+        this.tenantId
+      )
       if (results.length === 0 && isRunFinishedWakeEvent(event)) {
         await this.wakeRegistry.loadRegistrations()
-        results = this.wakeRegistry.evaluate(sourceUrl, event, this.tenantId)
+        results = await this.wakeRegistry.evaluate(
+          sourceUrl,
+          event,
+          this.tenantId
+        )
       }
       span.setAttribute(`electric_agents.wake.subscriber_count`, results.length)
       const settled = await Promise.allSettled(

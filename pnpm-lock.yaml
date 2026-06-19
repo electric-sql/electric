@@ -1946,6 +1946,12 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.48
         version: 0.34.49
+      '@tanstack/db':
+        specifier: ^0.6.7
+        version: 0.6.7(typescript@5.8.3)
+      '@tanstack/electric-db-collection':
+        specifier: ^0.3.5
+        version: 0.3.5(typescript@5.8.3)
       '@whatwg-node/server':
         specifier: ^0.10.18
         version: 0.10.18
@@ -4768,8 +4774,8 @@ packages:
   '@electric-sql/client@1.2.0':
     resolution: {integrity: sha512-K/MEjti3UF4aPKJJqO6Tp4f5noqc2/3icU1NPdpKfQaHwbzGtEX2aJmL2vxTEUJbfyrISkPKbOPnrz/lAvw1Vg==}
 
-  '@electric-sql/client@1.5.20':
-    resolution: {integrity: sha512-Ftf+ze/rZK9dBzvZqW7wrS74aQBToUlhQeUFm7KCTfOCkNJZ+7iZMm9JW/NjyIQjPOz4ApXg3VWOpeCbzsU3IQ==}
+  '@electric-sql/client@1.5.21':
+    resolution: {integrity: sha512-Aize0Aa2ZyTZySQMfMSTDPP/EJWcR1HfH7qE1DgMhI5f6dDxm1B74CN4o1fnIQeW/ZLg9TdbTgFYo1tsUg7mXg==}
     hasBin: true
 
   '@electric-sql/d2mini@0.1.8':
@@ -25333,7 +25339,7 @@ snapshots:
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
 
-  '@electric-sql/client@1.5.20':
+  '@electric-sql/client@1.5.21':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     optionalDependencies:
@@ -31426,9 +31432,20 @@ snapshots:
       - supports-color
       - typescript
 
+  '@tanstack/electric-db-collection@0.3.5(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/client': 1.5.21
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.7(typescript@5.8.3)
+      '@tanstack/store': 0.9.3
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
   '@tanstack/electric-db-collection@0.3.5(typescript@5.9.3)':
     dependencies:
-      '@electric-sql/client': 1.5.20
+      '@electric-sql/client': 1.5.21
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.6.7(typescript@5.9.3)
       '@tanstack/store': 0.9.3

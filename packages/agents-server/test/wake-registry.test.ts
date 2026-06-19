@@ -61,6 +61,30 @@ function createMockDb(): any {
 }
 
 describe(`Wake Registry`, () => {
+  it(`evaluates registrations from local TanStack DB collection`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.startLocalForTests()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.subscriberUrl).toBe(`/parent/p1`)
+    expect(results[0]!.registrationDbId).toBe(1)
+    expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
+  })
+
   it(`keeps shared registrations scoped by tenant`, async () => {
     const registry = new WakeRegistry(createMockDb(), null)
     await registry.register({
@@ -84,8 +108,8 @@ describe(`Wake Registry`, () => {
       value: {},
       headers: { operation: `insert` },
     }
-    const tenantA = registry.evaluate(`/source/shared`, event, `tenant-a`)
-    const tenantB = registry.evaluate(`/source/shared`, event, `tenant-b`)
+    const tenantA = await registry.evaluate(`/source/shared`, event, `tenant-a`)
+    const tenantB = await registry.evaluate(`/source/shared`, event, `tenant-b`)
 
     expect(tenantA).toHaveLength(1)
     expect(tenantA[0]!.tenantId).toBe(`tenant-a`)
@@ -163,7 +187,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -189,7 +213,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_cron/abc`, {
+    const results = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-7`,
       value: {},
@@ -210,7 +234,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const before = registry.evaluate(`/_cron/abc`, {
+    const before = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-7`,
       value: {},
@@ -224,7 +248,7 @@ describe(`Wake Registry`, () => {
       headers: { operation: `delete` },
     })
 
-    const after = registry.evaluate(`/_cron/abc`, {
+    const after = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-8`,
       value: {},
@@ -248,7 +272,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_cron/abc`, {
+    const results = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-7`,
       value: {},
@@ -271,7 +295,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const first = registry.evaluate(`/child/c1`, {
+    const first = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -279,7 +303,7 @@ describe(`Wake Registry`, () => {
     })
     expect(first).toHaveLength(1)
 
-    const second = registry.evaluate(`/child/c1`, {
+    const second = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-2`,
       value: { status: `completed` },
@@ -297,7 +321,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/source/s1`, {
+    const results = await registry.evaluate(`/source/s1`, {
       type: `texts`,
       key: `text-1`,
       value: { content: `hello` },
@@ -318,7 +342,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/agent/self`, {
+    const results = await registry.evaluate(`/agent/self`, {
       type: `inbox`,
       key: `msg-1`,
       value: {
@@ -355,7 +379,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/source/s1`, {
+    const results = await registry.evaluate(`/source/s1`, {
       type: `toolCalls`,
       key: `tc-1`,
       value: {},
@@ -378,13 +402,13 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const insertResults = registry.evaluate(`/source/s1`, {
+    const insertResults = await registry.evaluate(`/source/s1`, {
       type: `members`,
       key: `/task/a`,
       value: { url: `/task/a` },
       headers: { operation: `insert` },
     })
-    const deleteResults = registry.evaluate(`/source/s1`, {
+    const deleteResults = await registry.evaluate(`/source/s1`, {
       type: `members`,
       key: `/task/a`,
       old_value: { url: `/task/a` },
@@ -409,7 +433,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(
+    const results = await registry.evaluate(
       `/_electric/pg-sync/default/pg-source-1`,
       {
         type: `pg_sync_change`,
@@ -451,13 +475,13 @@ describe(`Wake Registry`, () => {
 
     await registry.unregisterBySubscriber(`/parent/p1`)
 
-    const r1 = registry.evaluate(`/child/c1`, {
+    const r1 = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
       headers: { operation: `update` },
     })
-    const r2 = registry.evaluate(`/child/c2`, {
+    const r2 = await registry.evaluate(`/child/c2`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -485,13 +509,13 @@ describe(`Wake Registry`, () => {
 
     await registry.unregisterBySubscriberAndSource(`/parent/p1`, `/child/c1`)
 
-    const r1 = registry.evaluate(`/child/c1`, {
+    const r1 = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
       headers: { operation: `update` },
     })
-    const r2 = registry.evaluate(`/child/c2`, {
+    const r2 = await registry.evaluate(`/child/c2`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -540,7 +564,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const runResults = registry.evaluate(`/child/c1`, {
+    const runResults = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -549,7 +573,7 @@ describe(`Wake Registry`, () => {
     expect(runResults).toHaveLength(1)
     expect(runResults[0]!.subscriberUrl).toBe(`/parent/p1`)
 
-    const changeResults = registry.evaluate(`/source/s1`, {
+    const changeResults = await registry.evaluate(`/source/s1`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -568,7 +592,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_electric/shared-state/board-1`, {
+    const results = await registry.evaluate(`/_electric/shared-state/board-1`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -620,7 +644,7 @@ describe(`Wake Registry`, () => {
     })
 
     for (let i = 0; i < 3; i++) {
-      const immediate = registry.evaluate(`/source/s1`, {
+      const immediate = await registry.evaluate(`/source/s1`, {
         type: `texts`,
         key: `text-${i}`,
         value: { content: `msg-${i}` },
@@ -661,7 +685,7 @@ describe(`Wake Registry`, () => {
     })
 
     expect(
-      registry.evaluate(`/source/s1`, {
+      await registry.evaluate(`/source/s1`, {
         type: `texts`,
         key: `text-1`,
         value: { content: `hello` },
@@ -670,7 +694,7 @@ describe(`Wake Registry`, () => {
     ).toHaveLength(0)
 
     expect(
-      registry.evaluate(`/source/s1`, {
+      await registry.evaluate(`/source/s1`, {
         type: `toolCalls`,
         key: `tool-1`,
         value: { name: `search` },
@@ -784,7 +808,7 @@ describe(`Wake Registry`, () => {
       includeResponse: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -804,7 +828,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -832,7 +856,7 @@ describe(`Wake Registry`, () => {
     })
 
     // Immediate evaluate should return nothing (debounced)
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -866,7 +890,7 @@ describe(`Wake Registry`, () => {
     })
 
     // run-1 completes
-    registry.evaluate(`/child/c1`, {
+    await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -874,7 +898,7 @@ describe(`Wake Registry`, () => {
     })
 
     // run-2 fails in the same debounce window
-    registry.evaluate(`/child/c1`, {
+    await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-2`,
       value: { status: `failed` },

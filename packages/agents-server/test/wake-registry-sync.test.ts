@@ -123,7 +123,7 @@ describe(`WakeRegistry Electric sync`, () => {
     await startPromise
 
     expect(
-      registry.evaluate(`/child/c1`, {
+      await registry.evaluate(`/child/c1`, {
         type: `run`,
         key: `run-1`,
         value: { status: `completed` },
@@ -141,7 +141,7 @@ describe(`WakeRegistry Electric sync`, () => {
     ])
 
     expect(
-      registry.evaluate(`/child/c1`, {
+      await registry.evaluate(`/child/c1`, {
         type: `run`,
         key: `run-2`,
         value: { status: `completed` },
