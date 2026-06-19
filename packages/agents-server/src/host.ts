@@ -113,11 +113,10 @@ export class AgentsHost {
     this.running = true
 
     try {
-      if (this.electricUrl) {
-        await this.wakeRegistry.startSync(this.electricUrl, this.electricSecret)
-      } else {
-        await this.wakeRegistry.loadRegistrations()
+      if (!this.electricUrl) {
+        throw new Error(`Electric URL is required to start WakeRegistry`)
       }
+      await this.wakeRegistry.startSync(this.electricUrl, this.electricSecret)
       if (this.startEntityBridgeManager) {
         await this.entityProjector.start()
       }

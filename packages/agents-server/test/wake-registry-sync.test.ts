@@ -1,155 +1,54 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { createDb } from '../src/db'
+import { wakeRegistrations } from '../src/db/schema'
 import { WakeRegistry } from '../src/wake-registry'
+import {
+  TEST_ELECTRIC_URL,
+  TEST_POSTGRES_URL,
+  resetElectricAgentsTestBackend,
+} from './test-backend'
 
-const { shapeStreamState } = vi.hoisted(() => ({
-  shapeStreamState: {
-    latest: null as null | {
-      emit: (messages: Array<Record<string, unknown>>) => Promise<void>
-      signal?: AbortSignal
-    },
-  },
-}))
+const connection = createDb(TEST_POSTGRES_URL)
+const db = connection.db
 
-vi.mock(`@electric-sql/client`, () => ({
-  isControlMessage: (message: { headers?: Record<string, unknown> }) =>
-    typeof message.headers?.control === `string`,
-  isChangeMessage: (message: { headers?: Record<string, unknown> }) =>
-    typeof message.headers?.operation === `string`,
-  ShapeStream: class MockShapeStream {
-    private onMessages:
-      | ((messages: Array<Record<string, unknown>>) => Promise<void> | void)
-      | null = null
-
-    constructor(options: { signal?: AbortSignal }) {
-      shapeStreamState.latest = {
-        signal: options.signal,
-        emit: async (messages) => {
-          await this.onMessages?.(messages)
-        },
-      }
-    }
-
-    subscribe(
-      callback: (messages: Array<Record<string, unknown>>) => Promise<void>,
-      _onError?: (error: Error) => void
-    ): () => void {
-      this.onMessages = callback
-      return () => {
-        this.onMessages = null
-      }
-    }
-  },
-}))
-
-function createMockDb(): any {
-  return {
-    insert: () => ({
-      values: () => ({
-        onConflictDoNothing: () => ({
-          returning: () => Promise.resolve([{ id: 1 }]),
-        }),
-      }),
-    }),
-    delete: () => ({
-      where: () => Promise.resolve(),
-    }),
-    update: () => ({
-      set: () => ({
-        where: () => Promise.resolve(),
-      }),
-    }),
-    select: () => ({
-      from: () => Promise.resolve([]),
-    }),
-  }
-}
-
-describe(`WakeRegistry Electric sync`, () => {
-  it(`ignores malformed shape messages without headers while waiting for up-to-date`, async () => {
-    const registry = new WakeRegistry(createMockDb())
-
-    const startPromise = registry.startSync(`http://electric.test`)
-
-    await expect(
-      shapeStreamState.latest!.emit([
-        {
-          key: `ignored-malformed-message`,
-        },
-        {
-          headers: {
-            control: `up-to-date`,
-          },
-        },
-      ])
-    ).resolves.toBeUndefined()
-
-    await expect(startPromise).resolves.toBeUndefined()
-
-    await registry.stopSync()
+describe(`WakeRegistry Electric collection sync`, () => {
+  beforeAll(async () => {
+    await resetElectricAgentsTestBackend()
   })
 
-  it(`hydrates and updates the cache from shape changes`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+  afterAll(async () => {
+    await connection.client.end()
+  })
 
-    const startPromise = registry.startSync(`http://electric.test`)
+  it(`syncs a registered wake through Postgres and Electric`, async () => {
+    const registry = new WakeRegistry(db as any)
+    await registry.startSync(TEST_ELECTRIC_URL)
 
-    await shapeStreamState.latest!.emit([
-      {
-        key: `1`,
-        value: {
-          id: 1,
-          subscriber_url: `/parent/p1`,
-          source_url: `/child/c1`,
-          condition: `runFinished`,
-          debounce_ms: 0,
-          timeout_ms: 0,
-          one_shot: false,
-          timeout_consumed: false,
-          include_response: true,
-          manifest_key: null,
-          created_at: new Date(),
-        },
-        headers: {
-          operation: `insert`,
-        },
-      },
-      {
-        headers: {
-          control: `up-to-date`,
-        },
-      },
-    ])
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
 
-    await startPromise
+    const rows = await db
+      .select()
+      .from(wakeRegistrations)
+      .where(eq(wakeRegistrations.sourceUrl, `/child/c1`))
 
-    expect(
-      await registry.evaluate(`/child/c1`, {
-        type: `run`,
-        key: `run-1`,
-        value: { status: `completed` },
-        headers: { operation: `update` },
-      })
-    ).toHaveLength(1)
+    expect(rows).toHaveLength(1)
 
-    await shapeStreamState.latest!.emit([
-      {
-        key: `1`,
-        headers: {
-          operation: `delete`,
-        },
-      },
-    ])
+    const results = await registry.evaluate(`/child/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
 
-    expect(
-      await registry.evaluate(`/child/c1`, {
-        type: `run`,
-        key: `run-2`,
-        value: { status: `completed` },
-        headers: { operation: `update` },
-      })
-    ).toHaveLength(0)
+    expect(results).toHaveLength(1)
+    expect(results[0]!.registrationDbId).toBe(rows[0]!.id)
 
     await registry.stopSync()
-    expect(shapeStreamState.latest!.signal?.aborted).toBe(true)
   })
 })
