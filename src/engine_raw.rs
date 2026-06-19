@@ -133,6 +133,35 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
             }
         };
         let _ = stream.set_nodelay(true);
+        // Cap the kernel socket buffers. An idle keep-alive connection — most
+        // visibly an SSE subscriber that sent one tiny GET and receives small
+        // events — otherwise pins the autotuned TCP receive buffer, whose Linux
+        // default is ~128 KiB and which is charged to the process/cgroup. With
+        // ~40k subscribers that kernel memory, not the ~27 KiB of Rust per-conn
+        // heap, dominates RSS and drives the OOM. A fixed 64 KiB recv / 64 KiB
+        // send buffer is still ample for this server's traffic: SSE is receive-
+        // light, and the splice/sendfile upload+download paths read/write in
+        // large chunks driven by socket readiness, so a 64 KiB kernel queue keeps
+        // a normal link saturated — we only forgo autotuning's growth into the
+        // MiB range, which is what bloats idle connections. Best-effort: clamped
+        // by net.core.{r,w}mem_max and a no-op where unsupported.
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            const SOCK_BUF: libc::c_int = 64 * 1024;
+            let fd = stream.as_raw_fd();
+            for opt in [libc::SO_RCVBUF, libc::SO_SNDBUF] {
+                unsafe {
+                    libc::setsockopt(
+                        fd,
+                        libc::SOL_SOCKET,
+                        opt,
+                        &SOCK_BUF as *const _ as *const libc::c_void,
+                        std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+                    );
+                }
+            }
+        }
         // At capacity: drop the new connection rather than queue unboundedly.
         let Ok(permit) = conns.clone().try_acquire_owned() else {
             continue;
@@ -150,7 +179,12 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
         b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     const TOO_LARGE: &[u8] =
         b"HTTP/1.1 413 Payload Too Large\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
-    let mut buf = BytesMut::with_capacity(16 * 1024);
+    // Initial capacity for the per-connection read buffer. Small on purpose:
+    // it persists for the whole (possibly long-lived, idle) connection, and
+    // `read_buf` grows it on demand, so a request head/body larger than this
+    // still parses — it just triggers a reserve. 4 KiB covers a typical request
+    // head in one read while keeping idle SSE subscribers cheap.
+    let mut buf = BytesMut::with_capacity(4 * 1024);
     loop {
         // ---- read request head ----
         let head = match http1::read_head(&mut stream, &mut buf).await? {
@@ -283,7 +317,12 @@ async fn write_response(
         Body::Channel(crate::api::StreamBody { mut rx, failed }) => {
             stream.write_all(&head).await?;
             debug_assert!(body_len.is_none());
-            let mut frame: Vec<u8> = Vec::with_capacity(8 * 1024);
+            // Small initial capacity: this buffer lives for the whole streaming
+            // response (e.g. an SSE subscriber held open for up to SSE_MAX_DURATION),
+            // and SSE events are small. `frame_chunk` grows it on demand for a
+            // larger frame, so this only trades one reallocation for a large event
+            // against ~7.5 KiB saved on every idle long-lived subscriber.
+            let mut frame: Vec<u8> = Vec::with_capacity(512);
             while let Some(b) = rx.recv().await {
                 frame.clear();
                 http1::frame_chunk(&mut frame, &b);
