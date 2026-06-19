@@ -383,11 +383,9 @@ impl Store {
         if threshold == 0 {
             return Ok(());
         }
-        let (sealed, file_base) = {
-            let m = st.tier.manifest.lock().unwrap();
-            let s = st.shared.read().unwrap();
-            (m.sealed_offset.max(st.base_offset), s.file_base)
-        };
+        // Separate acquisitions (never nest manifest+shared — see seal_loop note).
+        let sealed = st.tier.manifest.lock().unwrap().sealed_offset.max(st.base_offset);
+        let file_base = st.shared.read().unwrap().file_base;
         if sealed <= file_base || sealed - file_base < threshold {
             return Ok(());
         }
@@ -498,10 +496,15 @@ impl Store {
             // between the current sealed watermark and the tail, capped at one
             // segment. We need the appender lock briefly to read a consistent
             // (written) length and the file-local region.
-            let (sealed_offset, tail, file_base, file) = {
-                let m = st.tier.manifest.lock().unwrap();
+            // Acquire manifest and shared SEPARATELY (never nested): `write_meta_sync`'s
+            // `Meta::capture` holds shared.read() then takes manifest.lock(), so holding
+            // them in the opposite order here would deadlock under a queued shared writer
+            // (std RwLock is writer-preferring). These are heuristic reads; the seal cut is
+            // re-derived consistently below.
+            let sealed_offset = st.tier.manifest.lock().unwrap().sealed_offset.max(st.base_offset);
+            let (tail, file_base, file) = {
                 let s = st.shared.read().unwrap();
-                (m.sealed_offset.max(st.base_offset), s.tail, s.file_base, s.file.clone())
+                (s.tail, s.file_base, s.file.clone())
             };
             let unsealed = tail.saturating_sub(sealed_offset);
             if unsealed < seg_bytes {

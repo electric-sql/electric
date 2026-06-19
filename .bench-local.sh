@@ -125,7 +125,12 @@ stop_server
 
 # 4) append_tier — tier local, small segments so sealing (and future compaction) is active
 DATA_T="$ROOT/data-tier"; COLD_T="$ROOT/cold-tier"; rm -rf "$COLD_T"; mkdir -p "$COLD_T"
-start_server "$DATA_T" --tier local --tier-local-dir "$COLD_T" --tier-segment-bytes 1048576
+# COMPACT_BYTES: live-file compaction threshold for the tiered scenario. 0 = off
+# (matches the pre-compaction baseline). Set small (e.g. 8 MiB) to exercise
+# compaction frequently and stress the append path. Requires a binary that knows
+# --tier-compact-bytes.
+start_server "$DATA_T" --tier local --tier-local-dir "$COLD_T" --tier-segment-bytes 1048576 \
+  --tier-compact-bytes "${COMPACT_BYTES:-0}"
 RESULTS+=("$(scenario append_tier POST "$CONN_APPEND" "$ROOT/append100.bin")")
 # let any pending seal/offload settle, then measure on-disk footprint
 sleep 2

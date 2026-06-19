@@ -1572,6 +1572,68 @@ mod tier_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Regression: sustained concurrent appends + sealing + compaction + meta
+    /// writes must not deadlock. A lock-order inversion — seal/compact held
+    /// manifest.lock()→shared.read() while `write_meta_sync`'s capture held
+    /// shared.read()→manifest.lock(), with appends queuing a shared writer
+    /// (std RwLock is writer-preferring) — froze the server under load. This
+    /// drives all three actors concurrently and must finish well under the
+    /// timeout (a deadlock would hang past it). Multi-thread runtime is required
+    /// to reproduce the cross-thread lock cycle.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_append_seal_compact_no_deadlock() {
+        let dir = tmp_dir("no-deadlock");
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 128 * 1024; // compact often, to exercise the swap
+        let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let st = match store.create("s/cc", octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        let outcome = tokio::time::timeout(Duration::from_secs(30), async {
+            let mut handles = Vec::new();
+            // Appenders: each append bumps the tail (shared writer) then drives a
+            // seal/compact pass (manifest→shared).
+            for _ in 0..6 {
+                let s = store.clone();
+                let stc = st.clone();
+                handles.push(tokio::spawn(async move {
+                    let body = vec![b'x'; 6 * 1024];
+                    for _ in 0..120 {
+                        append_wire(&stc, &body).await;
+                        s.maybe_seal(&stc).await;
+                    }
+                }));
+            }
+            // Concurrent meta writer (shared→manifest), the opposite lock order.
+            let stc = st.clone();
+            handles.push(tokio::spawn(async move {
+                for _ in 0..300 {
+                    let s2 = stc.clone();
+                    let _ = tokio::task::spawn_blocking(move || write_meta_sync(&s2, false)).await;
+                    tokio::task::yield_now().await;
+                }
+            }));
+            for h in handles {
+                let _ = h.await;
+            }
+        })
+        .await;
+
+        assert!(
+            outcome.is_ok(),
+            "concurrent append + seal + compact + meta deadlocked (lock-order regression)"
+        );
+
+        // Sanity: the stream is intact and fully readable end to end.
+        let tail = st.shared.read().unwrap().tail;
+        let got = read_logical(&st, 0, tail).await;
+        assert_eq!(got.len() as u64, tail, "full read-back length after concurrent load");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A BlobStore whose uploads always fail — used to leave a sealed segment in
     /// the `Local` (not-yet-offloaded) state.
     struct FailingBlobStore;
