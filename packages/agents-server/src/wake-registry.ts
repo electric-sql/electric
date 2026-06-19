@@ -84,6 +84,26 @@ export interface WakeRegistrationCollectionRow {
 
 type WakeRegistryMode = `unstarted` | `local-test` | `electric`
 
+type DeleteRowsInput = {
+  rows: Array<WakeRegistrationCollectionRow>
+  persist:
+    | {
+        kind: `manifestKey`
+        tenantId: string
+        subscriberUrl: string
+        manifestKey: string
+      }
+    | { kind: `subscriber`; tenantId: string; subscriberUrl: string }
+    | { kind: `source`; tenantId: string; sourceUrl: string }
+    | {
+        kind: `subscriberAndSource`
+        tenantId: string
+        subscriberUrl: string
+        sourceUrl: string
+      }
+    | { kind: `oneShot` }
+}
+
 interface CachedWakeRegistration extends WakeRegistration {
   tenantId: string
   dbId: number
@@ -229,6 +249,49 @@ export class WakeRegistry {
     }
   }
 
+  private normalizeQueriedRows(
+    rows: Array<
+      WakeRegistrationCollectionRow | { reg: WakeRegistrationCollectionRow }
+    >
+  ): Array<WakeRegistrationCollectionRow> {
+    return rows.map(
+      (row) =>
+        ((row as { reg?: WakeRegistrationCollectionRow }).reg ??
+          row) as WakeRegistrationCollectionRow
+    )
+  }
+
+  private async rowsByPredicate(
+    predicate: (row: WakeRegistrationCollectionRow) => boolean
+  ): Promise<Array<WakeRegistrationCollectionRow>> {
+    const rows = await queryOnce((q) =>
+      q.from({ reg: this.requireCollection() })
+    )
+    return this.normalizeQueriedRows(
+      rows as Array<
+        WakeRegistrationCollectionRow | { reg: WakeRegistrationCollectionRow }
+      >
+    ).filter(predicate)
+  }
+
+  private async rowsForSource(
+    tenantId: string,
+    sourceUrl: string
+  ): Promise<Array<WakeRegistrationCollectionRow>> {
+    const rows = await queryOnce((q) =>
+      q
+        .from({ reg: this.requireCollection() })
+        .where(({ reg }) =>
+          dbAnd(dbEq(reg.tenantId, tenantId), dbEq(reg.sourceUrl, sourceUrl))
+        )
+    )
+    return this.normalizeQueriedRows(
+      rows as Array<
+        WakeRegistrationCollectionRow | { reg: WakeRegistrationCollectionRow }
+      >
+    )
+  }
+
   private registerAction =
     createOptimisticAction<WakeRegistrationCollectionRow>({
       onMutate: (row) => {
@@ -245,6 +308,45 @@ export class WakeRegistry {
         )
       },
     })
+
+  private deleteRowsAction = createOptimisticAction<DeleteRowsInput>({
+    onMutate: ({ rows }) => {
+      const collection = this.requireCollection()
+      for (const row of rows) {
+        this.clearRegistrationState(row)
+        this.timeoutDelivered.delete(row.id)
+        collection.delete(row.id)
+      }
+    },
+    mutationFn: async ({ persist }, { transaction }) => {
+      if (this.mode === `local-test` || persist.kind === `oneShot`) {
+        this.requireCollection().utils.acceptMutations(transaction)
+        return
+      }
+      throw new Error(
+        `WakeRegistry deleteRowsAction runtime persistence is not initialized`
+      )
+    },
+  })
+
+  private markTimeoutConsumedAction = createOptimisticAction<{
+    row: WakeRegistrationCollectionRow
+  }>({
+    onMutate: ({ row }) => {
+      this.requireCollection().update(row.id, (draft) => {
+        draft.timeoutConsumed = true
+      })
+    },
+    mutationFn: async (_input, { transaction }) => {
+      if (this.mode === `local-test`) {
+        this.requireCollection().utils.acceptMutations(transaction)
+        return
+      }
+      throw new Error(
+        `WakeRegistry markTimeoutConsumedAction runtime persistence is not initialized`
+      )
+    },
+  })
 
   setTimeoutCallback(cb: WakeTimeoutCallback, tenantId?: string): void {
     const resolvedTenantId = this.resolveTenantId(tenantId)
@@ -493,6 +595,26 @@ export class WakeRegistry {
     dbId: number,
     tenantId: string
   ): Promise<void> {
+    if (this.registrationsCollection) {
+      const row = await queryOnce((q) =>
+        q
+          .from({ reg: this.requireCollection() })
+          .where(({ reg }) =>
+            dbAnd(dbEq(reg.tenantId, tenantId), dbEq(reg.id, dbId))
+          )
+          .findOne()
+      )
+      const normalized = ((
+        row as
+          | { reg?: WakeRegistrationCollectionRow }
+          | WakeRegistrationCollectionRow
+          | undefined
+      )?.reg ?? row) as WakeRegistrationCollectionRow | undefined
+      if (!normalized) return
+      const tx = this.markTimeoutConsumedAction({ row: normalized })
+      await tx.isPersisted.promise
+      return
+    }
     await this.db
       .update(wakeRegistrations)
       .set({ timeoutConsumed: true })
@@ -509,6 +631,27 @@ export class WakeRegistry {
     manifestKey: string,
     tenantId?: string
   ): Promise<void> {
+    if (this.registrationsCollection) {
+      const resolvedTenantId = this.resolveTenantId(tenantId)
+      const rows = await this.rowsByPredicate(
+        (row) =>
+          row.tenantId === resolvedTenantId &&
+          row.subscriberUrl === subscriberUrl &&
+          row.manifestKey === manifestKey
+      )
+      const tx = this.deleteRowsAction({
+        rows,
+        persist: {
+          kind: `manifestKey`,
+          tenantId: resolvedTenantId,
+          subscriberUrl,
+          manifestKey,
+        },
+      })
+      await tx.isPersisted.promise
+      return
+    }
+
     const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
@@ -541,6 +684,25 @@ export class WakeRegistry {
     subscriberUrl: string,
     tenantId?: string
   ): Promise<void> {
+    if (this.registrationsCollection) {
+      const resolvedTenantId = this.resolveTenantId(tenantId)
+      const rows = await this.rowsByPredicate(
+        (row) =>
+          row.tenantId === resolvedTenantId &&
+          row.subscriberUrl === subscriberUrl
+      )
+      const tx = this.deleteRowsAction({
+        rows,
+        persist: {
+          kind: `subscriber`,
+          tenantId: resolvedTenantId,
+          subscriberUrl,
+        },
+      })
+      await tx.isPersisted.promise
+      return
+    }
+
     const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
@@ -570,6 +732,17 @@ export class WakeRegistry {
     sourceUrl: string,
     tenantId?: string
   ): Promise<void> {
+    if (this.registrationsCollection) {
+      const resolvedTenantId = this.resolveTenantId(tenantId)
+      const rows = await this.rowsForSource(resolvedTenantId, sourceUrl)
+      const tx = this.deleteRowsAction({
+        rows,
+        persist: { kind: `source`, tenantId: resolvedTenantId, sourceUrl },
+      })
+      await tx.isPersisted.promise
+      return
+    }
+
     const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
@@ -595,6 +768,27 @@ export class WakeRegistry {
     sourceUrl: string,
     tenantId?: string
   ): Promise<void> {
+    if (this.registrationsCollection) {
+      const resolvedTenantId = this.resolveTenantId(tenantId)
+      const rows = await this.rowsByPredicate(
+        (row) =>
+          row.tenantId === resolvedTenantId &&
+          row.subscriberUrl === subscriberUrl &&
+          row.sourceUrl === sourceUrl
+      )
+      const tx = this.deleteRowsAction({
+        rows,
+        persist: {
+          kind: `subscriberAndSource`,
+          tenantId: resolvedTenantId,
+          subscriberUrl,
+          sourceUrl,
+        },
+      })
+      await tx.isPersisted.promise
+      return
+    }
+
     const resolvedTenantId = this.resolveTenantId(tenantId)
     await this.db
       .delete(wakeRegistrations)
@@ -683,7 +877,9 @@ export class WakeRegistry {
     }
   }
 
-  private clearRegistrationState(reg: CachedWakeRegistration): void {
+  private clearRegistrationState(
+    reg: CachedWakeRegistration | WakeRegistrationCollectionRow
+  ): void {
     const timerKey = this.registrationKey(reg)
     this.clearDebounceState(timerKey)
     this.clearTimeoutState(timerKey)
@@ -920,7 +1116,7 @@ export class WakeRegistry {
       if (regs.length === 0) return []
 
       const results: Array<WakeEvalResult> = []
-      const oneShotIds: Array<number> = []
+      const oneShotRows: Array<WakeRegistrationCollectionRow> = []
 
       for (const reg of regs) {
         const match = this.matchCondition(reg, event)
@@ -986,18 +1182,21 @@ export class WakeRegistry {
         }
 
         if (reg.oneShot) {
-          oneShotIds.push(reg.id)
+          oneShotRows.push(reg)
         }
       }
 
-      for (let j = oneShotIds.length - 1; j >= 0; j--) {
-        const id = oneShotIds[j]!
-        const removed = regs.find((reg) => reg.id === id)
-        if (removed) {
-          this.clearRegistrationState(this.collectionRowAsCached(removed))
-          this.timeoutDelivered.delete(removed.id)
-          this.requireCollection().delete(removed.id)
-        }
+      if (oneShotRows.length > 0) {
+        const tx = this.deleteRowsAction({
+          rows: oneShotRows,
+          persist: { kind: `oneShot` },
+        })
+        void tx.isPersisted.promise.catch((error) => {
+          console.warn(
+            `[wake-registry] failed to persist one-shot cleanup:`,
+            error
+          )
+        })
       }
 
       return results

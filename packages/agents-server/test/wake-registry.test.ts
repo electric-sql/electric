@@ -458,6 +458,71 @@ describe(`Wake Registry`, () => {
     })
   })
 
+  it(`unregisterBySource removes all matching local collection rows`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.startLocalForTests()
+
+    await registry.register({
+      subscriberUrl: `/parent/a`,
+      sourceUrl: `/source/1`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+    await registry.register({
+      subscriberUrl: `/parent/b`,
+      sourceUrl: `/source/1`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+    await registry.register({
+      subscriberUrl: `/parent/c`,
+      sourceUrl: `/source/2`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+
+    await registry.unregisterBySource(`/source/1`)
+
+    expect(
+      await registry.evaluate(`/source/1`, {
+        type: `texts`,
+        key: `t1`,
+        value: {},
+        headers: { operation: `insert` },
+      })
+    ).toHaveLength(0)
+    expect(
+      await registry.evaluate(`/source/2`, {
+        type: `texts`,
+        key: `t2`,
+        value: {},
+        headers: { operation: `insert` },
+      })
+    ).toHaveLength(1)
+  })
+
+  it(`oneShot match removes row before a second immediate evaluation`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.startLocalForTests()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: true,
+    })
+
+    const event = {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    }
+
+    expect(await registry.evaluate(`/child/c1`, event)).toHaveLength(1)
+    expect(await registry.evaluate(`/child/c1`, event)).toHaveLength(0)
+  })
+
   it(`cleanup on subscriber deletion removes all registrations`, async () => {
     const registry = new WakeRegistry(createMockDb())
     await registry.register({
