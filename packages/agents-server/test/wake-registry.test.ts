@@ -85,6 +85,54 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
   })
 
+  it(`timeout effect delivers timeout wake once and marks row consumed`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.startLocalForTests()
+    const delivered: Array<WakeEvalResult> = []
+    registry.setTimeoutCallback((result) => delivered.push(result))
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 25,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]!.wakeMessage.timeout).toBe(true)
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(delivered).toHaveLength(1)
+  })
+
+  it(`local timeout effect does not consume timeout before callback is registered`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.startLocalForTests()
+    const delivered: Array<WakeEvalResult> = []
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 25,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(delivered).toHaveLength(0)
+
+    registry.setTimeoutCallback((result) => delivered.push(result))
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]!.sourceEventKey).toBe(`timeout`)
+  })
+
   it(`keeps shared registrations scoped by tenant`, async () => {
     const registry = new WakeRegistry(createMockDb(), null)
     await registry.register({

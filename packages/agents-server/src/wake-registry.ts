@@ -6,6 +6,7 @@ import {
 import {
   and as dbAnd,
   createCollection,
+  createEffect,
   createOptimisticAction,
   eq as dbEq,
   localOnlyCollectionOptions,
@@ -160,6 +161,7 @@ export class WakeRegistry {
   > | null = null
   private mode: WakeRegistryMode = `unstarted`
   private nextLocalId = 1
+  private registrationsEffect: { dispose(): Promise<void> } | null = null
   private registrationCache = new Map<string, Array<CachedWakeRegistration>>()
   private debounceTimers = new Map<string, NodeJS.Timeout>()
   private debounceBuffers = new Map<
@@ -203,6 +205,29 @@ export class WakeRegistry {
       })
     )
     await this.requireCollection().preload()
+    this.startRegistrationEffect()
+  }
+
+  private startRegistrationEffect(): void {
+    if (this.registrationsEffect) return
+    const collection = this.requireCollection()
+    this.registrationsEffect = createEffect<
+      WakeRegistrationCollectionRow,
+      number
+    >({
+      query: (q) => q.from({ reg: collection }),
+      skipInitial: false,
+      onEnter: ({ value }) => {
+        this.syncTimeoutTimer(value)
+      },
+      onUpdate: ({ value }) => {
+        this.syncTimeoutTimer(value)
+      },
+      onExit: ({ value }) => {
+        this.clearRegistrationState(value)
+        this.timeoutDelivered.delete(value.id)
+      },
+    })
   }
 
   private allocateLocalId(): number {
@@ -246,6 +271,25 @@ export class WakeRegistry {
       dbId: row.id,
       createdAt: row.createdAt,
       timeoutConsumed: row.timeoutConsumed,
+    }
+  }
+
+  private cachedRegistrationAsCollectionRow(
+    reg: CachedWakeRegistration
+  ): WakeRegistrationCollectionRow {
+    return {
+      id: reg.dbId,
+      tenantId: reg.tenantId,
+      subscriberUrl: reg.subscriberUrl,
+      sourceUrl: reg.sourceUrl,
+      condition: reg.condition,
+      debounceMs: reg.debounceMs ?? 0,
+      timeoutMs: reg.timeoutMs ?? 0,
+      oneShot: reg.oneShot,
+      timeoutConsumed: reg.timeoutConsumed ?? false,
+      includeResponse: reg.includeResponse !== false,
+      manifestKey: reg.manifestKey ?? null,
+      createdAt: reg.createdAt ?? new Date(),
     }
   }
 
@@ -296,7 +340,6 @@ export class WakeRegistry {
     createOptimisticAction<WakeRegistrationCollectionRow>({
       onMutate: (row) => {
         this.requireCollection().insert(row)
-        this.syncTimeoutTimer(this.collectionRowAsCached(row))
       },
       mutationFn: async (_row, { transaction }) => {
         if (this.mode === `local-test`) {
@@ -352,6 +395,7 @@ export class WakeRegistry {
     const resolvedTenantId = this.resolveTenantId(tenantId)
     this.timeoutCallbacks.set(resolvedTenantId, cb)
     this.syncTenantTimeoutTimers(resolvedTenantId)
+    void this.syncTenantCollectionTimeoutTimers(resolvedTenantId)
   }
 
   setDebounceCallback(cb: WakeDebounceCallback, tenantId?: string): void {
@@ -494,11 +538,31 @@ export class WakeRegistry {
   }
 
   async stopSync(): Promise<void> {
+    await this.registrationsEffect?.dispose()
+    this.registrationsEffect = null
+    this.registrationsCollection = null
+    this.mode = `unstarted`
     this.syncUnsubscribe?.()
     this.syncUnsubscribe = null
     this.syncAbortController?.abort()
     this.syncAbortController = null
     this.syncReadyPromise = null
+    this.resetRuntimeState()
+  }
+
+  private resetRuntimeState(): void {
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.debounceTimers.clear()
+    this.debounceBuffers.clear()
+    this.debounceRunStatus.clear()
+
+    for (const timer of this.timeoutTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.timeoutTimers.clear()
+    this.timeoutDelivered.clear()
   }
 
   private async recoverSync(
@@ -586,9 +650,9 @@ export class WakeRegistry {
     })
   }
 
-  private startTimeoutTimer(reg: CachedWakeRegistration, dbId: number): void {
-    if (reg.timeoutMs == null || reg.timeoutMs <= 0) return
-    this.startTimeoutTimerWithDuration(reg, dbId, reg.timeoutMs)
+  private startTimeoutTimer(reg: WakeRegistrationCollectionRow): void {
+    if (reg.timeoutMs <= 0) return
+    this.startTimeoutTimerWithDuration(reg, reg.timeoutMs)
   }
 
   private async markTimeoutConsumed(
@@ -604,12 +668,13 @@ export class WakeRegistry {
           )
           .findOne()
       )
-      const normalized = ((
-        row as
-          | { reg?: WakeRegistrationCollectionRow }
-          | WakeRegistrationCollectionRow
-          | undefined
-      )?.reg ?? row) as WakeRegistrationCollectionRow | undefined
+      const queried = row as
+        | { reg?: WakeRegistrationCollectionRow }
+        | WakeRegistrationCollectionRow
+        | undefined
+      const normalized = (
+        queried && `reg` in queried ? queried.reg : queried
+      ) as WakeRegistrationCollectionRow | undefined
       if (!normalized) return
       const tx = this.markTimeoutConsumedAction({ row: normalized })
       await tx.isPersisted.promise
@@ -847,14 +912,13 @@ export class WakeRegistry {
   }
 
   private startTimeoutTimerWithDuration(
-    reg: CachedWakeRegistration,
-    dbId: number,
+    reg: WakeRegistrationCollectionRow,
     durationMs: number
   ): void {
     const timerKey = this.registrationKey(reg)
     const timer = setTimeout(() => {
       this.timeoutTimers.delete(timerKey)
-      this.deliverTimeoutForRegistration(reg, dbId)
+      this.deliverTimeoutForRegistration(reg)
     }, durationMs)
     this.timeoutTimers.set(timerKey, timer)
   }
@@ -966,10 +1030,16 @@ export class WakeRegistry {
     }
   }
 
-  private syncTimeoutTimer(reg: CachedWakeRegistration): void {
+  private syncTimeoutTimer(
+    registration: CachedWakeRegistration | WakeRegistrationCollectionRow
+  ): void {
+    const reg =
+      `dbId` in registration
+        ? this.cachedRegistrationAsCollectionRow(registration)
+        : registration
     const timerKey = this.registrationKey(reg)
 
-    if (reg.timeoutConsumed || reg.timeoutMs == null || reg.timeoutMs <= 0) {
+    if (reg.timeoutConsumed || reg.timeoutMs <= 0) {
       this.clearTimeoutState(timerKey)
       return
     }
@@ -978,31 +1048,30 @@ export class WakeRegistry {
       return
     }
 
-    if (!reg.createdAt) {
-      this.startTimeoutTimer(reg, reg.dbId)
-      return
-    }
-
     const remaining = reg.createdAt.getTime() + reg.timeoutMs - Date.now()
     if (remaining > 0) {
-      this.startTimeoutTimerWithDuration(reg, reg.dbId, remaining)
+      this.startTimeoutTimerWithDuration(reg, remaining)
       return
     }
 
-    if (this.timeoutDelivered.has(reg.dbId)) {
+    if (this.timeoutDelivered.has(reg.id)) {
       return
     }
 
-    this.deliverTimeoutForRegistration(reg, reg.dbId)
+    this.deliverTimeoutForRegistration(reg)
   }
 
   private deliverTimeoutForRegistration(
-    reg: CachedWakeRegistration,
-    dbId: number
+    reg: WakeRegistrationCollectionRow
   ): void {
-    if (this.deliverTimeout(this.timeoutWakeResult(reg, dbId))) {
-      this.timeoutDelivered.add(dbId)
-      void this.markTimeoutConsumed(dbId, reg.tenantId)
+    if (this.deliverTimeout(this.timeoutWakeResult(reg))) {
+      this.timeoutDelivered.add(reg.id)
+      void this.markTimeoutConsumed(reg.id, reg.tenantId).catch((error) => {
+        serverLog.warn(
+          `[wake-registry] failed to mark timeout consumed for registration ${reg.id} (${reg.tenantId}, ${reg.sourceUrl} -> ${reg.subscriberUrl}):`,
+          error
+        )
+      })
     }
   }
 
@@ -1016,14 +1085,29 @@ export class WakeRegistry {
     }
   }
 
+  private async syncTenantCollectionTimeoutTimers(
+    tenantId: string
+  ): Promise<void> {
+    if (!this.registrationsCollection) return
+    const rows = await queryOnce((q) =>
+      q
+        .from({ reg: this.requireCollection() })
+        .where(({ reg }) => dbEq(reg.tenantId, tenantId))
+    )
+    for (const queriedRow of rows) {
+      const row = ((queriedRow as { reg?: WakeRegistrationCollectionRow })
+        .reg ?? queriedRow) as WakeRegistrationCollectionRow
+      this.syncTimeoutTimer(row)
+    }
+  }
+
   private timeoutWakeResult(
-    reg: CachedWakeRegistration,
-    dbId: number
+    reg: WakeRegistrationCollectionRow
   ): WakeEvalResult {
     return {
       tenantId: reg.tenantId,
       subscriberUrl: reg.subscriberUrl,
-      registrationDbId: dbId,
+      registrationDbId: reg.id,
       sourceEventKey: `timeout`,
       wakeMessage: {
         source: reg.sourceUrl,
