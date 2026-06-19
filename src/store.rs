@@ -1405,6 +1405,173 @@ mod tier_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    fn octet_cfg() -> StreamConfig {
+        StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn recovery_after_real_compaction() {
+        // A cleanly-compacted stream reopens with the persisted file_base, the
+        // compacted (small) live file, the right tail, and exact full read-back.
+        let dir = tmp_dir("compact-recover");
+        let total = 500 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        let (sealed, tail) = {
+            let mut cfg = local_tier(&dir, 64 * 1024);
+            cfg.compact_bytes = 128 * 1024;
+            let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+            let st = match store.create("s/cr", octet_cfg(), None, 0).unwrap() {
+                CreateResult::Created(s) => s,
+                _ => panic!("create failed"),
+            };
+            for chunk in payload.chunks(8 * 1024) {
+                append_wire(&st, chunk).await;
+            }
+            store.maybe_seal(&st).await; // compacts
+            let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
+            let tail = st.shared.read().unwrap().tail;
+            (sealed, tail)
+        };
+
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 128 * 1024;
+        let store2 = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let st = store2.get("s/cr").expect("stream recovered");
+        let (rtail, rfb) = {
+            let s = st.shared.read().unwrap();
+            (s.tail, s.file_base)
+        };
+        assert_eq!(rtail, tail, "tail recovered");
+        assert_eq!(rfb, sealed, "file_base recovered to the sealed watermark");
+        let live_size = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(live_size, tail - sealed, "compacted live file recovered");
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "post-compaction-recovery read exact");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Simulate a crash mid-compaction: persist the `pending_compaction` intent,
+    /// then leave the live file either as the original full file (`simulate_renamed
+    /// == false`, crash before the rename) or rewritten to just the hot tail
+    /// (`true`, crash after the rename). Recovery must reconstruct the right
+    /// `file_base` from `pending.tail - file_size` in both cases and read exact.
+    async fn recover_with_pending_intent(tag: &str, simulate_renamed: bool) {
+        let dir = tmp_dir(tag);
+        let total = 300 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        let (sealed, tail, file_path) = {
+            let mut cfg = local_tier(&dir, 64 * 1024);
+            cfg.compact_bytes = 0; // no auto-compaction; we craft the crash state
+            let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+            let st = match store.create("s/pend", octet_cfg(), None, 0).unwrap() {
+                CreateResult::Created(s) => s,
+                _ => panic!("create failed"),
+            };
+            for chunk in payload.chunks(8 * 1024) {
+                append_wire(&st, chunk).await;
+            }
+            store.maybe_seal(&st).await; // seals, no compaction
+            let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
+            let tail = st.shared.read().unwrap().tail;
+            // Persist the compaction intent as if a compaction had started.
+            *st.compaction.lock().unwrap() = Some(PendingCompaction {
+                new_file_base: sealed,
+                tail,
+            });
+            let stc = st.clone();
+            tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+                .await
+                .unwrap()
+                .unwrap();
+            (sealed, tail, st.file_path.clone())
+        };
+        if simulate_renamed {
+            // Crash after the rename: the live file already holds only [sealed,tail).
+            let full = std::fs::read(&file_path).unwrap();
+            std::fs::write(&file_path, &full[sealed as usize..]).unwrap();
+        }
+
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 0;
+        let store2 = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let st = store2.get("s/pend").expect("stream recovered");
+        let rtail = st.shared.read().unwrap().tail;
+        assert_eq!(rtail, tail, "tail recovered to the frozen value ({tag})");
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "pending-intent recovery read exact ({tag})");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn recovery_pending_intent_before_rename() {
+        recover_with_pending_intent("pend-before", false).await;
+    }
+
+    #[tokio::test]
+    async fn recovery_pending_intent_after_rename() {
+        recover_with_pending_intent("pend-after", true).await;
+    }
+
+    #[tokio::test]
+    async fn fork_reads_compacted_parent() {
+        // A fork inherits its parent's history below the fork point. After the
+        // parent is compacted (its sealed prefix dropped from the live file), the
+        // fork must still read that history — resolve_range routes the parent's
+        // sealed offsets to the manifest, not the (now-absent) live-file copy.
+        let dir = tmp_dir("fork-compact");
+        let total = 500 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 128 * 1024;
+        let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+
+        let parent = match store.create("s/parent", octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create parent failed"),
+        };
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&parent, chunk).await;
+        }
+        store.maybe_seal(&parent).await; // compacts the parent
+
+        let (sealed, ptail) = {
+            let m = parent.tier.manifest.lock().unwrap();
+            let s = parent.shared.read().unwrap();
+            (m.sealed_offset, s.tail)
+        };
+        assert_eq!(parent.shared.read().unwrap().file_base, sealed, "parent compacted");
+
+        // Fork at the parent's tail: the fork inherits all of [0, ptail).
+        let fork = match store
+            .create("s/fork", octet_cfg(), Some(parent.clone()), ptail)
+            .unwrap()
+        {
+            CreateResult::Created(s) => s,
+            _ => panic!("create fork failed"),
+        };
+
+        // Read the parent's full history (incl. its compacted region) via the fork.
+        let got = read_logical(&fork, 0, ptail).await;
+        assert_eq!(got, payload, "fork reads parent's compacted history exact");
+
+        // A sub-range entirely inside the parent's compacted (sealed) region.
+        let got2 = read_logical(&fork, 100, sealed).await;
+        assert_eq!(got2, payload[100..sealed as usize], "fork sub-range in cold region");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A BlobStore whose uploads always fail — used to leave a sealed segment in
     /// the `Local` (not-yet-offloaded) state.
     struct FailingBlobStore;
