@@ -92,7 +92,7 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
   })
 
-  it(`drops optimistic register row when runtime insert conflicts invisibly`, async () => {
+  it(`keeps optimistic register row when runtime insert conflicts invisibly`, async () => {
     const registry = await createLocalRegistry()
     ;(registry as any).mode = `electric`
     ;(registry as any).allocateRuntimeId = async () => 42
@@ -113,7 +113,7 @@ describe(`Wake Registry`, () => {
       headers: { operation: `update` },
     })
 
-    expect(results).toHaveLength(0)
+    expect(results).toHaveLength(1)
   })
 
   it(`keeps registrations locally visible when Electric tx visibility times out`, async () => {
