@@ -8,7 +8,7 @@ import {
   localOnlyCollectionOptions,
   queryOnce,
 } from '@tanstack/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './utils/log.js'
@@ -295,7 +295,8 @@ export class WakeRegistry {
         if (this.mode === `electric`) {
           const txid = await this.persistInsert(row)
           if (txid === undefined) {
-            throw new WakeRegistrationConflictError(row)
+            this.requireCollection().utils.acceptMutations(transaction)
+            return
           }
           try {
             await this.requireCollection().utils.awaitTxId(txid, 10_000)
@@ -304,6 +305,7 @@ export class WakeRegistry {
               error instanceof Error &&
               error.name === `TimeoutWaitingForTxIdError`
             ) {
+              this.requireCollection().utils.acceptMutations(transaction)
               return { txid }
             }
             throw error
@@ -323,18 +325,29 @@ export class WakeRegistry {
         collection.delete(row.id)
       }
     },
-    mutationFn: async ({ rows }, { transaction }) => {
+    mutationFn: async (input, { transaction }) => {
       if (this.mode === `local-test`) {
         this.requireCollection().utils.acceptMutations(transaction)
         return
       }
       if (this.mode === `electric`) {
-        const txid = await this.persistDeleteRows(rows)
+        const txid = await this.persistDeleteRows(input)
         if (txid === undefined) {
           this.requireCollection().utils.acceptMutations(transaction)
           return
         }
-        await this.requireCollection().utils.awaitTxId(txid, 10_000)
+        try {
+          await this.requireCollection().utils.awaitTxId(txid, 10_000)
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.name === `TimeoutWaitingForTxIdError`
+          ) {
+            this.requireCollection().utils.acceptMutations(transaction)
+            return { txid }
+          }
+          throw error
+        }
         return { txid }
       }
       throw new Error(`WakeRegistry deleteRowsAction called before startup`)
@@ -557,25 +570,53 @@ export class WakeRegistry {
     })
   }
 
-  private async persistDeleteRows(
-    rows: Array<WakeRegistrationCollectionRow>
-  ): Promise<number | undefined> {
-    if (rows.length === 0) return undefined
-    return await this.db.transaction(async (tx) => {
-      let txid: string | undefined
-      for (const row of rows) {
-        const deleted = await tx
-          .delete(wakeRegistrations)
-          .where(
-            and(
-              eq(wakeRegistrations.tenantId, row.tenantId),
-              eq(wakeRegistrations.id, row.id)
+  private deletePredicate(input: DeleteRowsInput) {
+    switch (input.persist.kind) {
+      case `manifestKey`:
+        return and(
+          eq(wakeRegistrations.tenantId, input.persist.tenantId),
+          eq(wakeRegistrations.subscriberUrl, input.persist.subscriberUrl),
+          eq(wakeRegistrations.manifestKey, input.persist.manifestKey)
+        )
+      case `subscriber`:
+        return and(
+          eq(wakeRegistrations.tenantId, input.persist.tenantId),
+          eq(wakeRegistrations.subscriberUrl, input.persist.subscriberUrl)
+        )
+      case `source`:
+        return and(
+          eq(wakeRegistrations.tenantId, input.persist.tenantId),
+          eq(wakeRegistrations.sourceUrl, input.persist.sourceUrl)
+        )
+      case `subscriberAndSource`:
+        return and(
+          eq(wakeRegistrations.tenantId, input.persist.tenantId),
+          eq(wakeRegistrations.subscriberUrl, input.persist.subscriberUrl),
+          eq(wakeRegistrations.sourceUrl, input.persist.sourceUrl)
+        )
+      case `oneShot`:
+        return input.rows.length === 0
+          ? undefined
+          : inArray(
+              wakeRegistrations.id,
+              input.rows.map((row) => row.id)
             )
-          )
-          .returning({ txid: sql<string>`pg_current_xact_id()::xid::text` })
-        txid = deleted[0]?.txid ?? txid
-      }
-      return txid === undefined ? undefined : Number(txid)
+    }
+  }
+
+  private async persistDeleteRows(
+    input: DeleteRowsInput
+  ): Promise<number | undefined> {
+    const predicate = this.deletePredicate(input)
+    if (!predicate) return undefined
+    return await this.db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(wakeRegistrations)
+        .where(predicate)
+        .returning({ txid: sql<string>`pg_current_xact_id()::xid::text` })
+      return deleted[0]?.txid === undefined
+        ? undefined
+        : Number(deleted[0].txid)
     })
   }
 
@@ -689,6 +730,17 @@ export class WakeRegistry {
       )
   }
 
+  private async deleteRows(input: DeleteRowsInput): Promise<void> {
+    if (this.registrationsCollection && input.rows.length > 0) {
+      const tx = this.deleteRowsAction(input)
+      await tx.isPersisted.promise
+      return
+    }
+    if (this.mode === `electric`) {
+      await this.persistDeleteRows(input)
+    }
+  }
+
   async unregisterByManifestKey(
     subscriberUrl: string,
     manifestKey: string,
@@ -702,7 +754,7 @@ export class WakeRegistry {
           row.subscriberUrl === subscriberUrl &&
           row.manifestKey === manifestKey
       )
-      const tx = this.deleteRowsAction({
+      await this.deleteRows({
         rows,
         persist: {
           kind: `manifestKey`,
@@ -711,7 +763,6 @@ export class WakeRegistry {
           manifestKey,
         },
       })
-      await tx.isPersisted.promise
       return
     }
 
@@ -738,7 +789,7 @@ export class WakeRegistry {
           row.tenantId === resolvedTenantId &&
           row.subscriberUrl === subscriberUrl
       )
-      const tx = this.deleteRowsAction({
+      await this.deleteRows({
         rows,
         persist: {
           kind: `subscriber`,
@@ -746,7 +797,6 @@ export class WakeRegistry {
           subscriberUrl,
         },
       })
-      await tx.isPersisted.promise
       return
     }
 
@@ -768,11 +818,10 @@ export class WakeRegistry {
     if (this.registrationsCollection) {
       const resolvedTenantId = this.resolveTenantId(tenantId)
       const rows = await this.rowsForSource(resolvedTenantId, sourceUrl)
-      const tx = this.deleteRowsAction({
+      await this.deleteRows({
         rows,
         persist: { kind: `source`, tenantId: resolvedTenantId, sourceUrl },
       })
-      await tx.isPersisted.promise
       return
     }
 
@@ -800,7 +849,7 @@ export class WakeRegistry {
           row.subscriberUrl === subscriberUrl &&
           row.sourceUrl === sourceUrl
       )
-      const tx = this.deleteRowsAction({
+      await this.deleteRows({
         rows,
         persist: {
           kind: `subscriberAndSource`,
@@ -809,7 +858,6 @@ export class WakeRegistry {
           sourceUrl,
         },
       })
-      await tx.isPersisted.promise
       return
     }
 

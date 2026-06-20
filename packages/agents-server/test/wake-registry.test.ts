@@ -116,6 +116,90 @@ describe(`Wake Registry`, () => {
     expect(results).toHaveLength(0)
   })
 
+  it(`keeps registrations locally visible when Electric tx visibility times out`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    ;(registry as any).allocateRuntimeId = async () => 42
+    ;(registry as any).persistInsert = async () => 123
+    const timeout = new Error(`timed out`)
+    timeout.name = `TimeoutWaitingForTxIdError`
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {
+      throw timeout
+    }
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/slow-visible`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/slow-visible`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(1)
+  })
+
+  it(`keeps committed one-shot deletes locally deleted when Electric tx visibility times out`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/one-shot-timeout`,
+      condition: `runFinished`,
+      oneShot: true,
+    })
+    ;(registry as any).mode = `electric`
+    ;(registry as any).persistDeleteRows = async () => 123
+    const timeout = new Error(`timed out`)
+    timeout.name = `TimeoutWaitingForTxIdError`
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {
+      throw timeout
+    }
+
+    const first = await registry.evaluate(`/child/one-shot-timeout`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const second = await registry.evaluate(`/child/one-shot-timeout`, {
+      type: `run`,
+      key: `run-2`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(first).toHaveLength(1)
+    expect(second).toHaveLength(0)
+  })
+
+  it(`persists unregister predicates even when matching rows are not locally visible`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    let persisted: unknown
+    ;(registry as any).persistDeleteRows = async (input: unknown) => {
+      persisted = input
+      return undefined
+    }
+
+    await registry.unregisterBySubscriber(`/parent/missing`)
+
+    expect(persisted).toEqual({
+      rows: [],
+      persist: {
+        kind: `subscriber`,
+        tenantId: `default`,
+        subscriberUrl: `/parent/missing`,
+      },
+    })
+  })
+
   it(`does not await an invisible txid when runtime timeout update matches no rows`, async () => {
     const registry = await createLocalRegistry()
 

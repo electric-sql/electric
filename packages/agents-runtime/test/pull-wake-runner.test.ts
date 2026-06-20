@@ -330,6 +330,56 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`does not let a new same-stream notification jump ahead of a queued trigger`, async () => {
+    const continueStream = deferred<void>()
+    const firstClaimResponse = deferred<Response>()
+    const requestGenerations: Array<number> = []
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestGenerations.push(JSON.parse(String(init?.body)).generation)
+        if (requestGenerations.length === 1) return firstClaimResponse.promise
+        return Response.json(notification(`coalesced`))
+      }
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield { ...wakeEvent(`parent`), generation: 1 }
+        yield { ...wakeEvent(`parent`), generation: 2 }
+        await continueStream.promise
+        yield { ...wakeEvent(`parent`), generation: 3 }
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(requestGenerations).toEqual([1])
+    })
+
+    firstClaimResponse.resolve(Response.json(notification(`one`)))
+    continueStream.resolve()
+
+    await waitFor(() => {
+      expect(requestGenerations).toEqual([1, 2])
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(requestGenerations).toEqual([1, 2])
+
+    await runner.stop()
+  })
+
   it(`skips stale wake events when claim returns no pending work`, async () => {
     const event = wakeEvent(`one`)
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
