@@ -95,6 +95,11 @@ export interface WakeRegistrationCollectionRow {
 
 type WakeRegistryMode = `unstarted` | `local-test` | `electric`
 
+type PersistInsertResult = {
+  txid: number
+  row: WakeRegistrationCollectionRow
+}
+
 type DeleteRowsInput = {
   rows: Array<WakeRegistrationCollectionRow>
   persist:
@@ -293,24 +298,25 @@ export class WakeRegistry {
           return
         }
         if (this.mode === `electric`) {
-          const txid = await this.persistInsert(row)
-          if (txid === undefined) {
-            this.requireCollection().utils.acceptMutations(transaction)
-            return
+          const result = await this.persistInsert(row)
+          if (result.row.id !== row.id) {
+            const collection = this.requireCollection()
+            collection.delete(row.id)
+            collection.insert(result.row)
           }
           try {
-            await this.requireCollection().utils.awaitTxId(txid, 10_000)
+            await this.requireCollection().utils.awaitTxId(result.txid, 10_000)
           } catch (error) {
             if (
               error instanceof Error &&
               error.name === `TimeoutWaitingForTxIdError`
             ) {
               this.requireCollection().utils.acceptMutations(transaction)
-              return { txid }
+              return { txid: result.txid }
             }
             throw error
           }
-          return { txid }
+          return { txid: result.txid }
         }
         throw new Error(`WakeRegistry registerAction called before startup`)
       },
@@ -429,6 +435,7 @@ export class WakeRegistry {
   async startSync(electricUrl: string, electricSecret?: string): Promise<void> {
     if (this.registrationsCollection) {
       await this.registrationsCollection.preload()
+      this.startRegistrationEffect()
       return
     }
 
@@ -469,16 +476,26 @@ export class WakeRegistry {
       } as any)
     ) as any
 
-    await this.requireCollection().preload()
+    try {
+      await this.requireCollection().preload()
+    } catch (error) {
+      const collection = this.registrationsCollection
+      this.registrationsCollection = null
+      this.mode = `unstarted`
+      await collection?.cleanup?.()
+      throw error
+    }
     this.startRegistrationEffect()
   }
 
   async stopSync(): Promise<void> {
+    const collection = this.registrationsCollection
     await this.registrationsEffect?.dispose()
     this.registrationsEffect = null
     this.registrationsCollection = null
     this.mode = `unstarted`
     this.resetRuntimeState()
+    await collection?.cleanup?.()
   }
 
   private resetRuntimeState(): void {
@@ -528,7 +545,7 @@ export class WakeRegistry {
 
   private async persistInsert(
     row: WakeRegistrationCollectionRow
-  ): Promise<number | undefined> {
+  ): Promise<PersistInsertResult> {
     return await this.db.transaction(async (tx) => {
       const rows = await tx
         .insert(wakeRegistrations)
@@ -546,9 +563,53 @@ export class WakeRegistry {
           manifestKey: row.manifestKey,
           createdAt: row.createdAt,
         })
-        .onConflictDoNothing()
-        .returning({ txid: sql<string>`pg_current_xact_id()::xid::text` })
-      return rows[0]?.txid === undefined ? undefined : Number(rows[0].txid)
+        .onConflictDoUpdate({
+          target: [
+            wakeRegistrations.tenantId,
+            wakeRegistrations.subscriberUrl,
+            wakeRegistrations.sourceUrl,
+            wakeRegistrations.oneShot,
+            wakeRegistrations.debounceMs,
+            wakeRegistrations.timeoutMs,
+            wakeRegistrations.condition,
+            wakeRegistrations.manifestKey,
+          ],
+          set: { createdAt: sql`${wakeRegistrations.createdAt}` },
+        })
+        .returning({
+          id: wakeRegistrations.id,
+          tenantId: wakeRegistrations.tenantId,
+          subscriberUrl: wakeRegistrations.subscriberUrl,
+          sourceUrl: wakeRegistrations.sourceUrl,
+          condition: wakeRegistrations.condition,
+          debounceMs: wakeRegistrations.debounceMs,
+          timeoutMs: wakeRegistrations.timeoutMs,
+          oneShot: wakeRegistrations.oneShot,
+          timeoutConsumed: wakeRegistrations.timeoutConsumed,
+          includeResponse: wakeRegistrations.includeResponse,
+          manifestKey: wakeRegistrations.manifestKey,
+          createdAt: wakeRegistrations.createdAt,
+          txid: sql<string>`pg_current_xact_id()::xid::text`,
+        })
+      const inserted = rows[0]
+      if (!inserted) throw new Error(`Wake registration insert returned no row`)
+      return {
+        txid: Number(inserted.txid),
+        row: {
+          id: inserted.id,
+          tenantId: inserted.tenantId,
+          subscriberUrl: inserted.subscriberUrl,
+          sourceUrl: inserted.sourceUrl,
+          condition: inserted.condition as WakeRegistration[`condition`],
+          debounceMs: inserted.debounceMs,
+          timeoutMs: inserted.timeoutMs,
+          oneShot: inserted.oneShot,
+          timeoutConsumed: inserted.timeoutConsumed,
+          includeResponse: inserted.includeResponse,
+          manifestKey: inserted.manifestKey,
+          createdAt: inserted.createdAt,
+        },
+      }
     })
   }
 

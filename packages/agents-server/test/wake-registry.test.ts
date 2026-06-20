@@ -92,12 +92,15 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
   })
 
-  it(`keeps optimistic register row when runtime insert conflicts invisibly`, async () => {
+  it(`reconciles invisible insert conflicts to the canonical database row`, async () => {
     const registry = await createLocalRegistry()
     ;(registry as any).mode = `electric`
     ;(registry as any).allocateRuntimeId = async () => 42
-    ;(registry as any).persistInsert = async () => undefined
-    ;(registry as any).waitForRegistrationVisible = async () => {}
+    ;(registry as any).persistInsert = async (row: any) => ({
+      txid: 123,
+      row: { ...row, id: 7 },
+    })
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {}
 
     await registry.register({
       subscriberUrl: `/parent/p1`,
@@ -114,13 +117,14 @@ describe(`Wake Registry`, () => {
     })
 
     expect(results).toHaveLength(1)
+    expect(results[0]!.registrationDbId).toBe(7)
   })
 
   it(`keeps registrations locally visible when Electric tx visibility times out`, async () => {
     const registry = await createLocalRegistry()
     ;(registry as any).mode = `electric`
     ;(registry as any).allocateRuntimeId = async () => 42
-    ;(registry as any).persistInsert = async () => 123
+    ;(registry as any).persistInsert = async (row: any) => ({ txid: 123, row })
     const timeout = new Error(`timed out`)
     timeout.name = `TimeoutWaitingForTxIdError`
     ;(registry as any).requireCollection().utils.awaitTxId = async () => {
@@ -198,6 +202,32 @@ describe(`Wake Registry`, () => {
         subscriberUrl: `/parent/missing`,
       },
     })
+  })
+
+  it(`cleans up the Electric collection on stopSync`, async () => {
+    const registry = await createLocalRegistry()
+    const cleanup = vi.fn(async () => undefined)
+    const dispose = vi.fn(async () => undefined)
+    ;(registry as any).registrationsCollection = { cleanup }
+    ;(registry as any).registrationsEffect = { dispose }
+
+    await registry.stopSync()
+
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it(`starts the registration effect after retrying an existing collection preload`, async () => {
+    const registry = await createLocalRegistry()
+    const preload = vi.fn(async () => undefined)
+    const startEffect = vi.fn()
+    ;(registry as any).registrationsCollection = { preload }
+    ;(registry as any).startRegistrationEffect = startEffect
+
+    await registry.startSync(`http://electric.test`)
+
+    expect(preload).toHaveBeenCalledTimes(1)
+    expect(startEffect).toHaveBeenCalledTimes(1)
   })
 
   it(`does not await an invisible txid when runtime timeout update matches no rows`, async () => {
