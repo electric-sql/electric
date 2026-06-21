@@ -239,7 +239,7 @@ export class WakeRegistry {
       oneShot: reg.oneShot,
       timeoutConsumed: false,
       includeResponse: reg.includeResponse !== false,
-      manifestKey: reg.manifestKey ?? null,
+      manifestKey: reg.manifestKey ?? ``,
       createdAt: new Date(),
     }
   }
@@ -299,11 +299,6 @@ export class WakeRegistry {
         }
         if (this.mode === `electric`) {
           const result = await this.persistInsert(row)
-          if (result.row.id !== row.id) {
-            const collection = this.requireCollection()
-            collection.delete(row.id)
-            collection.insert(result.row)
-          }
           try {
             await this.requireCollection().utils.awaitTxId(result.txid, 10_000)
           } catch (error) {
@@ -560,7 +555,7 @@ export class WakeRegistry {
           oneShot: row.oneShot,
           timeoutConsumed: row.timeoutConsumed,
           includeResponse: row.includeResponse,
-          manifestKey: row.manifestKey,
+          manifestKey: row.manifestKey ?? ``,
           createdAt: row.createdAt,
         })
         .onConflictDoUpdate({
@@ -574,7 +569,12 @@ export class WakeRegistry {
             wakeRegistrations.condition,
             wakeRegistrations.manifestKey,
           ],
-          set: { createdAt: sql`${wakeRegistrations.createdAt}` },
+          set: {
+            id: row.id,
+            timeoutConsumed: row.timeoutConsumed,
+            includeResponse: row.includeResponse,
+            createdAt: sql`${wakeRegistrations.createdAt}`,
+          },
         })
         .returning({
           id: wakeRegistrations.id,
