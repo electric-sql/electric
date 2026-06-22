@@ -48,7 +48,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ok
   end
 
-  def whereis_name({stack_id, shape_id}) do
+  def whereis_name({stack_id, shape_id}) when is_integer(shape_id) do
     whereis(stack_id, shape_id) || :undefined
   end
 
@@ -68,17 +68,19 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec register_consumer(pid(), shape_id(), stack_id()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_id, stack_id) when is_binary(stack_id) do
+  def register_consumer(pid, shape_id, stack_id)
+      when is_integer(shape_id) and is_binary(stack_id) do
     register_consumer(pid, shape_id, ets_name(stack_id))
   end
 
   @spec register_consumer(pid(), shape_id(), t()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_id, %__MODULE__{table: table}) do
+  def register_consumer(pid, shape_id, %__MODULE__{table: table}) when is_integer(shape_id) do
     register_consumer(pid, shape_id, table)
   end
 
   @spec register_consumer(pid(), shape_id(), :ets.table()) :: {:ok, non_neg_integer()}
-  def register_consumer(pid, shape_id, table) when is_atom(table) or is_reference(table) do
+  def register_consumer(pid, shape_id, table)
+      when is_integer(shape_id) and (is_atom(table) or is_reference(table)) do
     register_consumer!(pid, shape_id, table)
     :ok
   end
@@ -138,12 +140,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec remove_consumer(shape_id(), t()) :: :ok
-  def remove_consumer(shape_id, %__MODULE__{table: table}) do
+  def remove_consumer(shape_id, %__MODULE__{table: table}) when is_integer(shape_id) do
     do_remove_consumer(shape_id, table)
   end
 
   @spec remove_consumer(shape_id(), stack_id()) :: :ok
-  def remove_consumer(shape_id, stack_id) when is_stack_id(stack_id) do
+  def remove_consumer(shape_id, stack_id) when is_integer(shape_id) and is_stack_id(stack_id) do
     do_remove_consumer(shape_id, ets_name(stack_id))
   end
 

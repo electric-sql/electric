@@ -1333,7 +1333,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   describe "add_shape/4" do
     setup :setup_log_collector
     @shape Fixtures.Shape.new(1)
-    @shape_handle "the-shape-handle"
     @relation_info %{
       id: @shape.root_table_id,
       schema: @shape.root_table |> elem(0),
@@ -1345,13 +1344,23 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "returns :ok when relation info available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:ok, @relation_info} end)
 
-      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) == :ok
+      assert ShapeLogCollector.add_shape(
+               ctx.stack_id,
+               shape_id_for(@shape_handle),
+               @shape,
+               :create
+             ) == :ok
     end
 
     test "returns error when connection not available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:error, :connection_not_available} end)
 
-      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) ==
+      assert ShapeLogCollector.add_shape(
+               ctx.stack_id,
+               shape_id_for(@shape_handle),
+               @shape,
+               :create
+             ) ==
                {:error, :connection_not_available}
     end
 
@@ -1359,7 +1368,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       error = "ERROR 53200 (out_of_memory) out of memory"
       stub_inspector(load_relation_info: fn _, _ -> {:error, error} end)
 
-      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) ==
+      assert ShapeLogCollector.add_shape(
+               ctx.stack_id,
+               shape_id_for(@shape_handle),
+               @shape,
+               :create
+             ) ==
                {:error, error}
 
       assert ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis() |> Process.alive?()

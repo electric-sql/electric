@@ -59,19 +59,19 @@ defmodule Electric.Shapes.PartitionsTest do
     partitions = Partitions.new(inspector: @inspector)
 
     {:ok, partitions} =
-      Partitions.add_shape(partitions, "s1", Shape.new!("partitioned", inspector: @inspector))
+      Partitions.add_shape(partitions, 1, Shape.new!("partitioned", inspector: @inspector))
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s2",
+        2,
         Shape.new!("partitioned", where: "id = 2", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s3",
+        3,
         Shape.new!("partitioned", where: "id = 3", inspector: @inspector)
       )
 
@@ -92,19 +92,19 @@ defmodule Electric.Shapes.PartitionsTest do
       Partitions.new(inspector: @inspector)
 
     {:ok, partitions} =
-      Partitions.add_shape(partitions, "s1", Shape.new!("partition_01", inspector: @inspector))
+      Partitions.add_shape(partitions, 1, Shape.new!("partition_01", inspector: @inspector))
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s2",
+        2,
         Shape.new!("partition_01", where: "id = 2", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s3",
+        3,
         Shape.new!("partition_01", where: "id = 3", inspector: @inspector)
       )
 
@@ -125,19 +125,19 @@ defmodule Electric.Shapes.PartitionsTest do
       Partitions.new(inspector: @inspector)
 
     {:ok, partitions} =
-      Partitions.add_shape(partitions, "s1", Shape.new!("partitioned", inspector: @inspector))
+      Partitions.add_shape(partitions, 1, Shape.new!("partitioned", inspector: @inspector))
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s2",
+        2,
         Shape.new!("partitioned", where: "id = 2", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s3",
+        3,
         Shape.new!("partition_01", inspector: @inspector)
       )
 
@@ -171,28 +171,28 @@ defmodule Electric.Shapes.PartitionsTest do
     {:ok, partitions} =
       Partitions.add_shape(
         empty,
-        "s1",
+        1,
         Shape.new!("partitioned", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s2",
+        2,
         Shape.new!("partitioned", where: "id = 1", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s3",
+        3,
         Shape.new!("partition_01", where: "id = 2", inspector: @inspector)
       )
 
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s4",
+        4,
         Shape.new!("partition_02", where: "id > 2", inspector: @inspector)
       )
 
@@ -201,7 +201,7 @@ defmodule Electric.Shapes.PartitionsTest do
     {:ok, partitions} =
       Partitions.add_shape(
         partitions,
-        "s5",
+        5,
         Shape.new!("partition_03", where: "id > 7", inspector: @inspector)
       )
 
@@ -214,11 +214,11 @@ defmodule Electric.Shapes.PartitionsTest do
 
     clean_partitions =
       partitions
-      |> Partitions.remove_shape("s2")
-      |> Partitions.remove_shape("s1")
-      |> Partitions.remove_shape("s4")
-      |> Partitions.remove_shape("s5")
-      |> Partitions.remove_shape("s3")
+      |> Partitions.remove_shape(2)
+      |> Partitions.remove_shape(1)
+      |> Partitions.remove_shape(4)
+      |> Partitions.remove_shape(5)
+      |> Partitions.remove_shape(3)
 
     assert clean_partitions == empty
 
@@ -230,7 +230,7 @@ defmodule Electric.Shapes.PartitionsTest do
     partitions = Partitions.new(inspector: StubInspector.no_conn())
 
     {:error, :connection_not_available} =
-      Partitions.add_shape(partitions, "s1", Shape.new!("partitioned", inspector: @inspector))
+      Partitions.add_shape(partitions, 1, Shape.new!("partitioned", inspector: @inspector))
   end
 
   describe "truncation" do
@@ -239,26 +239,26 @@ defmodule Electric.Shapes.PartitionsTest do
         Partitions.new(inspector: @inspector)
 
       {:ok, partitions} =
-        Partitions.add_shape(partitions, "s1", Shape.new!("partitioned", inspector: @inspector))
+        Partitions.add_shape(partitions, 1, Shape.new!("partitioned", inspector: @inspector))
 
       {:ok, partitions} =
         Partitions.add_shape(
           partitions,
-          "s2",
+          2,
           Shape.new!("partitioned", where: "id = 2", inspector: @inspector)
         )
 
       {:ok, partitions} =
         Partitions.add_shape(
           partitions,
-          "s3",
+          3,
           Shape.new!("partition_01", where: "id = 2", inspector: @inspector)
         )
 
       {:ok, partitions} =
         Partitions.add_shape(
           partitions,
-          "s4",
+          4,
           Shape.new!("partition_02", where: "id > 2", inspector: @inspector)
         )
 
@@ -313,7 +313,7 @@ defmodule Electric.Shapes.PartitionsTest do
       shape = Shape.new!("partitioned", inspector: @inspector)
       partitions = Partitions.new(inspector: {ConstInspector, {:error, "boom"}})
 
-      assert {:error, "boom"} = Partitions.add_shape(partitions, "s1", shape)
+      assert {:error, "boom"} = Partitions.add_shape(partitions, 1, shape)
     end
   end
 end

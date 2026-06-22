@@ -35,7 +35,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def whereis(%{stack_id: stack_id, shape_id: shape_id}),
     do: whereis(stack_id, shape_id)
 
-  def whereis(stack_id, shape_id), do: GenServer.whereis(name(stack_id, shape_id))
+  def whereis(stack_id, shape_id) when is_integer(shape_id),
+    do: GenServer.whereis(name(stack_id, shape_id))
 
   @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}, keyword()) ::
           :ok
@@ -109,7 +110,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe)
 
-  def subscribe(stack_id, shape_id),
+  def subscribe(stack_id, shape_id) when is_integer(shape_id),
     do: subscribe(%{stack_id: stack_id, shape_id: shape_id})
 
   def start_link(opts) do
@@ -274,7 +275,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   Safe to call even if the table does not exist (e.g. after a stack shutdown).
   """
   @spec delete_link_values(Electric.stack_id(), Electric.shape_id()) :: :ok
-  def delete_link_values(stack_id, shape_id) do
+  def delete_link_values(stack_id, shape_id) when is_integer(shape_id) do
     :ets.delete(link_values_table_name(stack_id), shape_id)
     :ok
   rescue

@@ -37,7 +37,7 @@ defmodule Electric.Shapes.Filter do
   ]
 
   @type t :: %Filter{}
-  @type shape_id :: any()
+  @type shape_id() :: Electric.shape_id()
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
@@ -73,8 +73,8 @@ defmodule Electric.Shapes.Filter do
   @doc """
   Add a shape for the filter to track.
 
-  The `shape_id` can be any term you like to identify the shape. Whatever you use will be returned
-  by `affected_shapes/2` when the shape is affected by a change.
+  The `shape_id` is the runtime numeric shape id (`Electric.shape_id()`) that identifies the shape.
+  It will be returned by `affected_shapes/2` when the shape is affected by a change.
   """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
   def add_shape(%Filter{} = filter, shape_id, shape) do

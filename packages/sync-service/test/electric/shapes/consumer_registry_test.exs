@@ -416,63 +416,63 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
   end
 
   describe "register_consumer/3" do
-    test "adds consumer to table under given handle", ctx do
-      handle = 1
+    test "adds consumer to table under given id", ctx do
+      shape_id = 1
       parent = self()
 
       {:ok, pid} =
         TestSubscriber.start_link(fn message, state ->
-          send(parent, {:broadcast, handle, message})
+          send(parent, {:broadcast, shape_id, message})
           {:reply, :ok, state}
         end)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.register_consumer(pid, handle, ctx.registry_state)
+      :ok = ConsumerRegistry.register_consumer(pid, shape_id, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} == ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
-      assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
-      refute_receive {:start_consumer, ^handle}, 10
+      assert %{} == ConsumerRegistry.publish(%{shape_id => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      assert_receive {:broadcast, ^shape_id, {:txn, %{lsn: 1}}}
+      refute_receive {:start_consumer, ^shape_id}, 10
     end
   end
 
   describe "whereis/2" do
     test "returns the registered pid for named processes", ctx do
-      handle = 1
+      shape_id = 1
       parent = self()
 
       {:ok, pid} =
-        TestSubscriber.start_link(ctx.stack_id, handle, fn message, state ->
-          send(parent, {:broadcast, handle, message})
+        TestSubscriber.start_link(ctx.stack_id, shape_id, fn message, state ->
+          send(parent, {:broadcast, shape_id, message})
           {:reply, :ok, state}
         end)
 
-      assert pid == ConsumerRegistry.whereis(ctx.stack_id, handle)
+      assert pid == ConsumerRegistry.whereis(ctx.stack_id, shape_id)
     end
   end
 
   describe "remove_consumer/3" do
     test "removes the process from the table", ctx do
-      handle = 1
+      shape_id = 1
       parent = self()
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
       {:ok, _pid} =
-        TestSubscriber.start_link(ctx.stack_id, handle, fn message, state ->
-          send(parent, {:broadcast, handle, message})
+        TestSubscriber.start_link(ctx.stack_id, shape_id, fn message, state ->
+          send(parent, {:broadcast, shape_id, message})
           {:reply, :ok, state}
         end)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} == ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
-      assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
-      refute_receive {:start_consumer, ^handle}, 10
+      assert %{} == ConsumerRegistry.publish(%{shape_id => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      assert_receive {:broadcast, ^shape_id, {:txn, %{lsn: 1}}}
+      refute_receive {:start_consumer, ^shape_id}, 10
 
-      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(shape_id, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
@@ -485,19 +485,19 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     end
 
     test "never drops the consumer count below 0", ctx do
-      handle = 1
+      shape_id = 1
       parent = self()
 
       {:ok, _pid} =
-        TestSubscriber.start_link(ctx.stack_id, handle, fn message, state ->
-          send(parent, {:broadcast, handle, message})
+        TestSubscriber.start_link(ctx.stack_id, shape_id, fn message, state ->
+          send(parent, {:broadcast, shape_id, message})
           {:reply, :ok, state}
         end)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
-      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
-      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
-      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(shape_id, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(shape_id, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(shape_id, ctx.registry_state)
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
     end
   end

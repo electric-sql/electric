@@ -2,7 +2,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.{Commit, TransactionFragment}
 
-  @type shape_id() :: term()
+  @type shape_id() :: Electric.shape_id()
 
   defstruct [
     :last_global_flushed_offset,

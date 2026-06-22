@@ -13,7 +13,7 @@ defmodule Electric.Shapes.Partitions do
 
   @type partition_table :: Electric.relation()
   @type root_table :: Electric.relation()
-  @type shape_id :: term()
+  @type shape_id() :: Electric.shape_id()
   @type t :: %__MODULE__{
           inspector: Inspector.inspector(),
           active: non_neg_integer(),

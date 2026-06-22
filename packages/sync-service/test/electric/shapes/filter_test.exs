@@ -80,14 +80,14 @@ defmodule Electric.Shapes.FilterTest do
     test "returns shapes affected by insert" do
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
-        |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
       insert = %NewRecord{relation: {"public", "t1"}, record: %{"id" => "2"}}
 
-      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s2"])
+      assert Filter.affected_shapes(filter, insert) == MapSet.new([2])
     end
 
     test "returns shapes affected by uuid equality using compact index keys" do
@@ -104,11 +104,11 @@ defmodule Electric.Shapes.FilterTest do
       filter =
         Filter.new()
         |> Filter.add_shape(
-          "s1",
+          1,
           Shape.new!("uuid_table", where: "id = '#{uuid1}'", inspector: inspector)
         )
         |> Filter.add_shape(
-          "s2",
+          2,
           Shape.new!("uuid_table", where: "id = '#{uuid2}'", inspector: inspector)
         )
 
@@ -119,30 +119,30 @@ defmodule Electric.Shapes.FilterTest do
 
       insert = %NewRecord{relation: {"public", "uuid_table"}, record: %{"id" => uuid1}}
 
-      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s1"])
+      assert Filter.affected_shapes(filter, insert) == MapSet.new([1])
     end
 
     test "returns shapes affected by delete" do
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
-        |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
       delete = %DeletedRecord{relation: {"public", "t1"}, old_record: %{"id" => "2"}}
 
-      assert Filter.affected_shapes(filter, delete) == MapSet.new(["s2"])
+      assert Filter.affected_shapes(filter, delete) == MapSet.new([2])
     end
 
     test "returns shapes affected by update" do
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
-        |> Filter.add_shape("s4", Shape.new!("t1", where: "id = 4", inspector: @inspector))
-        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("t1", where: "id = 4", inspector: @inspector))
+        |> Filter.add_shape(5, Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
       update = %UpdatedRecord{
         relation: {"public", "t1"},
@@ -150,29 +150,29 @@ defmodule Electric.Shapes.FilterTest do
         old_record: %{"id" => "3"}
       }
 
-      assert Filter.affected_shapes(filter, update) == MapSet.new(["s2", "s3"])
+      assert Filter.affected_shapes(filter, update) == MapSet.new([2, 3])
     end
 
     test "returns shapes affected by relation change" do
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
-        |> Filter.add_shape("s4", Shape.new!("t1", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("t1", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("t1", where: "id > 8", inspector: @inspector))
         |> Filter.add_shape(
-          "s5",
+          5,
           Shape.new!("t1", where: "an_array @> '{1,2}'", inspector: @inspector)
         )
-        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s7", Shape.new!("t2", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 7", inspector: @inspector))
-        |> Filter.add_shape("s9", Shape.new!("t2", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape(6, Shape.new!("t2", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(7, Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(8, Shape.new!("t2", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape(9, Shape.new!("t2", where: "id > 8", inspector: @inspector))
 
       relation = %Relation{schema: "public", table: "t1"}
 
       assert Filter.affected_shapes(filter, relation) ==
-               MapSet.new(["s1", "s2", "s3", "s4", "s5"])
+               MapSet.new([1, 2, 3, 4, 5])
     end
 
     test "returns shapes affected by relation rename" do
@@ -183,13 +183,13 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", s1)
-        |> Filter.add_shape("s2", s2)
-        |> Filter.add_shape("s3", s3)
+        |> Filter.add_shape(1, s1)
+        |> Filter.add_shape(2, s2)
+        |> Filter.add_shape(3, s3)
 
       rename = %Relation{schema: "public", table: "new_name", id: table_id}
 
-      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s2"])
+      assert Filter.affected_shapes(filter, rename) == MapSet.new([2])
     end
 
     test "returns shapes affected by column addition" do
@@ -198,8 +198,8 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", s1)
-        |> Filter.add_shape("s2", s2)
+        |> Filter.add_shape(1, s1)
+        |> Filter.add_shape(2, s2)
 
       rename = %Relation{
         schema: "public",
@@ -208,7 +208,7 @@ defmodule Electric.Shapes.FilterTest do
         columns: ["id", "number", "an_array", "new one"]
       }
 
-      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s1"])
+      assert Filter.affected_shapes(filter, rename) == MapSet.new([1])
     end
 
     test "returns shapes affected by column change" do
@@ -218,9 +218,9 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", s1)
-        |> Filter.add_shape("s2", s2)
-        |> Filter.add_shape("s3", s3)
+        |> Filter.add_shape(1, s1)
+        |> Filter.add_shape(2, s2)
+        |> Filter.add_shape(3, s3)
 
       rename = %Relation{
         schema: "public",
@@ -230,40 +230,40 @@ defmodule Electric.Shapes.FilterTest do
         affected_columns: ["number"]
       }
 
-      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s1", "s2"])
+      assert Filter.affected_shapes(filter, rename) == MapSet.new([1, 2])
     end
 
     test "returns shapes affected by truncation" do
       filter =
         Filter.new()
-        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
-        |> Filter.add_shape("s4", Shape.new!("t1", where: "id > 8", inspector: @inspector))
-        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s7", Shape.new!("t2", where: "id > 7", inspector: @inspector))
-        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("t1", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("t1", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape(5, Shape.new!("t2", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape(6, Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape(7, Shape.new!("t2", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape(8, Shape.new!("t2", where: "id > 8", inspector: @inspector))
 
       truncation = %TruncatedRelation{relation: {"public", "t1"}}
 
-      assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
+      assert Filter.affected_shapes(filter, truncation) == MapSet.new([1, 2, 3, 4])
     end
 
     test "shape with no where clause is affected by all changes for the same table" do
       shape = Shape.new!("t1", inspector: @inspector)
-      filter = Filter.new() |> Filter.add_shape("s", shape)
+      filter = Filter.new() |> Filter.add_shape(1, shape)
 
-      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
-      assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([1])
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([1])
       assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
     end
 
     test "shape with a where clause is affected by changes that match that where clause" do
       shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
-      filter = Filter.new() |> Filter.add_shape("s", shape)
+      filter = Filter.new() |> Filter.add_shape(1, shape)
 
-      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([1])
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
       assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
     end
@@ -271,16 +271,16 @@ defmodule Electric.Shapes.FilterTest do
     test "invalid record value logs an error and says all shapes for the table are affected" do
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
-        |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
-        |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
-        |> Filter.add_shape("shape4", Shape.new!("table", where: "id > 9", inspector: @inspector))
-        |> Filter.add_shape("shape5", Shape.new!("another_table", inspector: @inspector))
+        |> Filter.add_shape(1, Shape.new!("table", inspector: @inspector))
+        |> Filter.add_shape(2, Shape.new!("table", where: "id = 7", inspector: @inspector))
+        |> Filter.add_shape(3, Shape.new!("table", where: "id = 8", inspector: @inspector))
+        |> Filter.add_shape(4, Shape.new!("table", where: "id > 9", inspector: @inspector))
+        |> Filter.add_shape(5, Shape.new!("another_table", inspector: @inspector))
 
       log =
         capture_log(fn ->
           assert Filter.affected_shapes(filter, change("table", %{"id" => "invalid_value"})) ==
-                   MapSet.new(["shape1", "shape2", "shape3", "shape4"])
+                   MapSet.new([1, 2, 3, 4])
         end)
 
       assert log =~ ~s(Could not parse value for field "id" of type :int8)
@@ -580,8 +580,8 @@ defmodule Electric.Shapes.FilterTest do
           transaction = change("the_table", record)
 
           assert Filter.new()
-                 |> Filter.add_shape("the-shape", shape)
-                 |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+                 |> Filter.add_shape(1, shape)
+                 |> Filter.affected_shapes(transaction) == MapSet.new([1]) == affected
         end
       end
     end
@@ -667,7 +667,7 @@ defmodule Electric.Shapes.FilterTest do
     index = Filter.subquery_index(filter)
     state_before = snapshot_filter_ets(filter)
 
-    shape_ids = ["a", "b", "c"]
+    shape_ids = [1, 2, 3]
 
     for id <- shape_ids do
       shape =
@@ -690,7 +690,7 @@ defmodule Electric.Shapes.FilterTest do
   test "Filter.remove_shape/2 removes seeded subquery index state" do
     filter = Filter.new()
     state_before = snapshot_filter_ets(filter)
-    shape_id = "seeded-shape"
+    shape_id = 1
 
     shape =
       Shape.new!("table",
@@ -1100,21 +1100,21 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       insert_matching = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "1", "par_id" => "7"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new([1])
 
       insert_not_in_subquery = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "99", "par_id" => "7"}
       }
 
-      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([1])
 
       insert_wrong_par_id = %NewRecord{
         relation: {"public", "child"},
@@ -1145,21 +1145,21 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       insert_matching = %NewRecord{
         relation: {"public", "incl_child"},
         record: %{"id" => "10", "par_id" => "7", "tags" => "{1,2,3}"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new([1])
 
       insert_not_in_subquery = %NewRecord{
         relation: {"public", "incl_child"},
         record: %{"id" => "99", "par_id" => "7", "tags" => "{1,2,3}"}
       }
 
-      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([1])
 
       insert_wrong_tags = %NewRecord{
         relation: {"public", "incl_child"},
@@ -1190,29 +1190,29 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape1)
-        |> Filter.add_shape("shape2", shape2)
+        |> Filter.add_shape(1, shape1)
+        |> Filter.add_shape(2, shape2)
 
       insert1 = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "1", "par_id" => "7"}
       }
 
-      assert Filter.affected_shapes(filter, insert1) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert1) == MapSet.new([1])
 
       insert2 = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "3", "par_id" => "8"}
       }
 
-      assert Filter.affected_shapes(filter, insert2) == MapSet.new(["shape2"])
+      assert Filter.affected_shapes(filter, insert2) == MapSet.new([2])
 
       insert3 = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "3", "par_id" => "7"}
       }
 
-      assert Filter.affected_shapes(filter, insert3) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert3) == MapSet.new([1])
     end
 
     @tag with_sql: [
@@ -1230,21 +1230,21 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       insert_matching = %NewRecord{
         relation: {"public", "nested_child"},
         record: %{"id" => "1", "field1" => "10", "field2" => "20"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new([1])
 
       insert_not_in_subquery = %NewRecord{
         relation: {"public", "nested_child"},
         record: %{"id" => "99", "field1" => "10", "field2" => "20"}
       }
 
-      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([1])
     end
 
     @tag with_sql: [
@@ -1263,17 +1263,17 @@ defmodule Electric.Shapes.FilterTest do
         )
 
       filter = Filter.new()
-      filter = Filter.add_shape(filter, "shape1", shape)
+      filter = Filter.add_shape(filter, 1, shape)
 
       # Seed the reverse index with subquery membership values
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
       for value <- [1, 2, 3] do
-        SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, value)
+        SubqueryIndex.add_value(index, 1, subquery_ref, 0, value)
       end
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       # Record matching the OR's simple condition (value = 'target')
       insert_matching_value = %NewRecord{
@@ -1281,7 +1281,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "99", "par_id" => "99", "value" => "target"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new([1])
 
       # Record matching the OR's subquery condition (par_id in refs)
       insert_matching_subquery = %NewRecord{
@@ -1289,7 +1289,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "10", "par_id" => "2", "value" => "other"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new([1])
 
       # Record matching neither condition
       insert_no_match = %NewRecord{
@@ -1306,7 +1306,7 @@ defmodule Electric.Shapes.FilterTest do
         old_record: %{"id" => "50", "par_id" => "99", "value" => "other"}
       }
 
-      assert Filter.affected_shapes(filter, update_into_shape) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, update_into_shape) == MapSet.new([1])
     end
 
     @tag with_sql: [
@@ -1323,30 +1323,30 @@ defmodule Electric.Shapes.FilterTest do
         )
 
       filter = Filter.new()
-      filter = Filter.add_shape(filter, "shape1", shape)
+      filter = Filter.add_shape(filter, 1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
       for value <- [1, 2, 3] do
-        SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, value)
+        SubqueryIndex.add_value(index, 1, subquery_ref, 0, value)
       end
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       insert_matching_value = %NewRecord{
         relation: {"public", "or_child"},
         record: %{"id" => "99", "par_id" => "99", "value" => "target-me"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new([1])
 
       insert_matching_subquery = %NewRecord{
         relation: {"public", "or_child"},
         record: %{"id" => "10", "par_id" => "2", "value" => "other"}
       }
 
-      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new([1])
 
       insert_no_match = %NewRecord{
         relation: {"public", "or_child"},
@@ -1371,14 +1371,14 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       insert_match = %NewRecord{
         relation: {"public", "like_child_unseeded"},
         record: %{"id" => "10", "name" => "keep_me", "parent_id" => "99"}
       }
 
-      assert Filter.affected_shapes(filter, insert_match) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_match) == MapSet.new([1])
 
       insert_like_miss = %NewRecord{
         relation: {"public", "like_child_unseeded"},
@@ -1402,13 +1402,13 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.add_value(index, 1, subquery_ref, 0, 1)
+      SubqueryIndex.mark_ready(index, 1)
 
       wrong_subquery_value = %NewRecord{
         relation: {"public", "child"},
@@ -1422,7 +1422,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "1", "par_id" => "7"}
       }
 
-      assert Filter.affected_shapes(filter, matching_record) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, matching_record) == MapSet.new([1])
     end
 
     @tag with_sql: [
@@ -1446,23 +1446,23 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape1)
-        |> Filter.add_shape("shape2", shape2)
+        |> Filter.add_shape(1, shape1)
+        |> Filter.add_shape(2, shape2)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
-      SubqueryIndex.add_value(index, "shape2", subquery_ref, 0, 1)
-      SubqueryIndex.mark_ready(index, "shape1")
-      SubqueryIndex.mark_ready(index, "shape2")
+      SubqueryIndex.add_value(index, 1, subquery_ref, 0, 1)
+      SubqueryIndex.add_value(index, 2, subquery_ref, 0, 1)
+      SubqueryIndex.mark_ready(index, 1)
+      SubqueryIndex.mark_ready(index, 2)
 
       change = %NewRecord{
         relation: {"public", "child"},
         record: %{"id" => "50", "par_id" => "1"}
       }
 
-      assert Filter.affected_shapes(filter, change) == MapSet.new(["shape2"])
+      assert Filter.affected_shapes(filter, change) == MapSet.new([2])
     end
 
     @tag with_sql: [
@@ -1478,17 +1478,17 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
-      SubqueryIndex.add_value(index, "shape1", subquery_ref, 0, 1)
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.add_value(index, 1, subquery_ref, 0, 1)
+      SubqueryIndex.mark_ready(index, 1)
 
       assert :ets.tab2list(index) != []
 
-      Filter.remove_shape(filter, "shape1")
+      Filter.remove_shape(filter, 1)
 
       assert :ets.tab2list(index) == []
     end
@@ -1506,7 +1506,7 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
@@ -1514,13 +1514,13 @@ defmodule Electric.Shapes.FilterTest do
       # Seed membership with value 1 (parent id 1 matches the subquery "WHERE value = 'keep'")
       SubqueryIndex.seed_membership(
         index,
-        "shape1",
+        1,
         subquery_ref,
         0,
         MapSet.new([1])
       )
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       # parent_id=1 is in the subquery view, so NOT IN means this should NOT route
       insert_matching_member = %NewRecord{
@@ -1536,7 +1536,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "11", "parent_id" => "2"}
       }
 
-      assert Filter.affected_shapes(filter, insert_not_member) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_not_member) == MapSet.new([1])
 
       # Update crossing from non-matching to matching should route (union of old/new)
       update_crossing = %UpdatedRecord{
@@ -1545,7 +1545,7 @@ defmodule Electric.Shapes.FilterTest do
         old_record: %{"id" => "10", "parent_id" => "2"}
       }
 
-      assert Filter.affected_shapes(filter, update_crossing) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, update_crossing) == MapSet.new([1])
     end
 
     @tag with_sql: [
@@ -1563,7 +1563,7 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
@@ -1571,13 +1571,13 @@ defmodule Electric.Shapes.FilterTest do
       # Seed the membership view with values {1, 2}
       SubqueryIndex.seed_membership(
         index,
-        "shape1",
+        1,
         subquery_ref,
         0,
         MapSet.new([1, 2])
       )
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       # Only id matches (id=1, par_id=99) -> should route
       insert_id_match = %NewRecord{
@@ -1585,7 +1585,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "1", "par_id" => "99"}
       }
 
-      assert Filter.affected_shapes(filter, insert_id_match) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_id_match) == MapSet.new([1])
 
       # Only par_id matches (id=99, par_id=2) -> should route
       insert_par_match = %NewRecord{
@@ -1593,7 +1593,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "99", "par_id" => "2"}
       }
 
-      assert Filter.affected_shapes(filter, insert_par_match) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_par_match) == MapSet.new([1])
 
       # Neither matches (id=99, par_id=99) -> should not route
       insert_neither = %NewRecord{
@@ -1617,7 +1617,7 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
@@ -1625,13 +1625,13 @@ defmodule Electric.Shapes.FilterTest do
       # Seed membership with a tuple value {10, 20}
       SubqueryIndex.seed_membership(
         index,
-        "shape1",
+        1,
         subquery_ref,
         0,
         MapSet.new([{10, 20}])
       )
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       # Matching tuple (a=10, b=20) should route
       insert_match = %NewRecord{
@@ -1639,7 +1639,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "1", "a" => "10", "b" => "20"}
       }
 
-      assert Filter.affected_shapes(filter, insert_match) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_match) == MapSet.new([1])
 
       # Only one column matches (a=10, b=99) should not route
       insert_partial = %NewRecord{
@@ -1667,20 +1667,20 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("shape1", shape)
+        |> Filter.add_shape(1, shape)
 
       index = Filter.subquery_index(filter)
       subquery_ref = ["$sublink", "0"]
 
       SubqueryIndex.seed_membership(
         index,
-        "shape1",
+        1,
         subquery_ref,
         0,
         MapSet.new([1, 2])
       )
 
-      SubqueryIndex.mark_ready(index, "shape1")
+      SubqueryIndex.mark_ready(index, 1)
 
       # Both conditions match -> route
       insert_match = %NewRecord{
@@ -1688,7 +1688,7 @@ defmodule Electric.Shapes.FilterTest do
         record: %{"id" => "10", "name" => "keep_me", "parent_id" => "1"}
       }
 
-      assert Filter.affected_shapes(filter, insert_match) == MapSet.new(["shape1"])
+      assert Filter.affected_shapes(filter, insert_match) == MapSet.new([1])
 
       # LIKE matches but subquery membership fails -> no route
       insert_like_only = %NewRecord{
@@ -1730,8 +1730,8 @@ defmodule Electric.Shapes.FilterTest do
 
       filter =
         Filter.new()
-        |> Filter.add_shape("fallback_s", fallback_shape)
-        |> Filter.add_shape("indexed_s", indexed_shape)
+        |> Filter.add_shape(1, fallback_shape)
+        |> Filter.add_shape(2, indexed_shape)
 
       index = Filter.subquery_index(filter)
 
@@ -1741,16 +1741,16 @@ defmodule Electric.Shapes.FilterTest do
 
       SubqueryIndex.seed_membership(
         index,
-        "indexed_s",
+        2,
         subquery_ref,
         0,
         MapSet.new([1])
       )
 
-      SubqueryIndex.mark_ready(index, "indexed_s")
+      SubqueryIndex.mark_ready(index, 2)
 
-      assert SubqueryIndex.fallback?(index, "fallback_s")
-      refute SubqueryIndex.fallback?(index, "indexed_s")
+      assert SubqueryIndex.fallback?(index, 1)
+      refute SubqueryIndex.fallback?(index, 2)
 
       # fallback_s routes for any root-table change, indexed_s only for matching
       insert_match = %NewRecord{
@@ -1759,7 +1759,7 @@ defmodule Electric.Shapes.FilterTest do
       }
 
       assert Filter.affected_shapes(filter, insert_match) ==
-               MapSet.new(["fallback_s", "indexed_s"])
+               MapSet.new([1, 2])
 
       insert_no_match = %NewRecord{
         relation: {"public", "fb_child"},
@@ -1767,7 +1767,7 @@ defmodule Electric.Shapes.FilterTest do
       }
 
       # fallback_s still routes, indexed_s does not
-      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new(["fallback_s"])
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([1])
 
       # Changes on unrelated table should not route either shape
       insert_other = %NewRecord{

@@ -8,9 +8,9 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
   import Support.ComponentSetup
   import Support.TestUtils
 
-  @shape_handle_1 "handle-1"
-  @shape_handle_2 "handle-2"
-  @shape_handle_3 "handle-3"
+  @shape_id_1 1
+  @shape_id_2 2
+  @shape_id_3 3
   @shape_1 "shape-1"
   @shape_2 "shape-2"
   @shape_3 "shape-3"
@@ -59,38 +59,38 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
   describe "add_shape/4" do
     test "returns immediately for :restore mode", %{stack_id: stack_id} do
-      assert :ok = RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :restore)
+      assert :ok = RequestBatcher.add_shape(stack_id, @shape_id_1, @shape_1, :restore)
       refute_received {:processor_called, _, _}
     end
 
     test "updates processor for :create mode", %{stack_id: stack_id} do
-      assert :ok = RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
+      assert :ok = RequestBatcher.add_shape(stack_id, @shape_id_1, @shape_1, :create)
 
-      expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
+      expected_msg = {:processor_called, %{@shape_id_1 => @shape_1}, MapSet.new()}
       assert_received ^expected_msg
     end
 
-    @tag processor_handle_result: %{@shape_handle_1 => {:error, "failed to register"}}
+    @tag processor_handle_result: %{@shape_id_1 => {:error, "failed to register"}}
     test "receives error if failed to register", %{stack_id: stack_id} do
       assert {:error, "failed to register"} =
-               RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
+               RequestBatcher.add_shape(stack_id, @shape_id_1, @shape_1, :create)
     end
   end
 
   describe "remove_shape/2" do
     test "updates processor to remove shape", %{stack_id: stack_id} do
-      assert :ok = RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
+      assert :ok = RequestBatcher.add_shape(stack_id, @shape_id_1, @shape_1, :create)
 
-      expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
+      expected_msg = {:processor_called, %{@shape_id_1 => @shape_1}, MapSet.new()}
       assert_received ^expected_msg
 
-      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_1)
+      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_id_1)
 
-      expected_msg = {:processor_called, %{}, MapSet.new([@shape_handle_1])}
+      expected_msg = {:processor_called, %{}, MapSet.new([@shape_id_1])}
       assert_receive ^expected_msg
 
       # request_batcher will always repeat messages, no global state known
-      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_1)
+      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_id_1)
       assert_receive ^expected_msg
     end
   end
@@ -101,28 +101,28 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
          %{stack_id: stack_id, request_batcher_pid: request_batcher_pid} do
       # This test requires a very precise ordering of events:
       #
-      #   1. RequestBatcher.handle_call({:add_shape, @shape_handle_1, ...
+      #   1. RequestBatcher.handle_call({:add_shape, @shape_id_1, ...
       #   2. RequestBatcher.handle_continue({:maybe_schedule_update, ... matches the 3rd clause
-      #   3. RequestBatcher.handle_call({:add_shape, @shape_handle_2, ...
+      #   3. RequestBatcher.handle_call({:add_shape, @shape_id_2, ...
       #   4. RequestBatcher.handle_continue({:maybe_schedule_update, ... matches the 1rd clause
-      #   5. RequestBatcher.handle_call({:remove_shape, @shape_handle_2, ...
+      #   5. RequestBatcher.handle_call({:remove_shape, @shape_id_2, ...
       #
-      # We need to call remove_shape() not earlier than add_shape(@shape_handle_2) but not
+      # We need to call remove_shape() not earlier than add_shape(@shape_id_2) but not
       # later than the async call of handle_processor_update_response() either.
       # We simulate this by unwrapping GenServer.call() and doing all calls from the test
       # process. This relies on BEAM's guarantee of message ordering for messages sent by the
       # same process.
 
-      ref1 = inprocess_call(request_batcher_pid, {:add_shape, @shape_handle_1, @shape_1})
+      ref1 = inprocess_call(request_batcher_pid, {:add_shape, @shape_id_1, @shape_1})
 
-      expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
+      expected_msg = {:processor_called, %{@shape_id_1 => @shape_1}, MapSet.new()}
       assert_receive ^expected_msg
 
-      ref2 = inprocess_call(request_batcher_pid, {:add_shape, @shape_handle_2, @shape_2})
+      ref2 = inprocess_call(request_batcher_pid, {:add_shape, @shape_id_2, @shape_2})
 
-      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_2)
+      assert :ok = RequestBatcher.remove_shape(stack_id, @shape_id_2)
 
-      expected_msg = {:processor_called, %{}, MapSet.new([@shape_handle_2])}
+      expected_msg = {:processor_called, %{}, MapSet.new([@shape_id_2])}
       assert_receive ^expected_msg
 
       assert_receive {^ref1, :ok}
@@ -131,35 +131,35 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
       # isolated unit test there is no ShapeStatus entry for the shape, so it falls
       # back to the "unknown, id: ..." form.
       expected_handle =
-        Electric.ShapeCache.ShapeStatus.shape_handle_for_log(stack_id, @shape_handle_2)
+        Electric.ShapeCache.ShapeStatus.shape_handle_for_log(stack_id, @shape_id_2)
 
       assert_receive {^ref2, {:error, error_message}}
       assert error_message == "Shape #{expected_handle} removed before registration completed"
     end
 
     @tag processor_delay: 20
-    @tag processor_handle_result: %{@shape_handle_3 => {:error, "failed to register"}}
+    @tag processor_handle_result: %{@shape_id_3 => {:error, "failed to register"}}
     test "waits for ack before sending next batch", %{stack_id: stack_id} do
       task1 =
         Task.async(fn ->
-          RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
+          RequestBatcher.add_shape(stack_id, @shape_id_1, @shape_1, :create)
         end)
 
-      expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
+      expected_msg = {:processor_called, %{@shape_id_1 => @shape_1}, MapSet.new()}
       assert_receive ^expected_msg
 
       task2 =
         Task.async(fn ->
-          RequestBatcher.add_shape(stack_id, @shape_handle_2, @shape_2, :create)
+          RequestBatcher.add_shape(stack_id, @shape_id_2, @shape_2, :create)
         end)
 
       task3 =
         Task.async(fn ->
-          RequestBatcher.add_shape(stack_id, @shape_handle_3, @shape_3, :create)
+          RequestBatcher.add_shape(stack_id, @shape_id_3, @shape_3, :create)
         end)
 
       task4 =
-        Task.async(fn -> RequestBatcher.remove_shape(stack_id, @shape_handle_1) end)
+        Task.async(fn -> RequestBatcher.remove_shape(stack_id, @shape_id_1) end)
 
       # should not call processor until acked
       Process.sleep(10)
@@ -168,8 +168,8 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
       # should call processor immediately after with batched update
       expected_msg =
-        {:processor_called, %{@shape_handle_2 => @shape_2, @shape_handle_3 => @shape_3},
-         MapSet.new([@shape_handle_1])}
+        {:processor_called, %{@shape_id_2 => @shape_2, @shape_id_3 => @shape_3},
+         MapSet.new([@shape_id_1])}
 
       assert_receive ^expected_msg
 

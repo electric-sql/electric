@@ -29,7 +29,7 @@ defmodule Electric.Shapes.EventRouter do
             in_txn: false
 
   @type t :: %EventRouter{}
-  @type shape_id :: any()
+  @type shape_id() :: Electric.shape_id()
 
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
