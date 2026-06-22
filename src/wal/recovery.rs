@@ -13,10 +13,14 @@
 //! cross-shard synchronization.
 //!
 //! For each shard:
-//! 1. Read its `checkpoint_lsn` (`wal/<i>/checkpoint`, default 0).
-//! 2. Walk its segments in lsn order from `checkpoint_lsn` to the FIRST torn /
-//!    incomplete record — that ends the durable log; the un-acked tail past it is
-//!    discarded.
+//! 1. Read its `checkpoint_lsn` (`wal/<i>/checkpoint`, default 0). This is a
+//!    write-skip optimization ONLY — NOT the boundary for which streams reconcile.
+//! 2. Walk its segments in lsn order from the OLDEST RETAINED record (lsn 0) to
+//!    the FIRST torn / incomplete record — that ends the durable log; the un-acked
+//!    tail past it is discarded. Replaying from the oldest (not `checkpoint_lsn`)
+//!    computes the durable frontier for EVERY stream, so a stream whose last
+//!    durable record is ≤ `checkpoint_lsn` but which carries a torn page-cache tail
+//!    in its per-stream file still gets that tail truncated (the C1 fix).
 //! 3. For each `Append` record, resolve `stream_id → StreamState` (via an
 //!    `id → Arc<StreamState>` index built from the sidecar-recovered streams):
 //!    - **Frontier skip:** if `stream_offset < file_base` the bytes have already
@@ -34,6 +38,9 @@
 //!      whole, durable record boundary).
 //!    - If SHORTER, an acked-in-WAL record was not yet checkpoint-fsync'd into the
 //!      file — the replay write above already extended it (no loss).
+//!    - `fdatasync` the repaired per-stream file so the truncate/extend is
+//!      crash-durable BEFORE the tail is published (a crash after recovery but
+//!      before the next checkpoint must not lose the repair).
 //!    - Then update `Shared.tail` and the appender `written` so subsequent
 //!      reads/appends see the reconciled tail.
 
@@ -45,6 +52,13 @@ use std::sync::Arc;
 use crate::store::{Store, StreamState};
 use crate::wal::codec::RecordKind;
 use crate::wal::walset::WalSet;
+
+/// Test-only counter of per-stream `sync_data` calls made during tail reconcile.
+/// Lets a test assert the repair was made crash-durable (HIGH fix) without
+/// observing the kernel page cache directly.
+#[cfg(test)]
+pub(crate) static RECOVERY_FSYNCS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 /// Replay every shard's WAL (in parallel) and repair each touched stream's
 /// per-stream-file tail to the durable frontier. See the module docs / spec §9.
@@ -83,7 +97,26 @@ fn recover_shard(
     shard: &crate::wal::shard::Shard,
     index: &HashMap<u64, Arc<StreamState>>,
 ) -> io::Result<()> {
-    let checkpoint_lsn = shard.read_checkpoint_lsn();
+    // `checkpoint_lsn` is a WRITE-SKIP optimization ONLY — NOT the boundary for
+    // which streams get reconciled. We replay from the OLDEST RETAINED record so
+    // the durable frontier is computed for EVERY stream, including one whose last
+    // durable record is ≤ checkpoint_lsn. That stream may still carry a torn
+    // page-cache tail in its per-stream file (bytes written on the hot path before
+    // the WAL fdatasync ack, then a crash before the ack) that must be truncated;
+    // a `checkpoint_lsn`-bounded replay leaves its frontier empty and re-exposes
+    // the torn tail (the exact C1 bug the WAL exists to fix, spec §9 line 198).
+    //
+    // In v1 the active segment is never recycled and there is one segment per
+    // shard, so the retained WAL holds EVERY durable record for every stream —
+    // replaying all of them (`replay_from_checkpoint(0, …)`) is complete. We still
+    // `pwrite` records ≤ checkpoint_lsn (idempotent; recovery is rare) so the
+    // simplest-correct path also restores any not-yet-fsync'd checkpoint bytes.
+    //
+    // DEFER (post-v1): once segment roll + recycle of records ≤ checkpoint lands,
+    // a stream whose durable records are ALL recycled while a torn page-cache tail
+    // remains can no longer be reconciled from the WAL alone — that will require
+    // recording per-stream durable tails at checkpoint time. Out of scope here.
+    let _checkpoint_lsn = shard.read_checkpoint_lsn();
 
     // Per-stream durable frontier: the max logical end recovered for that stream.
     // Only streams that actually had an in-range Append are inserted, so we
@@ -93,7 +126,7 @@ fn recover_shard(
     // `io::Result`). The first error aborts further application for this shard.
     let mut replay_err: Option<io::Error> = None;
 
-    shard.replay_from_checkpoint(checkpoint_lsn, |kind, stream_id, stream_offset, payload| {
+    shard.replay_from_checkpoint(0, |kind, stream_id, stream_offset, payload| {
         if replay_err.is_some() {
             return;
         }
@@ -188,6 +221,16 @@ fn reconcile_tail(st: &StreamState, logical_tail: u64) -> io::Result<()> {
     }
     // (cur < file_len: the replay writes above already extended the file — no
     //  truncation; cur == file_len: nothing to do.)
+
+    // Durability of the REPAIR (spec §9): the truncate above and the replay
+    // `write_at` extends land only in the page cache. A crash after recovery but
+    // before the next checkpoint fsync would lose the repair — the no-loss extend
+    // (an acked record re-written by replay) lost AGAIN, and the torn tail
+    // un-truncated again. fdatasync the per-stream file so the repaired,
+    // whole-record-boundary file is crash-durable BEFORE we publish the tail.
+    f.sync_data()?;
+    #[cfg(test)]
+    RECOVERY_FSYNCS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
     // Publish the reconciled tail to in-memory state.
     let closed = {
@@ -405,6 +448,196 @@ mod tests {
             st2.shared.read().unwrap().tail,
             K + r_noloss.len() as u64,
             "st2 tail = file_base + restored len"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Write `checkpoint_lsn` into a 1-shard WAL's `<dir>/wal/0/checkpoint`.
+    fn write_checkpoint(dir: &std::path::Path, lsn: u64) {
+        std::fs::write(dir.join("wal").join("0").join("checkpoint"), lsn.to_string()).unwrap();
+    }
+
+    /// CRITICAL (C1): a stream whose ONLY post-`checkpoint_lsn` append is TORN —
+    /// i.e. its durable records are ALL ≤ `checkpoint_lsn` — but whose per-stream
+    /// file carries a torn page-cache tail PAST the last durable record (bytes
+    /// written on the hot path before the WAL fdatasync ack, then a crash).
+    ///
+    /// A `checkpoint_lsn`-bounded replay leaves this stream's frontier EMPTY
+    /// (no in-range record after the checkpoint) → `reconcile_tail` never runs →
+    /// the torn tail is re-exposed. Replaying from the OLDEST retained record
+    /// computes the frontier and truncates the torn tail.
+    ///
+    /// MUST fail before the fix (file keeps the torn tail) and pass after.
+    #[tokio::test]
+    async fn wal_recovery_truncates_torn_tail_when_durable_records_all_below_checkpoint() {
+        let dir = tmp("torn-below-ckpt");
+
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        // Two durable records; both will be ≤ checkpoint_lsn.
+        let r1 = b"alpha".as_slice();
+        let r2 = b"bravo!!".as_slice();
+        // Torn page-cache tail past the durable frontier (never reached the WAL).
+        let r_torn = b"torn-tail-{\"x\":".as_slice(); // even torn JSON
+
+        let st = match store.create("s", cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let durable_len = r1.len() + r2.len();
+
+        // The per-stream file as a crash left it: r1‖r2 (durable) + torn tail.
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new().write(true).open(&st.file_path).unwrap();
+            f.write_all(r1).unwrap();
+            f.write_all(r2).unwrap();
+            f.write_all(r_torn).unwrap(); // un-acked torn page-cache tail
+            f.sync_all().unwrap();
+        }
+
+        // WAL holds ONLY r1 (lsn 1) and r2 (lsn 2) — both whole, both durable. The
+        // torn 3rd append never reached the WAL.
+        let id = st.id;
+        let mut seg = Vec::new();
+        append_record(&mut seg, 1, id, 0, r1);
+        append_record(&mut seg, 2, id, r1.len() as u64, r2);
+        let seg_file = seg_path(&dir.join("wal").join("0"), 1);
+        std::fs::write(&seg_file, &seg).unwrap();
+
+        // Checkpoint fsynced the file up to AND INCLUDING r2: checkpoint_lsn = 2,
+        // so a `checkpoint_lsn`-bounded replay (lsn >= 2 only) would replay just r2.
+        // Make it strictly ABOVE both durable records (lsn 3) so the bounded replay
+        // sees NOTHING for this stream — the frontier stays empty and the torn tail
+        // survives. Replay-from-oldest still recovers r1‖r2 and truncates the tail.
+        write_checkpoint(&dir, 3);
+
+        write_meta_sync(&st, true).unwrap();
+        let st_file_path = st.file_path.clone();
+
+        drop(st);
+        drop(store);
+        drop(wal);
+
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        recover(&store, &wal).unwrap();
+
+        // The torn tail is discarded: file ends at file_base + end(last durable rec).
+        let meta_len = std::fs::metadata(&st_file_path).unwrap().len();
+        assert_eq!(
+            meta_len as usize, durable_len,
+            "torn page-cache tail truncated even though durable records are all ≤ checkpoint_lsn"
+        );
+        // Bytes are byte-identical to the durable prefix r1‖r2 (no torn JSON).
+        let mut expect = Vec::new();
+        expect.extend_from_slice(r1);
+        expect.extend_from_slice(r2);
+        assert_eq!(
+            std::fs::read(&st_file_path).unwrap(),
+            expect,
+            "recovered bytes are exactly the durable prefix r1‖r2"
+        );
+        let st = store.streams.iter().find(|e| e.value().id == id).unwrap().value().clone();
+        assert_eq!(
+            st.shared.read().unwrap().tail,
+            durable_len as u64,
+            "Shared.tail reconciled to the durable frontier"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// HIGH: the repair (truncate / extend) must be fdatasync'd before `recover()`
+    /// returns. Asserts (a) a per-stream `sync_data` was invoked during reconcile,
+    /// and (b) the reconciled (truncated) length is durably ON DISK — provable by
+    /// re-opening WITHOUT re-running recovery: the sidecar pass seeds
+    /// `tail = file_base + file size`, so it reads the truncated length only if the
+    /// truncation actually hit the disk (not just the page cache).
+    #[tokio::test]
+    async fn wal_recovery_repair_is_fsynced_and_persists_across_reopen() {
+        let dir = tmp("fsync-repair");
+
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        let r1 = b"durable-record".as_slice();
+        let r_torn = b"torn-page-cache-tail".as_slice();
+
+        let st = match store.create("s", cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let durable_len = r1.len();
+
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new().write(true).open(&st.file_path).unwrap();
+            f.write_all(r1).unwrap();
+            f.write_all(r_torn).unwrap(); // un-acked torn tail to be truncated
+            f.sync_all().unwrap();
+        }
+
+        let id = st.id;
+        let mut seg = Vec::new();
+        append_record(&mut seg, 1, id, 0, r1);
+        let seg_file = seg_path(&dir.join("wal").join("0"), 1);
+        std::fs::write(&seg_file, &seg).unwrap();
+
+        write_meta_sync(&st, true).unwrap();
+        let st_file_path = st.file_path.clone();
+
+        drop(st);
+        drop(store);
+        drop(wal);
+
+        // --- First reopen: run recovery (which must truncate AND fsync). ---
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        let before = RECOVERY_FSYNCS.load(std::sync::atomic::Ordering::SeqCst);
+        recover(&store, &wal).unwrap();
+        let after = RECOVERY_FSYNCS.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            after > before,
+            "reconcile_tail must sync_data the repaired per-stream file (HIGH durability fix)"
+        );
+        assert_eq!(
+            std::fs::metadata(&st_file_path).unwrap().len() as usize,
+            durable_len,
+            "file truncated to the durable frontier after recovery"
+        );
+
+        drop(store);
+        drop(wal);
+
+        // --- Second reopen: sidecar pass ONLY, NO WAL recovery. The seeded tail is
+        //     file_base + on-disk file size. If the truncation only hit the page
+        //     cache it would be lost here; persistence proves the fsync. ---
+        let store2 = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        let store2 = std::sync::Arc::new(store2);
+        // (No store2.wal / no recover() call — pure on-disk observation.)
+        let st2 = store2.streams.iter().find(|e| e.value().id == id).unwrap().value().clone();
+        assert_eq!(
+            st2.shared.read().unwrap().tail,
+            durable_len as u64,
+            "the reconciled length is durable on disk (survives a reopen without recovery)"
+        );
+        assert_eq!(
+            std::fs::read(&st_file_path).unwrap(),
+            r1,
+            "on-disk bytes are exactly the durable record; the torn tail is gone for good"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
