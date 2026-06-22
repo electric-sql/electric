@@ -39,6 +39,22 @@ fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
+/// Durability mode for the append/close hot path. Default strict (`false`): ack only
+/// after the covering `fdatasync` (`SyncCoalescer::sync_to`). Relaxed (`true`): ack on
+/// the page-cache write, skipping the hot-path `fdatasync` — durability then comes from
+/// S3-offload (cold) + future replication (hot tail). Set once at startup from
+/// `--durability`; mirrors the `set_splice_appends` / `set_read_offload` flag pattern.
+static DURABILITY_RELAXED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_durability_relaxed(relaxed: bool) {
+    DURABILITY_RELAXED.store(relaxed, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn durability_relaxed() -> bool {
+    DURABILITY_RELAXED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 const SSE_MAX_DURATION: Duration = Duration::from_secs(60);
 const CACHEABLE: &str = "public, max-age=60, stale-while-revalidate=300";
 
@@ -2099,5 +2115,21 @@ mod bug1_tests {
             run_buffered(Mode::Error).await.is_err(),
             "a cold-read backend error must surface as Err (H4)"
         );
+    }
+}
+
+#[cfg(test)]
+mod durability_tests {
+    use super::*;
+
+    #[test]
+    fn durability_flag_defaults_strict_and_flips() {
+        // Process-global flag. This is the ONLY test that mutates it; it resets at the
+        // end so no append-path test (which reads it) is perturbed.
+        assert!(!durability_relaxed(), "default must be strict");
+        set_durability_relaxed(true);
+        assert!(durability_relaxed(), "set_durability_relaxed(true) takes effect");
+        set_durability_relaxed(false); // reset
+        assert!(!durability_relaxed());
     }
 }

@@ -124,6 +124,17 @@ fn main() {
             "--tier-local-dir" => {
                 tier.local_dir = Some(val(args.next(), "--tier-local-dir").into());
             }
+            "--durability" => {
+                let v = val(args.next(), "--durability");
+                match v.as_str() {
+                    "strict" => handlers::set_durability_relaxed(false),
+                    "relaxed" => handlers::set_durability_relaxed(true),
+                    _ => {
+                        eprintln!("--durability must be strict|relaxed");
+                        std::process::exit(2);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
