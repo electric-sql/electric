@@ -1,5 +1,18 @@
 # @electric-ax/agents-runtime
 
+## 0.6.2
+
+### Patch Changes
+
+- 9d063e4: Add desktop-configurable skill directories and common Claude/Codex skill locations so Markdown command files load recursively as slash-command skills without LLM metadata extraction.
+- 0418d90: Batch queued child completion wakes into a single wake payload so parent agents receive every child result without extra handler runs.
+- ac2391d: Capture OpenAI Codex reasoning summaries by default when built-in reasoning is enabled while preserving explicit reasoning summary settings from caller payloads.
+- 8f4368d: Delegate built-in reasoning configuration to pi-ai instead of rewriting provider request payloads in the model catalog. Built-in OpenAI, OpenAI Codex, and Anthropic reasoning models now pass `reasoning` through the runtime adapter, preserving existing `auto` defaults and Anthropic thinking budgets while letting pi-ai own provider-specific payload shapes.
+- 354b01b: Enable provider retries for agent model calls by default so transient LLM errors are retried. Set `modelMaxRetries: 0` to preserve the previous no-retry behavior.
+- 37b9922: Fix agent wake handling so concurrent sessions do not invalidate each other's claim write tokens, and retry same-stream wakes after the active wake drains instead of dropping pending work.
+- ee0da19: Fix Electric Agents quickstart startup by authenticating the built-in pull-wake runner with the same principal it registers as, registering built-in agent types with the local runner as their default dispatch target, and aligning the CLI's default principal with the local quickstart user. Pin the CLI-launched agents-server Docker image to the matching released agents-server version, improve registration fetch errors so startup failures include the endpoint and underlying cause, avoid the CLI observe live-query Collection boundary, and clarify browser-only credentials settings copy.
+- c14a886: Remove the skill content `max` cap so `use_skill` loads complete skill instructions instead of truncating them.
+
 ## 0.6.1
 
 ### Patch Changes

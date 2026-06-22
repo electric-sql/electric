@@ -1,5 +1,11 @@
 # @electric-ax/agents-desktop
 
+## 0.6.1
+
+### Patch Changes
+
+- 9d063e4: Add desktop-configurable skill directories and common Claude/Codex skill locations so Markdown command files load recursively as slash-command skills without LLM metadata extraction.
+
 ## 0.6.0
 
 ### Minor Changes

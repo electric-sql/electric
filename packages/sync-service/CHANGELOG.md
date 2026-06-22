@@ -1,5 +1,24 @@
 # @core/sync-service
 
+## 1.7.3
+
+### Patch Changes
+
+- 214e644: Store parsed UUID values as 16-byte binaries instead of canonical text inside the sync-service filter evaluator. This reduces memory use in where-clause filter indexes, especially equality and subquery index keys, while converting UUIDs back to canonical strings at API and SQL output boundaries. The shape metadata version is bumped so persisted shape comparable terms created with the old UUID string representation are ignored and rebuilt.
+- 0632b1c: Stop the ShapeLogCollector from crashing when table introspection fails on the hot replication path.
+
+  Previously the replication pipeline only handled `{:error, :connection_not_available}` from the inspector; every other legal inspector return crashed the ShapeLogCollector and took the whole shapes supervision tree down with it, putting the replication client into a 10-minute noproc retry loop:
+  - `:table_not_found` (table dropped or renamed between the WAL record and introspection) crashed `Partitions.handle_relation/2` and the pk-column lookup with a `CaseClauseError`. Relation messages for dropped tables are now ignored and changes for dropped tables are keyed on the full record, the same fallback used for tables without a primary key.
+  - In-band database errors (e.g. out-of-memory, `statement_timeout` cancelling the catalog query) crashed `Partitions.handle_relation/2` with a `CaseClauseError` and made `Partitions.add_shape/3` raise. They are now propagated as `{:error, reason}`; the collector logs a warning and pauses replication via the existing retry path until introspection succeeds.
+  - Connection-class errors returned in-band by Postgrex (e.g. `"ssl recv: closed"`) are now classified as `:connection_not_available` instead of leaking through as strings.
+  - Shape restore no longer crashes with a `MatchError` when the connection pool isn't ready yet; it retries the introspection in place and only gives up (with a descriptive error) after ~10 seconds.
+
+- 0cf38e8: Honor an upstream head-sampling rate hint received via the W3C `tracestate` header (`electric=rate:<N>`) on shape GET requests:
+
+  When the remote parent trace is sampled, the `Plug_shape_get` root span (and the `shape_get.plug.stream_chunk` child spans) are stamped with the `SampleRate` attribute — `N` for responses with status < 500 and `1` for 5xx responses — so tracing backends that understand sampling weights scale aggregates over Electric's spans by the upstream sampling rate instead of under-reporting traffic ~N-fold.
+
+  Requests without a remote trace context, with a not-sampled remote parent, or with a missing/invalid rate hint, behave exactly as before.
+
 ## 1.7.2
 
 ### Patch Changes

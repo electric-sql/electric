@@ -1,5 +1,23 @@
 # @electric-ax/agents-mobile
 
+## 0.6.2
+
+### Patch Changes
+
+- aa6ca85: Fix mobile chat timeline flashing when sending messages, resizing the composer (multiline/attachments) and queuing messages, and fix inconsistent auto-scroll as the composer grows. The timeline WebView embed now receives dynamic updates (bottom inset, inline queued messages, scroll) imperatively instead of via props that re-render and flash it. Also fix the composer occasionally not clearing after send when typing quickly.
+- Updated dependencies [9d063e4]
+- Updated dependencies [0418d90]
+- Updated dependencies [ac2391d]
+- Updated dependencies [8f4368d]
+- Updated dependencies [354b01b]
+- Updated dependencies [37b9922]
+- Updated dependencies [06a60fa]
+- Updated dependencies [aa6ca85]
+- Updated dependencies [ee0da19]
+- Updated dependencies [c14a886]
+  - @electric-ax/agents-server-ui@0.6.2
+  - @electric-ax/agents-runtime@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes
