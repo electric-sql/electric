@@ -666,7 +666,6 @@ export const AgentResponseLive = memo(function AgentResponseLive({
               key={entry.key}
               entry={entry.reasoning}
               isStreaming={isStreaming}
-              timestamp={timestamp}
               expanded={Boolean(expandedReasoning[entry.key])}
               onToggle={toggleReasoning}
             />
