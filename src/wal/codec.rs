@@ -189,4 +189,38 @@ mod tests {
         assert!(matches!(decode_at(&b[..HEADER_LEN-1], 0), Decoded::Incomplete | Decoded::Torn));
         assert!(matches!(decode_at(&[0u8; HEADER_LEN+5], 0), Decoded::Incomplete | Decoded::Torn));
     }
+
+    #[test]
+    fn seq_decode_two_records_back_to_back() {
+        // Encode two records into one buffer; decode_at must read the first at
+        // off=0 and the second at off=t1 (exercises off>0 decode, the Task-1 gap).
+        let mut b = Vec::new();
+        let r1 = Record { lsn: 1, kind: RecordKind::Append, stream_id: 10, stream_offset: 0, payload: b"first" };
+        let r2 = Record { lsn: 2, kind: RecordKind::StreamCreate, stream_id: 11, stream_offset: 5, payload: b"second-payload" };
+        encode_into(&mut b, &r1);
+        encode_into(&mut b, &r2);
+
+        let t1 = match decode_at(&b, 0) {
+            Decoded::Record { lsn, kind, stream_id, stream_offset, payload_off, len, total } => {
+                assert_eq!((lsn, stream_id, stream_offset, len), (1, 10, 0, 5));
+                assert!(matches!(kind, RecordKind::Append));
+                assert_eq!(&b[payload_off..payload_off + len], b"first");
+                assert_eq!(total, HEADER_LEN + 5);
+                total
+            }
+            other => panic!("expected first Record, got {other:?}"),
+        };
+
+        match decode_at(&b, t1) {
+            Decoded::Record { lsn, kind, stream_id, stream_offset, payload_off, len, total } => {
+                assert_eq!((lsn, stream_id, stream_offset, len), (2, 11, 5, 14));
+                assert!(matches!(kind, RecordKind::StreamCreate));
+                assert_eq!(&b[payload_off..payload_off + len], b"second-payload");
+                assert_eq!(total, HEADER_LEN + 14);
+                // The two records tile the buffer exactly.
+                assert_eq!(t1 + total, b.len());
+            }
+            other => panic!("expected second Record, got {other:?}"),
+        }
+    }
 }
