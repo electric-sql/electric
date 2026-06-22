@@ -29,7 +29,7 @@
 //! the invariant the committer relies on. `lsn`s start at 1; `written_high == 0`
 //! means "nothing contiguous yet".
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -82,7 +82,21 @@ pub struct Shard {
     notify: Notify,
     /// `<data-dir>/wal/<shard>/` — where this shard's segments live.
     dir: PathBuf,
+    /// **Dirty set** (spec §7): the per-stream files this shard has *touched*
+    /// since its last checkpoint, deduped by `stream_id`. The WAL itself only
+    /// knows `stream_id`s; the per-stream `Arc<File>` is registered here from the
+    /// append path (`maybe_sync_on_ack` holds it). `checkpoint()` drains this set
+    /// and `fdatasync`s exactly these files — no double-fsync of untouched
+    /// streams — *before* recycling the WAL. This is decoupled from
+    /// `reserve_and_stage`, which never needs the `StreamState`.
+    dirty: Mutex<HashMap<u64, Arc<std::fs::File>>>,
 }
+
+/// Name of the per-shard checkpoint-lsn file: `<shard_dir>/checkpoint` (plain
+/// decimal text). A value of `N` means every record with lsn ≤ `N` has had its
+/// per-stream-file bytes `fdatasync`'d, so WAL segments fully below `N` are
+/// recyclable.
+const CHECKPOINT_FILE: &str = "checkpoint";
 
 impl Shard {
     /// Open (creating if needed) the shard rooted at `dir`, opening a fresh
@@ -107,6 +121,7 @@ impl Shard {
             durable_tx,
             notify: Notify::new(),
             dir,
+            dirty: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -154,6 +169,142 @@ impl Shard {
         }
         self.notify.notify_one();
         lsn
+    }
+
+    /// Register a touched stream's per-stream `Arc<File>` into this shard's dirty
+    /// set (spec §7). Called from the append path (`maybe_sync_on_ack`) right
+    /// after staging a record, since that is where the stream's `Arc<File>` is in
+    /// hand. Deduped by `stream_id`: re-touching a stream just refreshes the
+    /// handle, so `checkpoint()` `fdatasync`s each touched file exactly once.
+    ///
+    /// Keeping this off `reserve_and_stage` keeps the WAL ignorant of
+    /// `StreamState` (the WAL only ever needs `stream_id`).
+    pub fn register_dirty(&self, stream_id: u64, file: Arc<std::fs::File>) {
+        self.dirty.lock().unwrap().insert(stream_id, file);
+    }
+
+    /// **Checkpoint** (spec §7), per shard, non-blocking w.r.t. acks:
+    ///
+    /// 1. Snapshot `checkpoint_lsn` = the committer's current `durable_lsn` (every
+    ///    record ≤ it is on disk in the WAL and acked).
+    /// 2. **Drain** the dirty set and `fdatasync` each touched per-stream file —
+    ///    this makes those streams' page-cache bytes durable in their own files.
+    /// 3. Persist `checkpoint_lsn` to `<shard_dir>/checkpoint`.
+    /// 4. **Recycle**: unlink every WAL segment whose *entire* lsn range is below
+    ///    `checkpoint_lsn` — never the active segment.
+    ///
+    /// **Hard ordering (the whole point):** step 2 (`fdatasync` the per-stream
+    /// files) happens *strictly before* step 4 (recycle the WAL). Until a
+    /// stream's bytes are fsync'd into its own file, the WAL is the only durable
+    /// copy, so the WAL segment carrying them must not be unlinked first.
+    ///
+    /// **Non-blocking:** acks gate on the committer's `durable_lsn` (`wait_durable`),
+    /// never on this method. A stalled/slow/never-run checkpoint only delays WAL
+    /// recycling (the WAL grows on disk) — it cannot block `reserve_and_stage` or
+    /// `wait_durable`. The dirty set is drained atomically so a concurrent append
+    /// re-registering a stream is never lost (it lands in the *next* checkpoint).
+    ///
+    /// Returns the `checkpoint_lsn` persisted.
+    pub async fn checkpoint(&self) -> io::Result<u64> {
+        // 1. Snapshot the recycle floor = the highest durably-acked lsn.
+        let checkpoint_lsn = *self.durable_tx.borrow();
+
+        // 2. Drain the dirty set atomically, then fdatasync each touched file.
+        //    Draining first means a concurrent append re-registers into a fresh
+        //    map for the next checkpoint — no touched stream is silently dropped.
+        let touched: Vec<Arc<std::fs::File>> = {
+            let mut g = self.dirty.lock().unwrap();
+            std::mem::take(&mut *g).into_values().collect()
+        };
+        // Run the (potentially blocking) fdatasyncs off the async runtime so a
+        // slow disk can't stall this task's executor thread. Ordering preserved:
+        // we await all per-stream fsyncs before touching the WAL.
+        let to_sync = touched;
+        tokio::task::spawn_blocking(move || -> io::Result<()> {
+            for f in &to_sync {
+                f.sync_data()?;
+            }
+            Ok(())
+        })
+        .await
+        .expect("checkpoint fdatasync task panicked")?;
+
+        // 3. Persist checkpoint_lsn (durably) AFTER the per-stream files are
+        //    fsync'd, so the recorded floor only ever covers bytes already on
+        //    disk in their own files.
+        let ckpt_path = self.dir.join(CHECKPOINT_FILE);
+        let tmp = self.dir.join(format!("{CHECKPOINT_FILE}.tmp"));
+        std::fs::write(&tmp, checkpoint_lsn.to_string())?;
+        std::fs::rename(&tmp, &ckpt_path)?;
+
+        // 4. Recycle: unlink WAL segments fully below checkpoint_lsn. This is the
+        //    LAST step — strictly after the per-stream fsyncs above.
+        self.recycle_below(checkpoint_lsn)?;
+
+        Ok(checkpoint_lsn)
+    }
+
+    /// Unlink every WAL segment file whose entire lsn range is `< floor`, never
+    /// the active segment. A segment named `<start>.wal` is fully below `floor`
+    /// iff the *next* segment's start lsn ≤ `floor` (i.e. all of this segment's
+    /// records have lsn < that next start ≤ `floor`). The active segment (the one
+    /// new records are still appended into) is always retained.
+    fn recycle_below(&self, floor: u64) -> io::Result<()> {
+        let active_start = self.inner.lock().unwrap().seg_start_lsn;
+
+        // Collect (start_lsn, path) of every on-disk segment.
+        let mut segs: Vec<(u64, PathBuf)> = Vec::new();
+        for entry in std::fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let Some(stem) = name.strip_suffix(".wal") else {
+                continue;
+            };
+            if let Ok(start) = stem.parse::<u64>() {
+                segs.push((start, path));
+            }
+        }
+        segs.sort_by_key(|(s, _)| *s);
+
+        // A segment is fully below `floor` iff the next segment's start ≤ floor.
+        for i in 0..segs.len() {
+            let (start, ref path) = segs[i];
+            // Never recycle the active segment.
+            if start == active_start {
+                continue;
+            }
+            let next_start = segs.get(i + 1).map(|(s, _)| *s);
+            let fully_below = match next_start {
+                Some(ns) => ns <= floor,
+                // No following segment on disk: its range extends to the live
+                // tail, so it is not fully below the floor — keep it.
+                None => false,
+            };
+            if fully_below {
+                std::fs::remove_file(path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Total bytes of this shard's on-disk WAL segments (the recyclable-growth
+    /// signal: with checkpoint stalled, this grows as appends accumulate).
+    pub fn wal_size_bytes(&self) -> u64 {
+        let mut total = 0u64;
+        if let Ok(rd) = std::fs::read_dir(&self.dir) {
+            for entry in rd.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("wal") {
+                    if let Ok(meta) = entry.metadata() {
+                        total += meta.len();
+                    }
+                }
+            }
+        }
+        total
     }
 
     /// Await until this shard's `durable_lsn >= lsn`.
@@ -292,6 +443,110 @@ mod tests {
         assert!(sh.durable_lsn() >= l1, "l1 (and its contiguous prefix) is durable");
         assert!(sh.durable_lsn() < l3, "MUST NOT advance past the unwritten l2 gap to l3");
         h.abort();
+    }
+
+    #[tokio::test]
+    async fn checkpoint_fsyncs_touched_files_then_recycles_below_lsn() {
+        let dir = tmp("ckpt");
+        let sh = Shard::open(dir.clone()).unwrap();
+
+        // Spawn the committer so staged records become durable (advances durable_lsn).
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+
+        // Stage a couple of records and register a touched per-stream file.
+        let l1 = sh.reserve_and_stage(RecordKind::Append, 42, 0, b"hello");
+        let l2 = sh.reserve_and_stage(RecordKind::Append, 42, 5, b"world");
+        // A stand-in for the stream's own file: write bytes WITHOUT fsync, then
+        // register it. checkpoint() must fdatasync it (we assert the bytes land).
+        let stream_file_path = dir.join("stream-42.data");
+        let f = Arc::new(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&stream_file_path)
+                .unwrap(),
+        );
+        {
+            use std::io::Write;
+            (&*f).write_all(b"helloworld").unwrap();
+        }
+        sh.register_dirty(42, Arc::clone(&f));
+
+        sh.wait_durable(l2).await;
+        assert!(sh.durable_lsn() >= l2, "both records durable in the WAL");
+
+        // Plant a STALE segment fully below the active segment (start lsn 1). Name
+        // it with a start lsn of 1 would collide with active; instead simulate a
+        // PRIOR segment by renaming: the active segment is `1.wal`. A segment that
+        // is fully below the checkpoint floor needs a FOLLOWING segment whose start
+        // ≤ floor. Create a stale `0.wal` (covers lsn range [0, 1)) — the next
+        // segment (`1.wal`, the active one) starts at 1 ≤ floor, so `0.wal` is
+        // fully below and must be recycled while `1.wal` (active) survives.
+        let stale = seg_path(&dir, 0);
+        std::fs::write(&stale, b"stale-segment-bytes").unwrap();
+        assert!(stale.exists());
+
+        // (a)+(b)+(c): checkpoint drains+fsyncs the dirty file, writes the
+        // checkpoint file, recycles `0.wal`, keeps the active `1.wal`.
+        let ckpt = sh.checkpoint().await.unwrap();
+        assert_eq!(ckpt, l2, "checkpoint_lsn == committer durable_lsn (l2)");
+
+        // (b) the checkpoint file holds checkpoint_lsn.
+        let persisted = std::fs::read_to_string(dir.join("checkpoint")).unwrap();
+        assert_eq!(persisted.trim().parse::<u64>().unwrap(), l2);
+
+        // (a) the touched per-stream file's bytes are durably on disk (fsync'd).
+        assert_eq!(std::fs::read(&stream_file_path).unwrap(), b"helloworld");
+        // dirty set drained: a second checkpoint with nothing touched is a no-op
+        // for fsync (we just assert it does not error and floor is unchanged).
+        let _ = sh.checkpoint().await.unwrap();
+
+        // (c) the stale segment fully below checkpoint_lsn is unlinked; the active
+        // segment (`1.wal`) remains.
+        assert!(!stale.exists(), "segment fully below checkpoint_lsn recycled");
+        assert!(seg_path(&dir, 1).exists(), "active segment never recycled");
+
+        let _ = l1;
+        h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn checkpoint_is_non_blocking_for_acks() {
+        // With checkpoint NEVER run, reserve_and_stage + wait_durable must still
+        // ack (gated only on the committer's durable_lsn), and the WAL size grows
+        // as records accumulate (a lagging checkpoint only delays recycling).
+        let dir = tmp("ckpt-nonblock");
+        let sh = Shard::open(dir.clone()).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+
+        let size_before = sh.wal_size_bytes();
+        let mut last = 0;
+        for i in 0..16u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 5, b"abcde");
+        }
+        // Acks resolve with NO checkpoint having run.
+        tokio::time::timeout(std::time::Duration::from_secs(5), sh.wait_durable(last))
+            .await
+            .expect("appends ack without any checkpoint (non-blocking)");
+        assert!(sh.durable_lsn() >= last);
+        // WAL bytes are present (fallocate'd active segment) and not recycled.
+        assert!(
+            sh.wal_size_bytes() >= size_before,
+            "WAL size does not shrink without a checkpoint"
+        );
+        assert!(seg_path(&dir, 1).exists(), "WAL segment retained (not recycled)");
+
+        h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

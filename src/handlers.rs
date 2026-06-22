@@ -646,6 +646,12 @@ async fn maybe_sync_on_ack(
                 stream_offset,
                 wire,
             );
+            // Register the touched per-stream file into the shard's dirty set
+            // (spec §7) so the next checkpoint `fdatasync`s exactly this stream's
+            // file once. We already hold its `Arc<File>`; the WAL stays ignorant
+            // of `StreamState`. This is off the ack gate below — checkpoint runs
+            // asynchronously and never blocks the ack.
+            shard.register_dirty(st.id, file);
             shard.wait_durable(lsn).await;
             Ok(())
         }
