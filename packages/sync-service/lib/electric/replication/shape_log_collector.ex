@@ -274,18 +274,33 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
             fn {shape_handle, shape_id, shape}, {partitions, event_router, layers, count} = acc ->
-              case dependency_ids(state.stack_id, shape) do
-                {:ok, dependency_ids} ->
-                  restore_shape(
-                    {shape_handle, shape_id, shape, dependency_ids},
-                    {partitions, event_router, layers, count}
-                  )
+              # Check dependencies first - if a parent shape failed to restore,
+              # we should skip this shape (and its children will also be skipped)
+              with {:ok, dependency_ids} <- dependency_ids(state.stack_id, shape),
+                   {:ok, layers} <-
+                     DependencyLayers.add_dependency(layers, dependency_ids, shape_id) do
+                partitions = restore_partitions_for_shape(partitions, shape_id, shape)
 
+                {
+                  partitions,
+                  EventRouter.add_shape(event_router, shape_id, shape),
+                  layers,
+                  count + 1
+                }
+              else
                 # A dependency has no id mapping in ShapeStatus, e.g. it's
                 # mid-removal. Skip this shape.
                 :error ->
                   Logger.warning(
                     "Skipping shape during restore: dependency has no id mapping",
+                    shape_handle: shape_handle
+                  )
+
+                  acc
+
+                {:error, {:missing_dependencies, missing_deps}} ->
+                  Logger.warning(
+                    "Skipping shape during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}",
                     shape_handle: shape_handle
                   )
 
@@ -308,33 +323,6 @@ defmodule Electric.Replication.ShapeLogCollector do
          }}
       end
     )
-  end
-
-  defp restore_shape(
-         {shape_handle, shape_id, shape, dependency_ids},
-         {partitions, event_router, layers, count}
-       ) do
-    # Check dependencies first - if a parent shape failed to restore,
-    # we should skip this shape (and its children will also be skipped)
-    case DependencyLayers.add_dependency(layers, dependency_ids, shape_id) do
-      {:ok, layers} ->
-        partitions = restore_partitions_for_shape(partitions, shape_id, shape)
-
-        {
-          partitions,
-          EventRouter.add_shape(event_router, shape_id, shape),
-          layers,
-          count + 1
-        }
-
-      {:error, {:missing_dependencies, missing_deps}} ->
-        Logger.warning(
-          "Skipping shape during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}",
-          shape_handle: shape_handle
-        )
-
-        {partitions, event_router, layers, count}
-    end
   end
 
   # Restoring a shape requires introspecting its root table, which can fail
