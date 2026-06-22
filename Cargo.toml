@@ -20,6 +20,10 @@ httparse = "1"
 libc = "0.2"
 percent-encoding = "2"
 
+# CRC32C (hardware-accelerated where available) for WAL record header framing.
+# Header-only checksum — see the durable-wal-v2 design spec §4 (B-light framing).
+crc32c = "0.6"
+
 # Structured logging / tracing facade. Always compiled (it is light), but with
 # `release_max_level_info` so trace/debug records are stripped from release
 # builds at compile time — zero runtime cost when telemetry is off.

@@ -6,6 +6,7 @@ mod http1;
 mod store;
 mod telemetry;
 mod tier;
+mod wal;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
