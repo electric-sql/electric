@@ -7,10 +7,7 @@ interface ExtractedMeta {
   arguments?: Array<string>
   argumentHint?: string
   userInvocable?: boolean
-  max: number
 }
-
-const DEFAULT_MAX = 10_000
 
 export async function extractSkillMeta(
   name: string,
@@ -26,7 +23,6 @@ export async function extractSkillMeta(
       ...(preamble.arguments && { arguments: preamble.arguments }),
       ...(preamble.argumentHint && { argumentHint: preamble.argumentHint }),
       ...(preamble.userInvocable && { userInvocable: true }),
-      max: preamble.max ?? DEFAULT_MAX,
     }
   }
 
@@ -35,7 +31,6 @@ export async function extractSkillMeta(
     whenToUse:
       preamble.whenToUse ?? `User asks about ${humanize(name).toLowerCase()}`,
     keywords: preamble.keywords ?? [name],
-    max: preamble.max ?? DEFAULT_MAX,
   }
 }
 

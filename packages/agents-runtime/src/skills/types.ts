@@ -6,7 +6,6 @@ export interface SkillMeta {
   arguments?: Array<string>
   argumentHint?: string
   userInvocable?: boolean
-  max: number
   charCount: number
   contentHash: string
   source: string
