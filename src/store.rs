@@ -120,6 +120,13 @@ pub struct SyncCoalescer {
 }
 
 impl SyncCoalescer {
+    /// Test-only: the current durable watermark (bytes proven synced). Lets a test
+    /// assert that `strict` advanced it and `relaxed` did not (fsync was skipped).
+    #[cfg(test)]
+    pub fn synced(&self) -> u64 {
+        self.inner.lock().unwrap().synced
+    }
+
     fn new() -> Self {
         let (tx, _rx) = watch::channel(0u64);
         SyncCoalescer {

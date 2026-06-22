@@ -513,7 +513,7 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let target = ap.written;
                 let file = ap.file.clone();
                 drop(ap);
-                if st.sync.sync_to(file, &st, target).await.is_err() {
+                if maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
                     return text_response(500, "fsync failed");
                 }
             }
@@ -577,6 +577,22 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
     tokio::spawn(async move {
         store.maybe_seal(&st).await;
     });
+}
+
+/// Gate the covering data `fdatasync` on the durability mode. `strict`
+/// (`relaxed == false`) awaits `sync_to` exactly as before; `relaxed` returns `Ok`
+/// without syncing — the ack happens on the page-cache write. Every append/close
+/// `sync_to` site routes through this one helper so all three are gated together.
+async fn maybe_sync_on_ack(
+    relaxed: bool,
+    st: &StreamState,
+    file: std::sync::Arc<std::fs::File>,
+    target: u64,
+) -> std::io::Result<()> {
+    if relaxed {
+        return Ok(());
+    }
+    st.sync.sync_to(file, st, target).await
 }
 
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
@@ -921,7 +937,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
 
     // Covering fsync failed: not durable. Error out (and skip the close commit
     // below) rather than ack 2xx.
-    if !wire.is_empty() && st.sync.sync_to(file, &st, target).await.is_err() {
+    if !wire.is_empty() && maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
         ret!(text_response(500, "fsync failed"), Conflict);
     }
 
@@ -1228,7 +1244,7 @@ where
 
     let target = ap.written;
     drop(ap);
-    if st.sync.sync_to(file, &st, target).await.is_err() {
+    if maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
         // Not durable. Body was fully consumed, so keep-alive framing is intact.
         return Done(text_response(500, "fsync failed"));
     }
@@ -2131,5 +2147,57 @@ mod durability_tests {
         assert!(durability_relaxed(), "set_durability_relaxed(true) takes effect");
         set_durability_relaxed(false); // reset
         assert!(!durability_relaxed());
+    }
+
+    #[tokio::test]
+    async fn maybe_sync_on_ack_strict_syncs_relaxed_skips() {
+        use crate::store::{CreateResult, Store, StreamConfig};
+        use crate::tier::TierConfig;
+
+        let dir = std::env::temp_dir().join(format!(
+            "ds-durab-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = std::sync::Arc::new(Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap());
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("s", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // Write 10 bytes via the same path the handler uses, then STRICT-sync.
+        let mut ap = st.appender.lock().await;
+        write_wire(&st, &mut ap, &bytes::Bytes::from_static(b"0123456789")).unwrap();
+        let target = ap.written;
+        let file = ap.file.clone();
+        drop(ap);
+        maybe_sync_on_ack(false, &st, file, target).await.unwrap();
+        assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
+
+        // Append 5 more; RELAXED must skip the fsync → watermark unchanged.
+        let mut ap = st.appender.lock().await;
+        write_wire(&st, &mut ap, &bytes::Bytes::from_static(b"abcde")).unwrap();
+        let target2 = ap.written;
+        let file2 = ap.file.clone();
+        drop(ap);
+        maybe_sync_on_ack(true, &st, file2, target2).await.unwrap();
+        assert_eq!(st.sync.synced(), target, "relaxed must skip fsync (watermark unchanged)");
+        assert!(target2 > target, "the bytes were still written (tail advanced)");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
