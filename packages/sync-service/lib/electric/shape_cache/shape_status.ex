@@ -154,6 +154,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @doc """
+  Like `list_shapes/1` but also returns each shape's in-memory `shape_id`.
+  """
+  @spec list_shapes_with_ids(stack_id()) :: [{shape_handle(), shape_id(), Shape.t()}]
+  def list_shapes_with_ids(stack_id) when is_stack_id(stack_id) do
+    stack_id
+    |> list_shapes()
+    |> Enum.flat_map(fn {handle, shape} ->
+      case id_for_handle(stack_id, handle) do
+        {:ok, id} -> [{handle, id, shape}]
+        :error -> []
+      end
+    end)
+  end
+
   @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
   defp topological_sort(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
   defp topological_sort([], acc, _visited), do: Enum.reverse(acc) |> List.flatten()

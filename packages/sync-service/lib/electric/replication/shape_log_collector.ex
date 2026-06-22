@@ -270,23 +270,22 @@ defmodule Electric.Replication.ShapeLogCollector do
 
         {partitions, event_router, layers, count} =
           state.stack_id
-          |> Electric.ShapeCache.ShapeStatus.list_shapes()
+          |> Electric.ShapeCache.ShapeStatus.list_shapes_with_ids()
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
-            fn {shape_handle, shape}, {partitions, event_router, layers, count} = acc ->
-              with {:ok, shape_id} <-
-                     Electric.ShapeCache.ShapeStatus.id_for_handle(state.stack_id, shape_handle),
-                   {:ok, dependency_ids} <- dependency_ids(state.stack_id, shape) do
-                restore_shape(
-                  {shape_handle, shape_id, shape, dependency_ids},
-                  {partitions, event_router, layers, count}
-                )
-              else
-                # The shape (or one of its dependencies) has no id mapping in
-                # ShapeStatus, e.g. it's mid-removal. Skip it.
+            fn {shape_handle, shape_id, shape}, {partitions, event_router, layers, count} = acc ->
+              case dependency_ids(state.stack_id, shape) do
+                {:ok, dependency_ids} ->
+                  restore_shape(
+                    {shape_handle, shape_id, shape, dependency_ids},
+                    {partitions, event_router, layers, count}
+                  )
+
+                # A dependency has no id mapping in ShapeStatus, e.g. it's
+                # mid-removal. Skip this shape.
                 :error ->
                   Logger.warning(
-                    "Skipping shape during restore: no id mapping",
+                    "Skipping shape during restore: dependency has no id mapping",
                     shape_handle: shape_handle
                   )
 

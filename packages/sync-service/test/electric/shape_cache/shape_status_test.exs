@@ -449,6 +449,15 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert is_integer(restored_id)
       assert {:ok, ^handle} = ShapeStatus.handle_for_id(stack_id, restored_id)
     end
+
+    test "list_shapes_with_ids returns each shape's handle, id and shape", %{stack_id: stack_id} do
+      {:ok, {handle1, id1}} = ShapeStatus.add_shape(stack_id, shape!())
+      {:ok, {handle2, id2}} = ShapeStatus.add_shape(stack_id, shape2!())
+
+      result = ShapeStatus.list_shapes_with_ids(stack_id) |> Enum.sort_by(&elem(&1, 1))
+
+      assert [{^handle1, ^id1, %Shape{}}, {^handle2, ^id2, %Shape{}}] = result
+    end
   end
 
   defp shape!, do: shape!("test")
