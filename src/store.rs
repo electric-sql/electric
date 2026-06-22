@@ -429,9 +429,15 @@ pub struct Store {
     pub tier_config: crate::tier::TierConfig,
     /// Remote object-storage backend, present only when tiering is enabled.
     pub blobstore: Option<crate::blobstore::SharedBlobStore>,
-    /// The sharded write-ahead log, present only under `--durability wal`. `None`
+    /// The sharded write-ahead log, present only under `--durability wal`. Empty
     /// for `strict`/`fast`, which keeps the WAL inert and those paths unchanged.
-    pub wal: Option<Arc<crate::wal::walset::WalSet>>,
+    ///
+    /// A `OnceLock` (not a plain `Option`) so it can be attached **once**,
+    /// post-construction, on the already-`Arc`-wrapped `Store`: `new_with_tier`
+    /// runs the sidecar recover pass before the WAL is built, then main.rs builds
+    /// the `WalSet`, runs WAL recovery, and `set`s it here — all before serving.
+    /// The hot-path read (`store.wal.get()`) is lock-free.
+    pub wal: std::sync::OnceLock<Arc<crate::wal::walset::WalSet>>,
 }
 
 pub enum CreateResult {
@@ -467,7 +473,7 @@ impl Store {
             next_id: AtomicU64::new(seed & MAX_SAFE_INT),
             tier_config,
             blobstore,
-            wal: None,
+            wal: std::sync::OnceLock::new(),
         };
         store.recover(&streams_dir)?;
         Ok(store)

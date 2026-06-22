@@ -68,6 +68,10 @@ fn main() {
     let mut host: std::net::IpAddr = [127, 0, 0, 1].into();
     let mut data_dir = std::env::temp_dir().join("durable-streams-rust");
     let mut tier = tier::TierConfig::default();
+    // `--wal-shards N` (the WAL shard count). `None` ⇒ on a fresh data dir use the
+    // core count; on an existing one reuse the persisted N. A value ≠ the persisted
+    // N is rejected with exit 2 (spec §5). Only consulted under `--durability wal`.
+    let mut wal_shards: Option<usize> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -127,17 +131,21 @@ fn main() {
             }
             "--durability" => {
                 let v = val(args.next(), "--durability");
-                match v.as_str() {
-                    "strict" => handlers::set_durability(handlers::DurabilityMode::Strict),
-                    // `relaxed` is the legacy spelling of the page-cache-only mode,
-                    // now `fast`; keep it as an alias so existing deploys don't break.
-                    "fast" | "relaxed" => handlers::set_durability(handlers::DurabilityMode::Fast),
-                    "wal" => handlers::set_durability(handlers::DurabilityMode::Wal),
-                    _ => {
+                match handlers::parse_durability(&v) {
+                    Some(mode) => handlers::set_durability(mode),
+                    None => {
                         eprintln!("--durability must be strict|wal|fast");
                         std::process::exit(2);
                     }
                 }
+            }
+            "--wal-shards" => {
+                let n: usize = parse_val(args.next(), "--wal-shards");
+                if n == 0 {
+                    eprintln!("--wal-shards must be ≥ 1");
+                    std::process::exit(2);
+                }
+                wal_shards = Some(n);
             }
             other => {
                 eprintln!("unknown argument: {other}");
@@ -174,6 +182,54 @@ fn main() {
         let store = Arc::new(
             Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"),
         );
+
+        // ---- WAL wiring (`--durability wal` only) ----
+        //
+        // Order is load-bearing for crash-correctness (spec §9):
+        //   1. `WalSet::open` is NON-DESTRUCTIVE — it opens the existing on-disk
+        //      `wal/<i>/*.wal` segments (so recovery can read the pre-crash bytes)
+        //      while resetting the in-memory cursor to lsn 1 / offset 0. A
+        //      `--wal-shards` ≠ the persisted N is rejected here → exit 2 (spec §5).
+        //   2. `recovery::recover` replays every durable WAL record into the
+        //      per-stream files and `fdatasync`s them — after this the per-stream
+        //      files are durable up to the frontier, so the OLD WAL is REDUNDANT.
+        //      (The non-sharded sidecar pass that owns stream identity already ran
+        //      inside `Store::new_with_tier`, so the streams exist here.)
+        //   3. `reset_after_recovery` then WIPES each shard's WAL to a fresh,
+        //      zero-filled segment at lsn 1. This closes the recover-before-clobber
+        //      hole: without it, the live committer/appenders (which start at lsn 1
+        //      / offset 0 per step 1) would write a new — possibly shorter — record
+        //      over the old segment, leaving a stale suffix of whole framed records
+        //      that a SECOND crash's recovery would mis-replay. After the reset the
+        //      decoder hits `fallocate` zeros right after the live tail = clean EOL.
+        //   4. ONLY THEN attach the WalSet (append path sees it), spawn the
+        //      per-shard committers, and start the checkpoint ticker. No append can
+        //      run before this point (we have not begun serving yet), so no durable
+        //      record is lost and no new append collides with un-recovered WAL data.
+        if handlers::durability() == handlers::DurabilityMode::Wal {
+            let walset = wal::walset::WalSet::open(&data_dir, wal_shards, workers)
+                .unwrap_or_else(|e| {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                });
+            wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
+            walset
+                .reset_after_recovery()
+                .expect("WAL reset after recovery failed");
+            // Attach so the append path's `maybe_sync_on_ack` sees it (lock-free
+            // `OnceLock::get` on the hot path). Empty for strict/fast = inert.
+            store
+                .wal
+                .set(Arc::clone(&walset))
+                .unwrap_or_else(|_| panic!("WAL already attached"));
+            walset.spawn_committers();
+            // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
+            // shard's touched per-stream files and recycle its WAL below the
+            // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
+            // durable_lsn, never on checkpoint).
+            spawn_checkpoint_ticker(Arc::clone(&walset));
+        }
+
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");
         println!(
@@ -188,6 +244,36 @@ fn main() {
                 // telemetry. Bounded so a stuck request can't block shutdown forever.
                 engine_raw::drain(std::time::Duration::from_secs(25)).await;
                 telemetry_guard.shutdown();
+            }
+        }
+    });
+}
+
+/// How often the checkpoint ticker drives each shard's `checkpoint` (spec §7).
+/// A sane v1 constant: frequent enough that the WAL doesn't grow unbounded on a
+/// busy server, infrequent enough that the batched per-stream `fdatasync`s stay
+/// amortized. Checkpoint is non-blocking w.r.t. acks, so this is purely the
+/// WAL-recycle / per-stream-durability cadence (tunable is follow-up #9).
+const CHECKPOINT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Spawn the per-shard checkpoint ticker (spec §7). One `tokio::time::interval`
+/// driver that, each tick, runs every shard's `checkpoint` (each: batched
+/// `fdatasync` of its touched per-stream files → persist `checkpoint_lsn` →
+/// recycle WAL segments below it). A checkpoint error is logged, not fatal — a
+/// failed/lagging checkpoint only delays WAL recycling (the disk-bounded safety
+/// valve, spec §7), never blocks appends.
+fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(CHECKPOINT_INTERVAL);
+        // Skip the immediate first tick — there is nothing to checkpoint at boot.
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            for shard in walset.shards() {
+                if let Err(e) = shard.checkpoint().await {
+                    eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
+                }
             }
         }
     });

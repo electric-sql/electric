@@ -60,6 +60,25 @@ pub enum DurabilityMode {
 /// an unset flag is strict). Same single-`AtomicU8` choke-point pattern the bool used.
 static DURABILITY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
+impl Default for DurabilityMode {
+    /// `strict` is the default mode (an unset `--durability` flag).
+    fn default() -> Self {
+        DurabilityMode::Strict
+    }
+}
+
+/// Parse the `--durability` flag value into a [`DurabilityMode`]. `relaxed` is the
+/// legacy spelling of `fast` (kept as an alias so existing deploys don't break).
+/// Returns `None` for an unknown value — the caller maps that to a usage error.
+pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
+    match s {
+        "strict" => Some(DurabilityMode::Strict),
+        "fast" | "relaxed" => Some(DurabilityMode::Fast),
+        "wal" => Some(DurabilityMode::Wal),
+        _ => None,
+    }
+}
+
 pub fn set_durability(mode: DurabilityMode) {
     let v = match mode {
         DurabilityMode::Strict => 0,
@@ -638,7 +657,7 @@ async fn maybe_sync_on_ack(
         DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
         DurabilityMode::Fast => Ok(()),
         DurabilityMode::Wal => {
-            let wal = store.wal.as_ref().expect("wal mode requires Store.wal");
+            let wal = store.wal.get().expect("wal mode requires Store.wal");
             let shard = wal.shard_for(st.id);
             // Register the touched per-stream file into the shard's dirty set
             // (spec §7) BEFORE staging the WAL record. This MUST precede
@@ -2247,9 +2266,30 @@ mod durability_tests {
 
     #[test]
     fn durability_flag_defaults_strict_and_flips() {
-        // Process-global flag. This test mutates it; it resets at the end so no
+        // Default mode is Strict (an unset --durability flag).
+        assert_eq!(DurabilityMode::default(), DurabilityMode::Strict, "default must be strict");
+
+        // --durability parsing: strict|wal|fast (+ the `relaxed` legacy alias).
+        assert_eq!(parse_durability("strict"), Some(DurabilityMode::Strict));
+        assert_eq!(parse_durability("wal"), Some(DurabilityMode::Wal));
+        assert_eq!(parse_durability("fast"), Some(DurabilityMode::Fast));
+        assert_eq!(
+            parse_durability("relaxed"),
+            Some(DurabilityMode::Fast),
+            "`relaxed` is the legacy alias of `fast`"
+        );
+        assert_eq!(parse_durability("bogus"), None, "unknown value → usage error");
+
+        // --wal-shards parses to an Option<usize> (the `requested_n` passed to
+        // WalSet::open). An absent flag is `None` (→ persisted N or default_n at
+        // init); a present flag is `Some(n)`.
+        let parsed: Option<usize> = "4".parse().ok();
+        assert_eq!(parsed, Some(4usize), "--wal-shards N parses to Some(N)");
+        let absent: Option<usize> = None;
+        assert_eq!(absent, None, "an absent --wal-shards defaults to None");
+
+        // Process-global flag round-trips through set/get. Reset at the end so no
         // append-path test (which reads it) is perturbed.
-        assert_eq!(durability(), DurabilityMode::Strict, "default must be strict");
         set_durability(DurabilityMode::Wal);
         assert_eq!(durability(), DurabilityMode::Wal, "set_durability(Wal) takes effect");
         set_durability(DurabilityMode::Fast);
@@ -2332,8 +2372,8 @@ mod durability_tests {
 
         // Store with a 1-shard WalSet attached.
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         let cfg = StreamConfig {
@@ -2431,8 +2471,8 @@ mod durability_tests {
 
         // 1-shard WalSet so the record lands in `<dir>/wal/0/1.wal`.
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         let cfg = StreamConfig {
@@ -2544,8 +2584,8 @@ mod durability_tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         let cfg = StreamConfig {

@@ -115,6 +115,18 @@ impl WalSet {
         &self.shards
     }
 
+    /// Reset every shard's on-disk WAL to a fresh, empty state — called **once**,
+    /// after `wal::recovery::recover` has replayed every durable record into the
+    /// per-stream files and BEFORE `spawn_committers`/any append. See
+    /// [`Shard::reset_after_recovery`] for why this is required for crash
+    /// correctness (recover-before-clobber, design spec §9).
+    pub fn reset_after_recovery(&self) -> io::Result<()> {
+        for shard in &self.shards {
+            shard.reset_after_recovery()?;
+        }
+        Ok(())
+    }
+
     /// Spawn each shard's `run_committer` (one tokio task per shard).
     pub fn spawn_committers(self: &Arc<Self>) {
         for shard in &self.shards {

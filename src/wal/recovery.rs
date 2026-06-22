@@ -321,8 +321,8 @@ mod tests {
         //     per-stream file + a hand-built WAL segment so we control exactly
         //     what is durable vs torn. ---
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         // Three durable records for a root stream (file_base = 0).
@@ -405,8 +405,8 @@ mod tests {
 
         // --- Reopen: sidecar pass + WAL recovery. ---
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         recover(&store, &wal).unwrap();
@@ -474,8 +474,8 @@ mod tests {
         let dir = tmp("torn-below-ckpt");
 
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         // Two durable records; both will be ≤ checkpoint_lsn.
@@ -524,8 +524,8 @@ mod tests {
         drop(wal);
 
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         recover(&store, &wal).unwrap();
@@ -566,8 +566,8 @@ mod tests {
         let dir = tmp("fsync-repair");
 
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         let r1 = b"durable-record".as_slice();
@@ -602,8 +602,8 @@ mod tests {
 
         // --- First reopen: run recovery (which must truncate AND fsync). ---
         let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
         let store = std::sync::Arc::new(store);
 
         let before = RECOVERY_FSYNCS.load(std::sync::atomic::Ordering::SeqCst);

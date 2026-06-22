@@ -135,6 +135,65 @@ impl Shard {
         }))
     }
 
+    /// **Reset this shard's on-disk WAL to a fresh, empty state** after recovery
+    /// has replayed every durable record into the per-stream files (design spec §9
+    /// recover-before-clobber resolution).
+    ///
+    /// # Why this is required for crash-correctness
+    ///
+    /// `Shard::open` is **non-destructive**: it opens the existing `<start>.wal`
+    /// segment (`O_RDWR|O_CREAT`, `truncate(false)`) so its pre-crash bytes survive
+    /// for recovery to read — but it resets the **in-memory** cursor to
+    /// `write_pos == 0`, `next_lsn == 1`. So after `open` + recovery, the live
+    /// committer/appenders would begin writing at offset 0 / lsn 1 **into a segment
+    /// that still holds the old, whole, framed pre-crash records**. A new (shorter)
+    /// record at offset 0 can leave a *stale suffix* of old whole records behind it;
+    /// on a *second* crash, recovery would decode those stale records as valid and
+    /// mis-replay them — a correctness hole.
+    ///
+    /// The fix: once recovery has made every durable record durable in the
+    /// per-stream files (`wal::recovery::recover` fsyncs them), the **old WAL is
+    /// redundant**. We delete every `*.wal` segment in this shard and re-create a
+    /// single fresh, zero-filled active segment at lsn 1 — matching the clean
+    /// in-memory state `open` already set. New appends then land in a zeroed
+    /// segment; the decoder hits the `fallocate` zeros immediately after the last
+    /// live record (clean end-of-log), so no stale record is ever re-applied. The
+    /// `checkpoint` file is removed too (a fresh WAL has no checkpoint).
+    ///
+    /// **Must run AFTER `recover` and BEFORE `spawn_committers`/any append**, while
+    /// the shard is single-threaded at boot.
+    pub fn reset_after_recovery(&self) -> io::Result<()> {
+        // Unlink every on-disk segment (and the stale checkpoint marker): recovery
+        // has already made their records durable in the per-stream files.
+        for entry in std::fs::read_dir(&self.dir)? {
+            let path = entry?.path();
+            match path.extension().and_then(|s| s.to_str()) {
+                Some("wal") => std::fs::remove_file(&path)?,
+                _ => {
+                    if path.file_name().and_then(|s| s.to_str()) == Some(CHECKPOINT_FILE) {
+                        std::fs::remove_file(&path)?;
+                    }
+                }
+            }
+        }
+        // Re-create a fresh, zero-filled active segment at lsn 1 and reset the
+        // in-memory cursor to match (open already set lsn 1 / pos 0, but the active
+        // FileSegment handle still points at the now-unlinked old inode).
+        let seg_start_lsn = 1;
+        let active = Arc::new(FileSegment::create(
+            seg_path(&self.dir, seg_start_lsn),
+            SEGMENT_BYTES,
+        )?);
+        let mut g = self.inner.lock().unwrap();
+        g.active = active;
+        g.seg_start_lsn = seg_start_lsn;
+        g.write_pos = 0;
+        g.next_lsn = seg_start_lsn;
+        g.written_high = 0;
+        g.written_ahead.clear();
+        Ok(())
+    }
+
     /// Reserve an lsn + segment range, stage the framed record's bytes off-lock,
     /// mark it written, and wake the committer. Returns the assigned lsn.
     ///
@@ -574,6 +633,78 @@ mod tests {
         assert!(sh.durable_lsn() >= l1, "l1 (and its contiguous prefix) is durable");
         assert!(sh.durable_lsn() < l3, "MUST NOT advance past the unwritten l2 gap to l3");
         h.abort();
+    }
+
+    #[tokio::test]
+    async fn reset_after_recovery_clears_stale_segments_so_new_appends_dont_collide() {
+        // Simulate the recover-before-clobber window: an old `1.wal` holds whole,
+        // framed pre-crash records (and a `checkpoint` marker). After recovery has
+        // replayed them into the per-stream files, `reset_after_recovery` must wipe
+        // the WAL to a fresh state so a NEW (shorter) append at lsn 1 / offset 0
+        // does not leave a stale suffix of old records that a second recovery would
+        // mis-replay.
+        let dir = tmp("reset");
+        let sh = Shard::open(dir.clone()).unwrap();
+
+        // Lay down several whole old records, then drop & re-open (non-destructive
+        // open keeps the bytes — exactly the production crash-restart situation).
+        for i in 0..6u64 {
+            sh.reserve_and_stage(RecordKind::Append, 1, i * 8, b"old-data");
+        }
+        std::fs::write(dir.join("checkpoint"), "3").unwrap();
+        let old_len_on_disk = {
+            // The old segment holds the framed records (plus fallocate zeros).
+            let raw = std::fs::read(seg_path(&dir, 1)).unwrap();
+            // The first record decodes as a real record (proves stale data exists).
+            assert!(matches!(decode_at(&raw, 0), Decoded::Record { .. }));
+            raw.len()
+        };
+        assert!(seg_path(&dir, 1).exists());
+        drop(sh);
+
+        // Re-open (non-destructive) then reset, as the wiring does after recovery.
+        let sh = Shard::open(dir.clone()).unwrap();
+        sh.reset_after_recovery().unwrap();
+
+        // The checkpoint marker is gone; the segment exists but is FULLY ZEROED
+        // (fresh fallocate) — no stale record decodes at offset 0 anymore.
+        assert!(!dir.join("checkpoint").exists(), "stale checkpoint removed");
+        let raw = std::fs::read(seg_path(&dir, 1)).unwrap();
+        assert_eq!(raw.len(), old_len_on_disk, "segment re-created at full size");
+        assert!(
+            raw.iter().all(|&b| b == 0),
+            "segment is fully zeroed — no stale framed records survive the reset"
+        );
+        assert!(
+            !matches!(decode_at(&raw, 0), Decoded::Record { .. }),
+            "offset 0 no longer decodes as a (stale) record"
+        );
+
+        // A new append now lands at lsn 1 / offset 0 into the clean segment; the
+        // committer makes it durable and nothing past it decodes as a record.
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        let lsn = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"new");
+        assert_eq!(lsn, 1, "fresh WAL starts at lsn 1");
+        sh.wait_durable(lsn).await;
+        let raw = std::fs::read(seg_path(&dir, 1)).unwrap();
+        match decode_at(&raw, 0) {
+            Decoded::Record { lsn: l, total, payload_off, len, .. } => {
+                assert_eq!(l, 1);
+                assert_eq!(&raw[payload_off..payload_off + len], b"new");
+                // Right after the only live record we hit fallocate zeros = clean
+                // end-of-log; NO stale old record decodes there.
+                assert!(
+                    !matches!(decode_at(&raw, total), Decoded::Record { .. }),
+                    "no stale record after the single fresh append"
+                );
+            }
+            other => panic!("fresh record did not decode: {other:?}"),
+        }
+        h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
