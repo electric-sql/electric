@@ -96,13 +96,10 @@ impl FileSegment {
         self.file.set_len(len)?;
         let fd = self.file.as_raw_fd();
         // The truncate changes file SIZE (metadata), so a plain fdatasync may not
-        // persist it — use a full fsync (macOS barrier/full ladder, Linux fsync).
+        // persist it — use a full fsync (macOS F_FULLFSYNC, Linux fsync).
         #[cfg(target_os = "macos")]
         // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
         unsafe {
-            if libc::fcntl(fd, libc::F_BARRIERFSYNC) == 0 {
-                return Ok(());
-            }
             if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
                 return Ok(());
             }
@@ -156,14 +153,12 @@ impl SegmentWriter for FileSegment {
 
     fn fdatasync(&self) -> io::Result<()> {
         let fd = self.file.as_raw_fd();
-        // Mirror `store::barrier_fsync`: macOS has no fdatasync, so use the
-        // barrier/full-fsync ladder libuv uses; Linux uses fdatasync.
+        // Mirror `store::barrier_fsync`: macOS has no fdatasync, so use
+        // F_FULLFSYNC for a true flush-to-platter (power-loss durable); Linux
+        // uses fdatasync.
         #[cfg(target_os = "macos")]
         // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
         unsafe {
-            if libc::fcntl(fd, libc::F_BARRIERFSYNC) == 0 {
-                return Ok(());
-            }
             if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
                 return Ok(());
             }

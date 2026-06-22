@@ -252,8 +252,9 @@ impl Drop for LeaderGuard<'_> {
     }
 }
 
-/// On macOS Node (libuv) implements fdatasync as fcntl(F_BARRIERFSYNC); match it
-/// so durability cost is comparable. On Linux use fdatasync.
+/// macOS uses fcntl(F_FULLFSYNC) for a true flush-to-platter (power-loss
+/// durable), accepting slower fsyncs in macOS dev; the no-loss guarantee holds
+/// on every platform. On Linux use fdatasync.
 ///
 /// Returns the fsync result: a failure (e.g. EIO writeback error) MUST be
 /// surfaced to the caller so an append is never acked as durable when the data
@@ -262,11 +263,8 @@ fn barrier_fsync(file: &File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
     #[cfg(target_os = "macos")]
     unsafe {
-        // Prefer the cheap ordering barrier; fall back to a full flush, then a
-        // plain fsync. Only error if the final fallback also fails.
-        if libc::fcntl(fd, libc::F_BARRIERFSYNC) == 0 {
-            return Ok(());
-        }
+        // Force a true flush to platter; fall back to a plain fsync. Only error
+        // if the final fallback also fails.
         if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
             return Ok(());
         }
