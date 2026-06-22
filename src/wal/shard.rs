@@ -844,18 +844,29 @@ impl Shard {
                         g.sealed_pending.iter().map(|(_, s)| Arc::clone(s)).collect(),
                     )
                 };
-                // Sealed segments first (older bytes), then the active segment: all
-                // must be durable before durable_lsn advances past records in them.
-                let mut fsync_res = Ok(());
-                for s in &sealed {
-                    if let Err(e) = s.fdatasync() {
-                        fsync_res = Err(e);
-                        break;
+                // Run the (potentially blocking) fdatasyncs off the async runtime so
+                // a slow disk can't stall this tokio worker — letting many shards'
+                // committers fsync concurrently on the blocking pool instead of being
+                // capped at the worker count. `sealed`/`seg` were cloned under the
+                // lock above and move into the closure. Sealed segments first (older
+                // bytes), then the active segment: all must be durable before
+                // durable_lsn advances past records in them. The watermark snapshot
+                // above stays BEFORE this fsync and is published as-is; we do not
+                // re-read it after. A failed fsync OR a panicked task yields Err,
+                // taking the same no-advance/no-publish path as an inline failure.
+                let fsync_res: io::Result<()> = tokio::task::spawn_blocking(move || {
+                    for s in &sealed {
+                        s.fdatasync()?;
                     }
-                }
-                if fsync_res.is_ok() {
-                    fsync_res = seg.fdatasync();
-                }
+                    seg.fdatasync()?;
+                    Ok(())
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    Err(io::Error::other(format!(
+                        "committer fsync task panicked: {e}"
+                    )))
+                });
                 match fsync_res {
                     Ok(()) => {
                         // Publish the watermark we snapshotted BEFORE the
