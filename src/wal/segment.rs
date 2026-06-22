@@ -83,6 +83,44 @@ impl FileSegment {
 
         Ok(FileSegment { file })
     }
+
+    /// **Seal** this segment at a roll: truncate it to exactly `len` bytes (drop
+    /// the unused `fallocate`'d zero tail) and `fdatasync` so its new size + data
+    /// are durable. After this the segment is **exactly packed** — its on-disk
+    /// length equals the byte offset of the end of its last record, which is what
+    /// lets recovery's `off == raw.len()` → next-segment logic walk across the
+    /// seam without seeing a zero gap (spec §4, recovery.rs). Because `set_len`
+    /// changes the inode size, we `fsync` (not just `fdatasync`) so the metadata
+    /// size change is itself durable — a torn size would re-expose the zero tail.
+    pub fn seal_to(&self, len: u64) -> io::Result<()> {
+        self.file.set_len(len)?;
+        let fd = self.file.as_raw_fd();
+        // The truncate changes file SIZE (metadata), so a plain fdatasync may not
+        // persist it — use a full fsync (macOS barrier/full ladder, Linux fsync).
+        #[cfg(target_os = "macos")]
+        // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
+        unsafe {
+            if libc::fcntl(fd, libc::F_BARRIERFSYNC) == 0 {
+                return Ok(());
+            }
+            if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
+                return Ok(());
+            }
+            if libc::fsync(fd) == 0 {
+                return Ok(());
+            }
+            Err(io::Error::last_os_error())
+        }
+        #[cfg(not(target_os = "macos"))]
+        // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
+        unsafe {
+            if libc::fsync(fd) == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
 }
 
 impl SegmentWriter for FileSegment {

@@ -72,6 +72,11 @@ fn main() {
     // core count; on an existing one reuse the persisted N. A value ≠ the persisted
     // N is rejected with exit 2 (spec §5). Only consulted under `--durability wal`.
     let mut wal_shards: Option<usize> = None;
+    // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
+    // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
+    // Only consulted under `--durability wal`; useful for forcing rolls in tests
+    // and benches without writing a full 128 MiB segment.
+    let mut wal_segment_bytes: Option<u64> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -147,6 +152,14 @@ fn main() {
                 }
                 wal_shards = Some(n);
             }
+            "--wal-segment-bytes" => {
+                let n: u64 = parse_val(args.next(), "--wal-segment-bytes");
+                if n == 0 {
+                    eprintln!("--wal-segment-bytes must be ≥ 1");
+                    std::process::exit(2);
+                }
+                wal_segment_bytes = Some(n);
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -207,11 +220,16 @@ fn main() {
         //      run before this point (we have not begun serving yet), so no durable
         //      record is lost and no new append collides with un-recovered WAL data.
         if handlers::durability() == handlers::DurabilityMode::Wal {
-            let walset = wal::walset::WalSet::open(&data_dir, wal_shards, workers)
-                .unwrap_or_else(|e| {
-                    eprintln!("error: {e}");
-                    std::process::exit(2);
-                });
+            let open_res = match wal_segment_bytes {
+                Some(sz) => wal::walset::WalSet::open_with_segment_size(
+                    &data_dir, wal_shards, workers, sz,
+                ),
+                None => wal::walset::WalSet::open(&data_dir, wal_shards, workers),
+            };
+            let walset = open_res.unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(2);
+            });
             wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
             walset
                 .reset_after_recovery()

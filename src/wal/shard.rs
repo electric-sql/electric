@@ -45,12 +45,32 @@ struct ShardInner {
     /// The active (current) segment all new records are written into. Held as an
     /// `Arc` so an appender can clone the handle under the short lock and run its
     /// positioned `write_at` off-lock; the committer's `fdatasync` clones it the
-    /// same way. (Segment roll — swapping this `Arc` — is a later task.)
+    /// same way. **Segment roll** swaps this `Arc` for a fresh full-size segment.
     active: Arc<FileSegment>,
     /// The lsn of the first record this active segment holds (its file name).
     seg_start_lsn: u64,
     /// Next free byte offset within the active segment.
     write_pos: u64,
+    /// **Sealed segments that may still hold un-durable records.** A roll seals the
+    /// old active segment and pushes `(end_lsn, segment)` here, where `end_lsn` is
+    /// the highest lsn that lives in it. The committer `fdatasync`s every pending
+    /// sealed segment (not just the active one) before advancing `durable_lsn`, and
+    /// drops entries whose `end_lsn <= durable` once durable catches up.
+    ///
+    /// # Why this is required (the no-window argument)
+    ///
+    /// An appender reserves its byte range under the lock but runs its `write_at`
+    /// *off-lock*. So a record `P` can be reserved in the old segment, then a
+    /// concurrent appender's roll seals that segment, and only *afterwards* does
+    /// `P`'s off-lock `write_at` land in the (now-sealed) old segment and `P` get
+    /// `mark_written`. The seal's own fsync (at roll time) happened BEFORE `P`'s
+    /// bytes, so it does not cover them. If the committer fsync'd only the *active*
+    /// segment, it could advance `durable_lsn` past `P` while `P`'s bytes in the
+    /// sealed segment were never fsync'd — acked-record loss. Fsyncing every
+    /// pending sealed segment closes that window: a record is only crossed by the
+    /// watermark once `mark_written`, and the committer fsyncs the exact segment it
+    /// lives in (active or pending-sealed) before publishing past it.
+    sealed_pending: Vec<(u64, Arc<FileSegment>)>,
     /// Next lsn to assign (monotonic within the shard; first record is lsn 1).
     next_lsn: u64,
     /// Highest lsn `w` such that every lsn in `1..=w` has been written. `0` ⇒
@@ -83,6 +103,11 @@ pub struct Shard {
     notify: Notify,
     /// `<data-dir>/wal/<shard>/` — where this shard's segments live.
     dir: PathBuf,
+    /// The size each segment is `fallocate`'d to and the roll threshold. Defaults
+    /// to [`SEGMENT_BYTES`] (128 MiB); a `#[cfg(test)]`/constructor override lets a
+    /// test force rolls with a tiny (e.g. 4 KiB) segment without writing 128 MiB.
+    /// Immutable for the shard's lifetime, so a plain field (no lock) is enough.
+    segment_size: u64,
     /// **Dirty set** (spec §7): the per-stream files this shard has *touched*
     /// since its last checkpoint, deduped by `stream_id`. The WAL itself only
     /// knows `stream_id`s; the per-stream `Arc<File>` is registered here from the
@@ -132,16 +157,35 @@ impl Shard {
     /// behind them (see that method's docs for the full crash-correctness argument).
     ///
     /// [`recovery`]: super::recovery
+    ///
+    /// Convenience default-size entry (`SEGMENT_BYTES`). Production opens shards via
+    /// [`WalSet::open`]→[`Shard::open_with_segment_size`]; this default-size form is
+    /// the unit-test constructor.
+    ///
+    /// [`WalSet::open`]: super::walset::WalSet::open
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn open(dir: PathBuf) -> io::Result<std::sync::Arc<Shard>> {
+        Shard::open_with_segment_size(dir, SEGMENT_BYTES)
+    }
+
+    /// Like [`Shard::open`] but with an explicit `segment_size` (the `fallocate`
+    /// size and the segment-roll threshold). Production threads
+    /// [`SEGMENT_BYTES`] (or `--wal-segment-bytes`) through here from
+    /// [`WalSet::open_with_segment_size`]; tests pass a small size to force rolls
+    /// cheaply.
+    ///
+    /// [`WalSet::open_with_segment_size`]: super::walset::WalSet::open_with_segment_size
+    pub fn open_with_segment_size(dir: PathBuf, segment_size: u64) -> io::Result<std::sync::Arc<Shard>> {
         std::fs::create_dir_all(&dir)?;
         let seg_start_lsn = 1;
-        let active = Arc::new(FileSegment::create(seg_path(&dir, seg_start_lsn), SEGMENT_BYTES)?);
+        let active = Arc::new(FileSegment::create(seg_path(&dir, seg_start_lsn), segment_size)?);
         let (durable_tx, _durable_rx) = watch::channel(0u64);
         Ok(std::sync::Arc::new(Shard {
             inner: Mutex::new(ShardInner {
                 active,
                 seg_start_lsn,
                 write_pos: 0,
+                sealed_pending: Vec::new(),
                 next_lsn: seg_start_lsn,
                 written_high: 0,
                 written_ahead: BTreeSet::new(),
@@ -149,6 +193,7 @@ impl Shard {
             durable_tx,
             notify: Notify::new(),
             dir,
+            segment_size,
             dirty: Mutex::new(HashMap::new()),
             stats: ShardStats::default(),
             #[cfg(test)]
@@ -205,12 +250,13 @@ impl Shard {
         let seg_start_lsn = 1;
         let active = Arc::new(FileSegment::create(
             seg_path(&self.dir, seg_start_lsn),
-            SEGMENT_BYTES,
+            self.segment_size,
         )?);
         let mut g = self.inner.lock().unwrap();
         g.active = active;
         g.seg_start_lsn = seg_start_lsn;
         g.write_pos = 0;
+        g.sealed_pending.clear();
         g.next_lsn = seg_start_lsn;
         g.written_high = 0;
         g.written_ahead.clear();
@@ -252,9 +298,54 @@ impl Shard {
         // Framed length = fixed header + payload; we reserve exactly this range.
         let total = (super::codec::HEADER_LEN + payload.len()) as u64;
 
-        // --- Phase 1: reserve under the short lock. ---
+        // A single record can never exceed a whole segment — it would overflow the
+        // `fallocate`'d region no matter how we roll. Reject it rather than corrupt
+        // the log. (The bench payloads are far smaller than `segment_size`.)
+        if total > self.segment_size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "WAL record framed size {total} exceeds segment_size {} — cannot fit in a segment",
+                    self.segment_size
+                ),
+            ));
+        }
+
+        // --- Phase 1: (maybe roll, then) reserve under the short lock. ---
         let (lsn, off, seg) = {
             let mut g = self.inner.lock().unwrap();
+
+            // Segment roll (spec §4): if this record would overflow the active
+            // segment's `fallocate`'d region, SEAL the current segment (truncate to
+            // its exact `write_pos` so it is EXACTLY packed — no zero tail — and
+            // fsync so the size+data are durable) and OPEN a fresh full-size segment
+            // at the next lsn BEFORE reserving. The seal's synchronous fsync makes
+            // every record already in the old segment durable at roll time, so the
+            // committer never has to fsync a segment it no longer holds.
+            if g.write_pos + total > self.segment_size {
+                // Seal the current active segment to its packed size + fsync (so the
+                // truncated size is itself crash-durable → recovery walks the exact
+                // packed seam). The committer additionally fsyncs this sealed
+                // segment via `sealed_pending` to cover any record still being
+                // written into it off-lock (see `sealed_pending` docs).
+                g.active.seal_to(g.write_pos)?;
+                let next_lsn = g.next_lsn;
+                // The highest lsn already reserved in the old segment is
+                // `next_lsn - 1` (the rolling record itself, `next_lsn`, lands in
+                // the NEW segment). Track the sealed segment until durable_lsn
+                // passes that end lsn.
+                let sealed = Arc::clone(&g.active);
+                g.sealed_pending.push((next_lsn - 1, sealed));
+                // Open a fresh full-size segment named for the rolling record's lsn.
+                let new_seg = Arc::new(FileSegment::create(
+                    seg_path(&self.dir, next_lsn),
+                    self.segment_size,
+                )?);
+                g.active = new_seg;
+                g.seg_start_lsn = next_lsn;
+                g.write_pos = 0;
+            }
+
             let lsn = g.next_lsn;
             g.next_lsn += 1;
             let off = g.write_pos;
@@ -621,12 +712,30 @@ impl Shard {
 
             if watermark > durable {
                 // There is newly-written, not-yet-durable data. fdatasync the
-                // segment, then publish the watermark we fsync'd up to.
-                let seg = {
+                // active segment AND every pending sealed segment that may still
+                // hold an un-durable record (a record written into a sealed segment
+                // off-lock AFTER the roll's own seal-fsync), then publish the
+                // watermark. Fsyncing the sealed segments here is what closes the
+                // roll's no-window invariant (see `sealed_pending` docs).
+                let (seg, sealed): (Arc<FileSegment>, Vec<Arc<FileSegment>>) = {
                     let g = self.inner.lock().unwrap();
-                    Arc::clone(&g.active)
+                    (
+                        Arc::clone(&g.active),
+                        g.sealed_pending.iter().map(|(_, s)| Arc::clone(s)).collect(),
+                    )
                 };
-                let fsync_res = seg.fdatasync();
+                // Sealed segments first (older bytes), then the active segment: all
+                // must be durable before durable_lsn advances past records in them.
+                let mut fsync_res = Ok(());
+                for s in &sealed {
+                    if let Err(e) = s.fdatasync() {
+                        fsync_res = Err(e);
+                        break;
+                    }
+                }
+                if fsync_res.is_ok() {
+                    fsync_res = seg.fdatasync();
+                }
                 match fsync_res {
                     Ok(()) => {
                         // Publish the watermark we snapshotted BEFORE the
@@ -647,6 +756,15 @@ impl Shard {
                         // append) — a few relaxed atomics, off no critical lock.
                         self.stats.record_batch(watermark - durable);
                         let _ = self.durable_tx.send(watermark);
+                        // Drop sealed segments now fully durable (every record in
+                        // them is ≤ watermark, and we just fsync'd them). Any entry
+                        // with `end_lsn <= watermark` had all its records written +
+                        // marked before the watermark snapshot, so it was present in
+                        // the `sealed` list we fsync'd above — safe to release.
+                        {
+                            let mut g = self.inner.lock().unwrap();
+                            g.sealed_pending.retain(|(end_lsn, _)| *end_lsn > watermark);
+                        }
                         // Loop again immediately (do not await) in case the
                         // watermark advanced further while we were fsyncing.
                         continue;
@@ -725,6 +843,227 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&p);
         p
+    }
+
+    /// Collect every on-disk segment's `(start_lsn, path)` sorted by start lsn.
+    fn segs_on_disk(dir: &Path) -> Vec<(u64, PathBuf)> {
+        let mut v: Vec<(u64, PathBuf)> = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter_map(|e| {
+                let path = e.path();
+                let name = path.file_name()?.to_str()?.to_string();
+                let stem = name.strip_suffix(".wal")?;
+                let start = stem.parse::<u64>().ok()?;
+                Some((start, path))
+            })
+            .collect();
+        v.sort_by_key(|(s, _)| *s);
+        v
+    }
+
+    #[tokio::test]
+    async fn appends_roll_to_multiple_segments() {
+        // With a tiny segment_size, appending enough records must SEAL the current
+        // segment and OPEN a fresh one — spanning ≥3 segments. Each sealed segment
+        // is truncated to its exact write_pos (EXACTLY packed, no fallocate tail).
+        const SEG: u64 = 4096;
+        let dir = tmp("roll-multi");
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+
+        // ~200-byte records → ~20 per 4 KiB segment; 80 records ⇒ ≥3 segments.
+        let payload = vec![b'x'; 200 - crate::wal::codec::HEADER_LEN];
+        let mut last = 0;
+        for i in 0..80u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 1, i * 200, &payload).unwrap();
+        }
+        sh.wait_durable(last).await;
+        h.abort();
+
+        let segs = segs_on_disk(&dir);
+        assert!(segs.len() >= 3, "rolled to ≥3 segments, got {}", segs.len());
+        // Every SEALED (non-active) segment must be exactly packed (set_len to
+        // write_pos): its size ≤ SEG and the next segment's first record decodes,
+        // and there is NO fallocate zero gap at the seam (recovery's off==len → next).
+        let active_start = segs.last().unwrap().0;
+        for (start, path) in &segs {
+            let meta = std::fs::metadata(path).unwrap().len();
+            if *start == active_start {
+                assert_eq!(meta, SEG, "active segment stays fallocate'd to full size");
+            } else {
+                assert!(meta <= SEG, "sealed segment truncated to its packed size");
+                // Exactly packed: walking it consumes exactly to raw.len().
+                let raw = std::fs::read(path).unwrap();
+                let mut off = 0usize;
+                while let Decoded::Record { total, .. } = decode_at(&raw, off) {
+                    off += total;
+                    if off >= raw.len() {
+                        break;
+                    }
+                }
+                assert_eq!(off, raw.len(), "sealed segment is EXACTLY packed (no zero tail)");
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn records_span_segments_and_are_all_durable() {
+        // Every record across multiple rolled segments becomes durable (the
+        // committer advances durable_lsn through sealed + active segments).
+        const SEG: u64 = 4096;
+        let dir = tmp("roll-durable");
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        let payload = vec![b'y'; 150];
+        let mut last = 0;
+        for i in 0..100u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 2, i, &payload).unwrap();
+        }
+        sh.wait_durable(last).await;
+        assert_eq!(sh.durable_lsn(), last, "every record across rolls is durable");
+        assert!(segs_on_disk(&dir).len() >= 3, "spanned ≥3 segments");
+        h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn recovery_replays_every_record_across_rolls() {
+        // Replay across rolled segments (sealed exactly-packed + active w/ zero
+        // tail) must reconstruct EVERY record, byte-identical, in lsn order.
+        const SEG: u64 = 4096;
+        let dir = tmp("roll-replay");
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        let mut expect: Vec<(u64, u64, Vec<u8>)> = Vec::new();
+        let mut last = 0;
+        for i in 0..120u64 {
+            // ~150-byte framed records ⇒ ~27 per 4 KiB segment ⇒ 120 ⇒ ≥4 segments.
+            let p = format!("rec-{i:04}-{}", "p".repeat(120)).into_bytes();
+            last = sh.reserve_and_stage(RecordKind::Append, 3, i * 7, &p).unwrap();
+            expect.push((last, i * 7, p));
+        }
+        sh.wait_durable(last).await;
+        h.abort();
+        assert!(segs_on_disk(&dir).len() >= 3, "spanned ≥3 segments");
+
+        // Replay in lsn order across segments; collect every record.
+        let mut got: Vec<(u64, Vec<u8>)> = Vec::new();
+        sh.replay_from_checkpoint(0, |kind, stream_id, stream_offset, payload| {
+            assert_eq!(kind, RecordKind::Append);
+            assert_eq!(stream_id, 3);
+            got.push((stream_offset, payload.to_vec()));
+        })
+        .unwrap();
+        assert_eq!(got.len(), expect.len(), "every record replayed across rolls");
+        for (i, (off, p)) in got.iter().enumerate() {
+            assert_eq!(*off, expect[i].1, "record {i} stream_offset");
+            assert_eq!(p, &expect[i].2, "record {i} payload byte-identical");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn recycle_frees_sealed_segment_below_checkpoint_keeps_active() {
+        // With rolls firing, recycle must delete a sealed segment fully below the
+        // checkpoint floor while keeping the active segment.
+        const SEG: u64 = 4096;
+        let dir = tmp("roll-recycle");
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        let payload = vec![b'z'; 180];
+        let mut last = 0;
+        for i in 0..120u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 4, i, &payload).unwrap();
+        }
+        sh.wait_durable(last).await;
+
+        let before = segs_on_disk(&dir);
+        assert!(before.len() >= 3, "rolled to ≥3 segments before recycle");
+        let active_start = before.last().unwrap().0;
+
+        // Checkpoint floor = durable_lsn = last lsn ⇒ every sealed segment is fully
+        // below it; recycle must delete them all and keep ONLY the active segment.
+        let ckpt = sh.checkpoint().await.unwrap();
+        assert_eq!(ckpt, last);
+
+        let after = segs_on_disk(&dir);
+        assert_eq!(after.len(), 1, "all sealed segments recycled below the floor");
+        assert_eq!(after[0].0, active_start, "the active segment is retained");
+        assert!(seg_path(&dir, active_start).exists(), "active segment file remains");
+        h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn roll_boundary_exact_fill_vs_overflow() {
+        // A record that EXACTLY fills the remaining segment space does NOT roll
+        // (it fits); the NEXT record then rolls. A record that would overflow rolls
+        // BEFORE being written. Both land whole and decode.
+        let dir = tmp("roll-boundary");
+        // Choose a segment size that's an exact multiple of one framed record so a
+        // record can exactly fill it. Framed size = HEADER_LEN + payload.
+        let payload = vec![b'q'; 31]; // total = 33 + 31 = 64
+        let total = (crate::wal::codec::HEADER_LEN + payload.len()) as u64;
+        assert_eq!(total, 64);
+        const SEG: u64 = 128; // exactly 2 records per segment
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        // 5 records: r1,r2 fill seg0 exactly (write_pos 64 then 128 == SEG, no roll
+        // on r2 since 64+64==128 is NOT > 128). r3 rolls (128+64 > 128). r4 fills
+        // the new seg. r5 rolls again.
+        let mut last = 0;
+        for i in 0..5u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 5, i, &payload).unwrap();
+        }
+        sh.wait_durable(last).await;
+        h.abort();
+
+        let segs = segs_on_disk(&dir);
+        assert_eq!(segs.len(), 3, "r1r2 | r3r4 | r5 ⇒ 3 segments");
+        // seg0 sealed at exactly 128 (2 records, exact fill — no premature roll).
+        assert_eq!(std::fs::metadata(&segs[0].1).unwrap().len(), 128, "exact-fill seg packed at 128");
+        assert_eq!(std::fs::metadata(&segs[1].1).unwrap().len(), 128, "second sealed seg packed at 128");
+
+        // Replay reconstructs all 5 records.
+        let mut got = 0usize;
+        sh.replay_from_checkpoint(0, |_, _, off, payload| {
+            assert_eq!(off, got as u64);
+            assert_eq!(payload.len(), 31);
+            got += 1;
+        })
+        .unwrap();
+        assert_eq!(got, 5, "all 5 records across exact-fill+overflow boundaries replayed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn record_larger_than_segment_errors() {
+        // A pathological record bigger than the whole segment cannot be staged
+        // without corrupting the fallocate region — it must return an error.
+        const SEG: u64 = 256;
+        let dir = tmp("roll-toobig");
+        let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
+        let huge = vec![b'!'; 512];
+        let res = sh.reserve_and_stage(RecordKind::Append, 6, 0, &huge);
+        assert!(res.is_err(), "a record larger than segment_size must error, not overflow");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

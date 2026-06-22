@@ -106,16 +106,26 @@ fn recover_shard(
     // a `checkpoint_lsn`-bounded replay leaves its frontier empty and re-exposes
     // the torn tail (the exact C1 bug the WAL exists to fix, spec §9 line 198).
     //
-    // In v1 the active segment is never recycled and there is one segment per
-    // shard, so the retained WAL holds EVERY durable record for every stream —
-    // replaying all of them (`replay_from_checkpoint(0, …)`) is complete. We still
-    // `pwrite` records ≤ checkpoint_lsn (idempotent; recovery is rare) so the
-    // simplest-correct path also restores any not-yet-fsync'd checkpoint bytes.
+    // With segment roll + recycle (task 11a) the WAL spans MULTIPLE segments and
+    // recycle deletes sealed segments fully below `checkpoint_lsn`. Recovery
+    // therefore replays from the OLDEST RETAINED segment: `replay_from_checkpoint`
+    // `read_dir`s the shard dir and walks every `<start>.wal` in start-lsn order,
+    // so it naturally begins at the lowest segment still on disk (recycled ones are
+    // gone) — there is no hardcoded assumption that segment `1.wal` exists. Passing
+    // floor `0` keeps the replay UNbounded (replay every retained record, including
+    // those ≤ checkpoint_lsn) so the C1 torn-tail fix above still applies to a
+    // stream whose last durable record is ≤ checkpoint_lsn. Re-applying already-
+    // checkpoint-fsync'd records is idempotent (recovery is rare).
     //
-    // DEFER (post-v1): once segment roll + recycle of records ≤ checkpoint lands,
-    // a stream whose durable records are ALL recycled while a torn page-cache tail
-    // remains can no longer be reconciled from the WAL alone — that will require
-    // recording per-stream durable tails at checkpoint time. Out of scope here.
+    // TODO(11b): per-stream durable tails. A stream whose durable records were ALL
+    // recycled (every segment carrying them is below `checkpoint_lsn` and deleted)
+    // but which still has a torn page-cache tail in its per-stream file can no
+    // longer have its frontier reconstructed from the retained WAL alone — the
+    // bytes proving its durable boundary are gone. Reconciling that torn tail needs
+    // a per-stream durable-tail recorded at checkpoint time (the checkpoint must
+    // persist each touched stream's durable end), then recovery would seed the
+    // frontier from that checkpoint tail HERE before the replay extends it. That is
+    // the separate next task; not implemented in 11a.
     let _checkpoint_lsn = shard.read_checkpoint_lsn();
 
     // Per-stream durable frontier: the max logical end recovered for that stream.

@@ -65,6 +65,19 @@ impl WalSet {
         requested_n: Option<usize>,
         default_n: usize,
     ) -> io::Result<Arc<WalSet>> {
+        WalSet::open_with_segment_size(data_dir, requested_n, default_n, super::segment::SEGMENT_BYTES)
+    }
+
+    /// Like [`WalSet::open`] but with an explicit per-shard `segment_size` (the
+    /// `fallocate` size + segment-roll threshold), threaded to every [`Shard`].
+    /// Production passes [`super::segment::SEGMENT_BYTES`] via [`WalSet::open`];
+    /// `--wal-segment-bytes` and tests pass a smaller size to force rolls.
+    pub fn open_with_segment_size(
+        data_dir: &Path,
+        requested_n: Option<usize>,
+        default_n: usize,
+        segment_size: u64,
+    ) -> io::Result<Arc<WalSet>> {
         let wal_dir = data_dir.join("wal");
         std::fs::create_dir_all(&wal_dir)?;
         let shards_path = wal_dir.join(SHARDS_FILE);
@@ -95,7 +108,10 @@ impl WalSet {
 
         let mut shards = Vec::with_capacity(n);
         for i in 0..n {
-            shards.push(Shard::open(wal_dir.join(i.to_string()))?);
+            shards.push(Shard::open_with_segment_size(
+                wal_dir.join(i.to_string()),
+                segment_size,
+            )?);
         }
         Ok(Arc::new(WalSet { shards, n }))
     }
