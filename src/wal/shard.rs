@@ -482,7 +482,7 @@ impl Shard {
             touched.into_iter().map(|(_, _, f)| f).collect();
         tokio::task::spawn_blocking(move || -> io::Result<()> {
             for f in &to_sync {
-                f.sync_data()?;
+                crate::store::barrier_fsync(f)?;
             }
             Ok(())
         })

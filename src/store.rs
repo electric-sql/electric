@@ -259,7 +259,7 @@ impl Drop for LeaderGuard<'_> {
 /// Returns the fsync result: a failure (e.g. EIO writeback error) MUST be
 /// surfaced to the caller so an append is never acked as durable when the data
 /// did not reach stable storage. See `SyncCoalescer::sync_to`.
-fn barrier_fsync(file: &File) -> std::io::Result<()> {
+pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
     #[cfg(target_os = "macos")]
     unsafe {

@@ -253,7 +253,7 @@ fn reconcile_tail(st: &StreamState, logical_tail: u64) -> io::Result<()> {
     // (an acked record re-written by replay) lost AGAIN, and the torn tail
     // un-truncated again. fdatasync the per-stream file so the repaired,
     // whole-record-boundary file is crash-durable BEFORE we publish the tail.
-    f.sync_data()?;
+    crate::store::barrier_fsync(&f)?;
     #[cfg(test)]
     RECOVERY_FSYNCS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
