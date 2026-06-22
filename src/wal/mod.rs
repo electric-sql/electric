@@ -17,3 +17,6 @@ pub mod segment;
 pub mod shard;
 pub mod telemetry;
 pub mod walset;
+
+#[cfg(test)]
+mod e2e_tests;
