@@ -129,7 +129,7 @@ export function createPullWakeRunner(
   let stopPromise: Promise<void> | null = null
   const claimActors = new Set<Promise<void>>()
   const claimingStreamPaths = new Set<string>()
-  const deferredWakeEventsByStreamPath = new Map<string, Array<PullWakeEvent>>()
+  const deferredWakeEventsByStreamPath = new Map<string, PullWakeEvent>()
   const deferredWakeTimersByStreamPath = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -364,35 +364,40 @@ export function createPullWakeRunner(
     deferredWakeEventsByStreamPath.clear()
   }
 
+  const drainQueuedWakeClaims = (
+    streamPath: string,
+    signal: AbortSignal
+  ): void => {
+    const timer = deferredWakeTimersByStreamPath.get(streamPath)
+    if (timer) {
+      clearTimeout(timer)
+      deferredWakeTimersByStreamPath.delete(streamPath)
+    }
+
+    const deferredEvent = deferredWakeEventsByStreamPath.get(streamPath)
+    if (!deferredEvent || signal.aborted || !isRunningState()) {
+      deferredWakeEventsByStreamPath.delete(streamPath)
+      return
+    }
+    if (hasActiveStreamClaim(streamPath)) {
+      scheduleDeferredWakeRetry(streamPath, signal)
+      return
+    }
+
+    deferredWakeEventsByStreamPath.delete(streamPath)
+    spawnClaimActor(deferredEvent, signal)
+  }
+
   const scheduleDeferredWakeRetry = (
     streamPath: string,
     signal: AbortSignal
   ): void => {
     if (deferredWakeTimersByStreamPath.has(streamPath)) return
 
-    const retry = (): void => {
-      deferredWakeTimersByStreamPath.delete(streamPath)
-      const deferredEvents = deferredWakeEventsByStreamPath.get(streamPath)
-      if (!deferredEvents?.length || signal.aborted || !isRunningState()) {
-        deferredWakeEventsByStreamPath.delete(streamPath)
-        return
-      }
-      if (hasActiveStreamClaim(streamPath)) {
-        scheduleDeferredWakeRetry(streamPath, signal)
-        return
-      }
-
-      const deferredEvent = deferredEvents.shift()!
-      if (deferredEvents.length === 0) {
-        deferredWakeEventsByStreamPath.delete(streamPath)
-      }
-      spawnClaimActor(deferredEvent, signal)
-      if (deferredEvents.length > 0) {
-        scheduleDeferredWakeRetry(streamPath, signal)
-      }
-    }
-
-    const timer = setTimeout(retry, DEFERRED_WAKE_RETRY_MS)
+    const timer = setTimeout(
+      () => drainQueuedWakeClaims(streamPath, signal),
+      DEFERRED_WAKE_RETRY_MS
+    )
     timer.unref?.()
     deferredWakeTimersByStreamPath.set(streamPath, timer)
   }
@@ -402,10 +407,15 @@ export function createPullWakeRunner(
     signal: AbortSignal
   ): void => {
     const streamPath = normalizeStreamPath(event.stream)
-    const deferredEvents = deferredWakeEventsByStreamPath.get(streamPath) ?? []
-    deferredEvents.push(event)
-    deferredWakeEventsByStreamPath.set(streamPath, deferredEvents)
-    scheduleDeferredWakeRetry(streamPath, signal)
+    if (!deferredWakeEventsByStreamPath.has(streamPath)) {
+      deferredWakeEventsByStreamPath.set(streamPath, event)
+    }
+    if (hasActiveStreamClaim(streamPath)) {
+      recordClaimSkipped()
+      scheduleDeferredWakeRetry(streamPath, signal)
+      return
+    }
+    drainQueuedWakeClaims(streamPath, signal)
   }
 
   const claimWake = async (
@@ -544,7 +554,7 @@ export function createPullWakeRunner(
       eventsReceived++
       notifyHeartbeatChange()
       const signal = controller?.signal
-      if (signal && !signal.aborted) spawnClaimActor(event, signal)
+      if (signal && !signal.aborted) scheduleDeferredWakeClaim(event, signal)
     },
     onOffset: (offset) => {
       if (offset !== currentOffset) {
