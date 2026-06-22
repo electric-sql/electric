@@ -534,8 +534,17 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 }
                 let target = ap.written;
                 let file = ap.file.clone();
+                // Logical pre-append offset for THIS append. Read `file_base` while
+                // still holding the appender lock so a concurrent compaction (which
+                // raises `file_base` and resets `ap.written` together under this same
+                // lock) cannot desync it from `target`.
+                let stream_offset =
+                    st.shared.read().unwrap().file_base + target - wire.len() as u64;
                 drop(ap);
-                if maybe_sync_on_ack(durability(), &store, &st, &wire, file, target).await.is_err() {
+                if maybe_sync_on_ack(durability(), &store, &st, &wire, file, target, stream_offset)
+                    .await
+                    .is_err()
+                {
                     return text_response(500, "fsync failed");
                 }
             }
@@ -608,9 +617,14 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
 /// - `Fast`: return `Ok` without syncing — the ack happens on the page-cache write.
 /// - `Wal`: the per-stream file write already happened upstream (the read view); stage
 ///   the wire bytes into the stream's WAL shard and await the shard's group-commit
-///   `fdatasync`. `stream_offset` is the pre-append logical offset = `target − wire.len()`.
+///   `fdatasync`. `stream_offset` is the **logical** pre-append offset for THIS append
+///   (`file_base + file-relative pre-append position`), computed by the caller from the
+///   SAME append context as `target` so a concurrent compaction/appender can't desync it.
+///   Recovery does `file_pos = stream_offset − file_base`, so for forked/compacted
+///   streams (`file_base > 0`) this MUST be logical, not the file-relative `target`.
 ///
-/// `Strict`/`Fast` ignore `store`/`wire`, so those paths stay byte-for-byte unchanged.
+/// `Strict`/`Fast` ignore `store`/`wire`/`stream_offset`, so those paths stay
+/// byte-for-byte unchanged.
 async fn maybe_sync_on_ack(
     mode: DurabilityMode,
     store: &Arc<Store>,
@@ -618,6 +632,7 @@ async fn maybe_sync_on_ack(
     wire: &Bytes,
     file: std::sync::Arc<std::fs::File>,
     target: u64,
+    stream_offset: u64,
 ) -> std::io::Result<()> {
     match mode {
         DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
@@ -625,7 +640,6 @@ async fn maybe_sync_on_ack(
         DurabilityMode::Wal => {
             let wal = store.wal.as_ref().expect("wal mode requires Store.wal");
             let shard = wal.shard_for(st.id);
-            let stream_offset = target - wire.len() as u64;
             let lsn = shard.reserve_and_stage(
                 crate::wal::codec::RecordKind::Append,
                 st.id,
@@ -986,12 +1000,17 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     }
     let target = ap.written;
     let file = ap.file.clone();
+    // Logical pre-append offset for THIS append (see site above): read `file_base`
+    // under the appender lock so a concurrent compaction can't desync it from `target`.
+    let stream_offset = st.shared.read().unwrap().file_base + target - wire.len() as u64;
     drop(ap);
 
     // Covering fsync failed: not durable. Error out (and skip the close commit
     // below) rather than ack 2xx.
     if !wire.is_empty()
-        && maybe_sync_on_ack(durability(), &store, &st, &wire, file, target).await.is_err()
+        && maybe_sync_on_ack(durability(), &store, &st, &wire, file, target, stream_offset)
+            .await
+            .is_err()
     {
         ret!(text_response(500, "fsync failed"), Conflict);
     }
@@ -1310,8 +1329,9 @@ where
     let target = ap.written;
     drop(ap);
     // WAL mode is excluded above (splice bypasses userspace), so this site only ever
-    // runs `Strict`/`Fast`, which ignore the `wire` argument — pass an empty one.
-    if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target)
+    // runs `Strict`/`Fast`, which ignore the `wire`/`stream_offset` arguments — pass an
+    // empty wire and the file-relative `target` (no WAL record is ever recorded here).
+    if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target, target)
         .await
         .is_err()
     {
@@ -2257,7 +2277,7 @@ mod durability_tests {
         let target = ap.written;
         let file = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target)
+        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target, target - 10)
             .await
             .unwrap();
         assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
@@ -2268,7 +2288,7 @@ mod durability_tests {
         let target2 = ap.written;
         let file2 = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2)
+        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2, target2)
             .await
             .unwrap();
         assert_eq!(st.sync.synced(), target, "relaxed must skip fsync (watermark unchanged)");
@@ -2332,6 +2352,8 @@ mod durability_tests {
         // NO committer spawned yet → the shard's durable_lsn cannot advance, so the
         // wal-mode helper must NOT return. Prove the ack is gated.
         set_durability(DurabilityMode::Wal);
+        let stream_offset =
+            st.shared.read().unwrap().file_base + target - wire.len() as u64;
         let ack = maybe_sync_on_ack(
             DurabilityMode::Wal,
             &store,
@@ -2339,6 +2361,7 @@ mod durability_tests {
             &wire,
             std::sync::Arc::clone(&file),
             target,
+            stream_offset,
         );
         tokio::pin!(ack);
         tokio::select! {
@@ -2359,6 +2382,112 @@ mod durability_tests {
             wal.shard_for(st.id).durable_lsn() >= 1,
             "durable_lsn covers the append after ack"
         );
+
+        set_durability(DurabilityMode::Strict); // reset the global
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression for the WAL `stream_offset` logical-vs-file-relative bug: a
+    /// forked/compacted stream has `file_base > 0`, and the WAL record's
+    /// `stream_offset` is defined as the LOGICAL pre-append offset (recovery does
+    /// `file_pos = stream_offset − file_base`). The buggy code recorded the
+    /// file-relative `target − wire.len()`, which is short by `file_base` and
+    /// underflows/mis-positions on recovery. This test seeds `file_base > 0` and
+    /// asserts the recorded `stream_offset` is logical, i.e. `stream_offset −
+    /// file_base` equals the correct file position (0 for the first append).
+    #[tokio::test]
+    async fn wal_record_offset_is_logical_for_forked_stream() {
+        use crate::store::{CreateResult, Store, StreamConfig};
+        use crate::tier::TierConfig;
+        use crate::wal::codec::{decode_at, Decoded};
+        use crate::wal::walset::WalSet;
+
+        let dir = std::env::temp_dir().join(format!(
+            "ds-wal-forked-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // 1-shard WalSet so the record lands in `<dir>/wal/0/1.wal`.
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        // A forked stream: base_offset > 0 → file_base starts at base_offset > 0.
+        const FILE_BASE: u64 = 1000;
+        let st = match store.create("forked", cfg, None, FILE_BASE).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        assert_eq!(
+            st.shared.read().unwrap().file_base,
+            FILE_BASE,
+            "forked stream must start with file_base > 0"
+        );
+
+        // Append via the same path the handler uses.
+        let wire = bytes::Bytes::from_static(b"forked-payload");
+        let mut ap = st.appender.lock().await;
+        write_wire(&st, &mut ap, &wire).unwrap();
+        let target = ap.written;
+        let file = ap.file.clone();
+        let file_base = st.shared.read().unwrap().file_base;
+        let stream_offset = file_base + target - wire.len() as u64;
+        drop(ap);
+
+        set_durability(DurabilityMode::Wal);
+        wal.spawn_committers();
+        maybe_sync_on_ack(
+            DurabilityMode::Wal,
+            &store,
+            &st,
+            &wire,
+            std::sync::Arc::clone(&file),
+            target,
+            stream_offset,
+        )
+        .await
+        .unwrap();
+
+        // Read the staged record back from the shard's segment and assert the
+        // recorded stream_offset is LOGICAL. The first append's file position is 0,
+        // so the logical offset must equal file_base. The buggy `target − wire.len()`
+        // would record 0 here (the file-relative pre-offset), failing this assert.
+        let seg = std::fs::read(dir.join("wal").join("0").join("1.wal")).unwrap();
+        match decode_at(&seg, 0) {
+            Decoded::Record { stream_id, stream_offset: rec_off, payload_off, len, .. } => {
+                assert_eq!(stream_id, st.id);
+                assert_eq!(&seg[payload_off..payload_off + len], wire.as_ref());
+                assert_eq!(
+                    rec_off, FILE_BASE,
+                    "WAL stream_offset must be LOGICAL (file_base + file-relative pre-offset), \
+                     not the file-relative `target − wire.len()`"
+                );
+                // Recovery maps file_pos = stream_offset − file_base; the first
+                // append must land at file position 0.
+                assert_eq!(
+                    rec_off - file_base,
+                    0,
+                    "stream_offset − file_base must position the payload at file pos 0"
+                );
+            }
+            other => panic!("WAL record did not decode: {other:?}"),
+        }
 
         set_durability(DurabilityMode::Strict); // reset the global
         let _ = std::fs::remove_dir_all(&dir);
