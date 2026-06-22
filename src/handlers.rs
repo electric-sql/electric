@@ -672,7 +672,7 @@ fn wal_stream_offset(
 async fn maybe_sync_on_ack(
     mode: DurabilityMode,
     store: &Arc<Store>,
-    st: &StreamState,
+    st: &Arc<StreamState>,
     wire: &Bytes,
     file: std::sync::Arc<std::fs::File>,
     target: u64,
@@ -699,10 +699,11 @@ async fn maybe_sync_on_ack(
             // its lsn can ever become durable, so any checkpoint whose floor
             // covers the lsn fdatasyncs this stream's file before recycling. The
             // per-stream bytes are already in page cache (`write_wire` ran
-            // upstream), so registering before staging is safe. We hold its
-            // `Arc<File>`; the WAL stays ignorant of `StreamState`. Off the ack
+            // upstream), so registering before staging is safe. We register the
+            // stream's `Arc<StreamState>` so checkpoint can read its current
+            // durable tail (task 11b) alongside the file it fsyncs. Off the ack
             // gate — checkpoint runs asynchronously and never blocks the ack.
-            shard.register_dirty(st.id, file);
+            shard.register_dirty(st.id, Arc::clone(st));
             // A transient WAL segment write error fails the ack (the request
             // errors) rather than crashing the process — matching the committer's
             // fail-loud-don't-ack discipline. The lsn was reserved but never

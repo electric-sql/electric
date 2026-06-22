@@ -117,21 +117,25 @@ fn recover_shard(
     // stream whose last durable record is ≤ checkpoint_lsn. Re-applying already-
     // checkpoint-fsync'd records is idempotent (recovery is rare).
     //
-    // TODO(11b): per-stream durable tails. A stream whose durable records were ALL
-    // recycled (every segment carrying them is below `checkpoint_lsn` and deleted)
-    // but which still has a torn page-cache tail in its per-stream file can no
-    // longer have its frontier reconstructed from the retained WAL alone — the
-    // bytes proving its durable boundary are gone. Reconciling that torn tail needs
-    // a per-stream durable-tail recorded at checkpoint time (the checkpoint must
-    // persist each touched stream's durable end), then recovery would seed the
-    // frontier from that checkpoint tail HERE before the replay extends it. That is
-    // the separate next task; not implemented in 11a.
+    // Per-stream durable tails recorded at checkpoint time (task 11b). A stream
+    // whose durable records were ALL recycled (every segment carrying them is
+    // below `checkpoint_lsn` and deleted) but which still has a torn page-cache
+    // tail in its per-stream file can no longer have its frontier reconstructed
+    // from the retained WAL alone — the bytes proving its durable boundary are
+    // gone. The checkpoint persisted each touched stream's durable end into
+    // `<shard>/tails` (cumulatively) BEFORE recycling those segments, so we SEED
+    // the frontier from it here. The replay below then extends each stream's
+    // frontier across any RETAINED WAL records via `max`, and `reconcile_tail`
+    // truncates a torn per-stream-file tail past the resulting durable frontier —
+    // even for a stream with a persisted tail and ZERO retained WAL records.
     let _checkpoint_lsn = shard.read_checkpoint_lsn();
 
     // Per-stream durable frontier: the max logical end recovered for that stream.
-    // Only streams that actually had an in-range Append are inserted, so we
-    // reconcile exactly the touched streams.
-    let mut frontier: HashMap<u64, u64> = HashMap::new();
+    // SEEDED from the persisted durable-tail map (a stream with a persisted tail
+    // but no retained WAL record still gets reconciled), then raised by the replay
+    // below. Only streams with EITHER a persisted tail OR an in-range Append are
+    // inserted, so we reconcile exactly the streams the WAL touched.
+    let mut frontier: HashMap<u64, u64> = shard.read_durable_tails();
     // Captured replay error from inside the closure (the closure cannot return
     // `io::Result`). The first error aborts further application for this shard.
     let mut replay_err: Option<io::Error> = None;
@@ -169,12 +173,23 @@ fn recover_shard(
         return Err(e);
     }
 
-    // Reconcile each touched stream's file tail to its durable frontier.
+    // Reconcile each touched stream's file tail to its durable frontier (the max
+    // of the persisted durable tail and the replayed WAL frontier, already folded
+    // into `frontier`).
     for (stream_id, &logical_tail) in &frontier {
         let st = match index.get(stream_id) {
             Some(st) => st,
             None => continue,
         };
+        // A persisted durable tail can predate a later compaction that advanced
+        // `file_base` past it (the compacted prefix's bytes live durably in a
+        // sealed chunk). Reconciling to a logical tail below `file_base` would
+        // underflow `logical_tail - file_base`; skip — the live file already
+        // starts at `file_base` and its tail is governed by the sealed watermark,
+        // not this stale recorded tail.
+        if logical_tail < st.shared.read().unwrap().file_base {
+            continue;
+        }
         reconcile_tail(st, logical_tail)?;
     }
     Ok(())
@@ -649,6 +664,269 @@ mod tests {
             r1,
             "on-disk bytes are exactly the durable record; the torn tail is gone for good"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Drive a real shard so the committer makes records durable. Used by the 11b
+    /// tests to checkpoint (recording per-stream durable tails) and roll/recycle.
+    fn spawn_committer(shard: &std::sync::Arc<crate::wal::shard::Shard>) -> tokio::task::JoinHandle<()> {
+        let s = std::sync::Arc::clone(shard);
+        tokio::spawn(async move { s.run_committer().await })
+    }
+
+    /// CRITICAL (11b): a stream X whose durable WAL records are ALL recycled
+    /// (every segment carrying them deleted by checkpoint), so recovery's replay
+    /// sees ZERO retained records for X — yet X's per-stream file carries a torn
+    /// page-cache tail past its durable boundary (an un-acked post-checkpoint
+    /// append). Without the persisted per-stream durable tail, recovery cannot
+    /// reconstruct X's frontier → the torn tail (incl. torn JSON) survives.
+    ///
+    /// The checkpoint that fsync'd X's file recorded X's durable tail into
+    /// `<shard>/tails` BEFORE recycling X's WAL segment, so recovery seeds X's
+    /// frontier from it and truncates the torn tail.
+    ///
+    /// MUST fail before 11b (the TODO path: frontier empty → torn tail kept) and
+    /// pass after.
+    #[tokio::test]
+    async fn wal_recovery_truncates_torn_tail_of_fully_recycled_stream() {
+        // Tiny segments so a handful of filler appends roll + recycle X's segment.
+        const SEG: u64 = 4096;
+        let dir = tmp("torn-recycled");
+
+        let wal = WalSet::open_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+
+        // --- Stream X: two durable records, fsync'd at checkpoint #1. ---
+        let r1 = b"alpha".as_slice();
+        let r2 = b"bravo!!".as_slice();
+        // Torn page-cache tail past the durable frontier (even torn JSON).
+        let r_torn = b"torn-tail-{\"x\":".as_slice();
+        let x = match store.create("x", cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create x failed"),
+        };
+        let x_durable_len = r1.len() + r2.len();
+        let x_id = x.id;
+        let x_file_path = x.file_path.clone();
+        let shard = std::sync::Arc::clone(wal.shard_for(x_id));
+
+        let h = spawn_committer(&shard);
+
+        // Write X's two durable records into ITS per-stream file (page cache) and
+        // stage them in the WAL; register X dirty so checkpoint fsyncs + records it.
+        {
+            let f = std::sync::Arc::clone(&x.shared.read().unwrap().file);
+            use std::io::Write;
+            (&*f).write_all(r1).unwrap();
+            (&*f).write_all(r2).unwrap();
+            x.shared.write().unwrap().tail = x_durable_len as u64;
+        }
+        shard.register_dirty(x_id, std::sync::Arc::clone(&x));
+        let l1 = shard.reserve_and_stage(RecordKind::Append, x_id, 0, r1).unwrap();
+        let l2 = shard
+            .reserve_and_stage(RecordKind::Append, x_id, r1.len() as u64, r2)
+            .unwrap();
+        let _ = l1;
+        shard.wait_durable(l2).await;
+
+        // Checkpoint #1: fsyncs X's file, records X's durable tail (x_durable_len)
+        // into <shard>/tails, persists checkpoint_lsn = l2.
+        let ckpt1 = shard.checkpoint().await.unwrap();
+        assert_eq!(ckpt1, l2, "checkpoint #1 floor covers both of X's records");
+        // The durable-tail map now holds X.
+        assert_eq!(
+            shard.read_durable_tails().get(&x_id).copied(),
+            Some(x_durable_len as u64),
+            "checkpoint recorded X's durable tail"
+        );
+
+        // --- Filler stream F: append enough to roll past X's segment, then a
+        //     checkpoint recycles X's (now fully-below-floor) WAL segment. ---
+        let f_id = 999_000u64; // unused stream id (no StreamState) — replay skips it
+        let filler = vec![b'f'; 256];
+        let mut last = l2;
+        for i in 0..60u64 {
+            last = shard
+                .reserve_and_stage(RecordKind::Append, f_id, i * 256, &filler)
+                .unwrap();
+        }
+        shard.wait_durable(last).await;
+
+        // Checkpoint #2: floor = last (in the active segment) → every sealed
+        // segment below it (incl. X's original `1.wal`) is recycled.
+        let ckpt2 = shard.checkpoint().await.unwrap();
+        assert_eq!(ckpt2, last);
+        h.abort();
+
+        // X must now have NO retained WAL record: replay sees nothing for X.
+        let mut x_records_in_wal = 0usize;
+        shard
+            .replay_from_checkpoint(0, |_, sid, _, _| {
+                if sid == x_id {
+                    x_records_in_wal += 1;
+                }
+            })
+            .unwrap();
+        assert_eq!(
+            x_records_in_wal, 0,
+            "X's WAL records were all recycled (no retained record for X)"
+        );
+
+        // Now simulate the un-acked post-checkpoint append: write a torn tail into
+        // X's per-stream file past its durable boundary, then fsync the file (the
+        // bytes reached disk but the append never acked).
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&x_file_path)
+                .unwrap();
+            // Position at the durable end, then append the torn bytes.
+            use std::io::Seek;
+            f.seek(std::io::SeekFrom::Start(x_durable_len as u64)).unwrap();
+            f.write_all(r_torn).unwrap();
+            f.sync_all().unwrap();
+        }
+        assert_eq!(
+            std::fs::metadata(&x_file_path).unwrap().len() as usize,
+            x_durable_len + r_torn.len(),
+            "X's file carries the torn tail before recovery"
+        );
+
+        // Persist X's sidecar so the sidecar pass recovers X on reopen.
+        write_meta_sync(&x, true).unwrap();
+
+        drop(x);
+        drop(store);
+        drop(wal);
+
+        // --- Reopen: sidecar pass + WAL recovery. ---
+        let wal = WalSet::open_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+
+        recover(&store, &wal).unwrap();
+
+        // The torn tail is gone: X's file is truncated to its persisted durable
+        // tail even though NO WAL record for X survived.
+        let meta_len = std::fs::metadata(&x_file_path).unwrap().len();
+        assert_eq!(
+            meta_len as usize, x_durable_len,
+            "X's torn tail truncated to its persisted durable tail (all WAL records recycled)"
+        );
+        let mut expect = Vec::new();
+        expect.extend_from_slice(r1);
+        expect.extend_from_slice(r2);
+        assert_eq!(
+            std::fs::read(&x_file_path).unwrap(),
+            expect,
+            "X's bytes are exactly the durable prefix r1‖r2 (no torn JSON)"
+        );
+        let x = store.streams.iter().find(|e| e.value().id == x_id).unwrap().value().clone();
+        assert_eq!(
+            x.shared.read().unwrap().tail,
+            x_durable_len as u64,
+            "X.tail reconciled to the persisted durable frontier"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression: the NORMAL case — a stream whose durable records are STILL in
+    /// the retained WAL — must still reconcile via the replayed frontier, and the
+    /// `max(persisted_durable_tail, replayed_frontier)` must pick the replayed
+    /// (higher) value when the WAL extends past the last persisted tail.
+    #[tokio::test]
+    async fn wal_recovery_max_picks_replayed_frontier_when_wal_retained() {
+        const SEG: u64 = 4096;
+        let dir = tmp("max-replayed");
+
+        let wal = WalSet::open_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+
+        let r1 = b"alpha".as_slice();
+        let r2 = b"bravo!!".as_slice();
+        // r3 is acked in the WAL AND in the file, but AFTER the checkpoint that
+        // recorded the durable tail (so persisted tail = end(r2) < end(r3)).
+        let r3 = b"charlie-delta".as_slice();
+        let r_torn = b"torn".as_slice();
+
+        let x = match store.create("x", cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let x_id = x.id;
+        let x_file_path = x.file_path.clone();
+        let after_r2 = (r1.len() + r2.len()) as u64;
+        let after_r3 = after_r2 + r3.len() as u64;
+        let shard = std::sync::Arc::clone(wal.shard_for(x_id));
+        let h = spawn_committer(&shard);
+
+        // r1, r2 durable + checkpointed (records persisted tail = end(r2)).
+        {
+            let f = std::sync::Arc::clone(&x.shared.read().unwrap().file);
+            use std::io::Write;
+            (&*f).write_all(r1).unwrap();
+            (&*f).write_all(r2).unwrap();
+            x.shared.write().unwrap().tail = after_r2;
+        }
+        shard.register_dirty(x_id, std::sync::Arc::clone(&x));
+        shard.reserve_and_stage(RecordKind::Append, x_id, 0, r1).unwrap();
+        let l2 = shard.reserve_and_stage(RecordKind::Append, x_id, r1.len() as u64, r2).unwrap();
+        shard.wait_durable(l2).await;
+        shard.checkpoint().await.unwrap();
+        assert_eq!(shard.read_durable_tails().get(&x_id).copied(), Some(after_r2));
+
+        // r3 appended AFTER the checkpoint: durable in the WAL (RETAINED — its
+        // segment is the active one, not recycled) and written to the file.
+        {
+            let f = std::sync::Arc::clone(&x.shared.read().unwrap().file);
+            use std::io::Write;
+            (&*f).write_all(r3).unwrap();
+            x.shared.write().unwrap().tail = after_r3;
+        }
+        let l3 = shard.reserve_and_stage(RecordKind::Append, x_id, after_r2, r3).unwrap();
+        shard.wait_durable(l3).await;
+        h.abort();
+
+        // Torn page-cache tail past r3 (un-acked).
+        {
+            use std::io::{Seek, Write};
+            let mut f = std::fs::OpenOptions::new().write(true).open(&x_file_path).unwrap();
+            f.seek(std::io::SeekFrom::Start(after_r3)).unwrap();
+            f.write_all(r_torn).unwrap();
+            f.sync_all().unwrap();
+        }
+
+        write_meta_sync(&x, true).unwrap();
+        drop(x);
+        drop(store);
+        drop(wal);
+
+        let wal = WalSet::open_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+        recover(&store, &wal).unwrap();
+
+        // max(persisted=end(r2), replayed=end(r3)) = end(r3): the file reconciles
+        // to end(r3) (NOT the lower persisted tail) and the torn tail is dropped.
+        assert_eq!(
+            std::fs::metadata(&x_file_path).unwrap().len(),
+            after_r3,
+            "reconciled to the replayed frontier (end r3), not the lower persisted tail"
+        );
+        let mut expect = Vec::new();
+        expect.extend_from_slice(r1);
+        expect.extend_from_slice(r2);
+        expect.extend_from_slice(r3);
+        assert_eq!(std::fs::read(&x_file_path).unwrap(), expect, "bytes are r1‖r2‖r3");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

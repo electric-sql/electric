@@ -39,6 +39,7 @@ use tokio::sync::{watch, Notify};
 use super::codec::{encode_into, Record, RecordKind};
 use super::segment::{seg_path, FileSegment, SegmentWriter, SEGMENT_BYTES};
 use super::telemetry::{ShardStats, StatsSnapshot};
+use crate::store::StreamState;
 
 /// Mutable, lock-guarded shard state.
 struct ShardInner {
@@ -108,14 +109,18 @@ pub struct Shard {
     /// test force rolls with a tiny (e.g. 4 KiB) segment without writing 128 MiB.
     /// Immutable for the shard's lifetime, so a plain field (no lock) is enough.
     segment_size: u64,
-    /// **Dirty set** (spec §7): the per-stream files this shard has *touched*
-    /// since its last checkpoint, deduped by `stream_id`. The WAL itself only
-    /// knows `stream_id`s; the per-stream `Arc<File>` is registered here from the
-    /// append path (`maybe_sync_on_ack` holds it). `checkpoint()` drains this set
-    /// and `fdatasync`s exactly these files — no double-fsync of untouched
-    /// streams — *before* recycling the WAL. This is decoupled from
-    /// `reserve_and_stage`, which never needs the `StreamState`.
-    dirty: Mutex<HashMap<u64, Arc<std::fs::File>>>,
+    /// **Dirty set** (spec §7): the per-stream `StreamState`s this shard has
+    /// *touched* since its last checkpoint, deduped by `stream_id`. The append
+    /// path (`maybe_sync_on_ack`) registers the touched stream's `Arc<StreamState>`
+    /// here. `checkpoint()` drains this set, reads each stream's current logical
+    /// `Shared.tail` and live `Shared.file`, `fdatasync`s exactly these files — no
+    /// double-fsync of untouched streams — *before* recycling the WAL, and records
+    /// each stream's durable tail (the tail at the moment its file is fsync'd) into
+    /// the persisted per-shard tail map (spec §7, task 11b). Holding the
+    /// `StreamState` (rather than a bare `Arc<File>`) lets checkpoint read the
+    /// logical tail it must record alongside the file it fsyncs. This stays
+    /// decoupled from `reserve_and_stage`, which never needs the `StreamState`.
+    dirty: Mutex<HashMap<u64, Arc<StreamState>>>,
     /// Per-shard batch-size + durability counters (spec §11). Updated once per
     /// successful committer `fdatasync` (`record_batch`) — cheap relaxed atomics,
     /// no lock/alloc/syscall on the commit path. Read off-path by the 1 Hz
@@ -142,6 +147,17 @@ pub struct Shard {
 /// per-stream-file bytes `fdatasync`'d, so WAL segments fully below `N` are
 /// recyclable.
 const CHECKPOINT_FILE: &str = "checkpoint";
+
+/// Name of the per-shard durable-tail map: `<shard_dir>/tails` (task 11b). A
+/// CUMULATIVE `stream_id durable_tail` line map (plain decimal text, one stream
+/// per line). At checkpoint, each touched stream's current logical `Shared.tail`
+/// (the file is durable up to it after the checkpoint `fdatasync`) is merged in
+/// and the whole map is written `tmp`+rename + fsync'd **before** segments are
+/// recycled — so recovery can truncate a stream's torn per-stream-file tail even
+/// when every WAL record for that stream has been recycled (its durable boundary
+/// is gone from the WAL). Cumulative: a stream touched in an earlier checkpoint
+/// but not this one keeps its last recorded durable tail.
+const TAILS_FILE: &str = "tails";
 
 impl Shard {
     /// Open (creating if needed) the shard rooted at `dir`, opening the active
@@ -238,7 +254,15 @@ impl Shard {
             match path.extension().and_then(|s| s.to_str()) {
                 Some("wal") => std::fs::remove_file(&path)?,
                 _ => {
-                    if path.file_name().and_then(|s| s.to_str()) == Some(CHECKPOINT_FILE) {
+                    // Drop the stale checkpoint marker AND the durable-tail map
+                    // (task 11b): recovery has already truncated/extended every
+                    // per-stream file to its durable frontier and fsync'd it, so a
+                    // fresh WAL must start with neither a checkpoint_lsn nor a tail
+                    // map (else a future recovery would seed a stale tail).
+                    if matches!(
+                        path.file_name().and_then(|s| s.to_str()),
+                        Some(CHECKPOINT_FILE) | Some(TAILS_FILE)
+                    ) {
                         std::fs::remove_file(&path)?;
                     }
                 }
@@ -388,16 +412,18 @@ impl Shard {
         Ok(lsn)
     }
 
-    /// Register a touched stream's per-stream `Arc<File>` into this shard's dirty
-    /// set (spec §7). Called from the append path (`maybe_sync_on_ack`) right
-    /// after staging a record, since that is where the stream's `Arc<File>` is in
-    /// hand. Deduped by `stream_id`: re-touching a stream just refreshes the
-    /// handle, so `checkpoint()` `fdatasync`s each touched file exactly once.
+    /// Register a touched stream's `Arc<StreamState>` into this shard's dirty set
+    /// (spec §7). Called from the append path (`maybe_sync_on_ack`) BEFORE staging
+    /// the WAL record (register-before-stage, CQ-1), since that is where the
+    /// stream's `Arc<StreamState>` is in hand. Deduped by `stream_id`: re-touching
+    /// a stream just refreshes the handle, so `checkpoint()` reads each touched
+    /// stream's current tail + `fdatasync`s its file exactly once.
     ///
-    /// Keeping this off `reserve_and_stage` keeps the WAL ignorant of
-    /// `StreamState` (the WAL only ever needs `stream_id`).
-    pub fn register_dirty(&self, stream_id: u64, file: Arc<std::fs::File>) {
-        self.dirty.lock().unwrap().insert(stream_id, file);
+    /// `reserve_and_stage` itself stays ignorant of `StreamState` (it only ever
+    /// needs `stream_id`); the `StreamState` is needed solely by `checkpoint`, to
+    /// read the durable tail it records and the file it fsyncs.
+    pub fn register_dirty(&self, stream_id: u64, st: Arc<StreamState>) {
+        self.dirty.lock().unwrap().insert(stream_id, st);
     }
 
     /// **Checkpoint** (spec §7), per shard, non-blocking w.r.t. acks:
@@ -429,14 +455,31 @@ impl Shard {
         // 2. Drain the dirty set atomically, then fdatasync each touched file.
         //    Draining first means a concurrent append re-registers into a fresh
         //    map for the next checkpoint — no touched stream is silently dropped.
-        let touched: Vec<Arc<std::fs::File>> = {
+        //    For each touched stream we capture its current logical `Shared.tail`
+        //    (the durable end the upcoming fdatasync will make durable on disk)
+        //    and its live `Shared.file` (the handle to fsync). The tail is read
+        //    BEFORE the fsync; the fdatasync flushes every page already in the
+        //    file's cache, so the file is durable up to AT LEAST this tail
+        //    afterwards (a later concurrent append only extends past it and lands
+        //    in the next checkpoint). Recording this tail is conservative-safe.
+        let touched: Vec<(u64, u64, Arc<std::fs::File>)> = {
             let mut g = self.dirty.lock().unwrap();
-            std::mem::take(&mut *g).into_values().collect()
+            std::mem::take(&mut *g)
+                .into_iter()
+                .map(|(id, st)| {
+                    let s = st.shared.read().unwrap();
+                    (id, s.tail, Arc::clone(&s.file))
+                })
+                .collect()
         };
         // Run the (potentially blocking) fdatasyncs off the async runtime so a
         // slow disk can't stall this task's executor thread. Ordering preserved:
-        // we await all per-stream fsyncs before touching the WAL.
-        let to_sync = touched;
+        // we await all per-stream fsyncs before touching the WAL. We move only the
+        // files into the blocking task; the (stream_id, durable_tail) pairs stay
+        // here to merge into the persisted tail map after the fsyncs succeed.
+        let tails: Vec<(u64, u64)> = touched.iter().map(|(id, tail, _)| (*id, *tail)).collect();
+        let to_sync: Vec<Arc<std::fs::File>> =
+            touched.into_iter().map(|(_, _, f)| f).collect();
         tokio::task::spawn_blocking(move || -> io::Result<()> {
             for f in &to_sync {
                 f.sync_data()?;
@@ -446,19 +489,96 @@ impl Shard {
         .await
         .expect("checkpoint fdatasync task panicked")?;
 
-        // 3. Persist checkpoint_lsn (durably) AFTER the per-stream files are
-        //    fsync'd, so the recorded floor only ever covers bytes already on
-        //    disk in their own files.
+        // 3a. Persist the CUMULATIVE per-stream durable-tail map (task 11b) AFTER
+        //     the per-stream files are fsync'd, and BEFORE recycle — same hard
+        //     ordering as `checkpoint_lsn`. Merge this checkpoint's touched tails
+        //     into the previously-persisted map so a stream touched in an earlier
+        //     checkpoint (but not this one) keeps its last durable tail. `tmp` +
+        //     rename + fsync makes the map itself crash-durable, so when recycle
+        //     deletes the WAL records below the floor, recovery can still truncate
+        //     a recycled stream's torn per-stream-file tail to its durable tail.
+        self.persist_durable_tails(&tails)?;
+
+        // 3b. Persist checkpoint_lsn (durably) AFTER the per-stream files are
+        //     fsync'd, so the recorded floor only ever covers bytes already on
+        //     disk in their own files.
         let ckpt_path = self.dir.join(CHECKPOINT_FILE);
         let tmp = self.dir.join(format!("{CHECKPOINT_FILE}.tmp"));
         std::fs::write(&tmp, checkpoint_lsn.to_string())?;
         std::fs::rename(&tmp, &ckpt_path)?;
 
         // 4. Recycle: unlink WAL segments fully below checkpoint_lsn. This is the
-        //    LAST step — strictly after the per-stream fsyncs above.
+        //    LAST step — strictly after the per-stream fsyncs AND the durable-tail
+        //    map persist above.
         self.recycle_below(checkpoint_lsn)?;
 
         Ok(checkpoint_lsn)
+    }
+
+    /// Merge `touched` `(stream_id, durable_tail)` pairs into the persisted
+    /// CUMULATIVE per-shard durable-tail map (`<shard_dir>/tails`) and rewrite it
+    /// durably (`tmp` + rename + fsync the dir-synced file). Called from
+    /// `checkpoint` AFTER the touched per-stream files are fdatasync'd and BEFORE
+    /// the WAL is recycled, so a torn per-stream-file tail can always be truncated
+    /// to its durable tail even after its WAL records are gone (task 11b).
+    ///
+    /// Cumulative-merge: read the existing map, overwrite each touched stream's
+    /// entry with its newest durable tail (`max`, so a re-checkpointed earlier tail
+    /// can never regress the recorded value), keep every untouched stream's last
+    /// recorded tail.
+    fn persist_durable_tails(&self, touched: &[(u64, u64)]) -> io::Result<()> {
+        if touched.is_empty() && !self.dir.join(TAILS_FILE).exists() {
+            // Nothing touched and no prior map: nothing to persist.
+            return Ok(());
+        }
+        let mut map = Self::read_durable_tails_at(&self.dir);
+        for &(id, tail) in touched {
+            let slot = map.entry(id).or_insert(0);
+            *slot = (*slot).max(tail);
+        }
+        // Serialize as `stream_id durable_tail` lines (sorted for a deterministic,
+        // diff-friendly file). Plain decimal text, matching the `checkpoint` file.
+        let mut entries: Vec<(u64, u64)> = map.into_iter().collect();
+        entries.sort_unstable();
+        let mut body = String::with_capacity(entries.len() * 16);
+        for (id, tail) in entries {
+            body.push_str(&format!("{id} {tail}\n"));
+        }
+        let path = self.dir.join(TAILS_FILE);
+        let tmp = self.dir.join(format!("{TAILS_FILE}.tmp"));
+        std::fs::write(&tmp, &body)?;
+        // fsync the tmp file's bytes before the rename so the durable-tail map is
+        // crash-durable BEFORE recycle (the whole point of 11b).
+        std::fs::File::open(&tmp)?.sync_all()?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    /// Read the persisted per-shard durable-tail map from `<dir>/tails`. Returns
+    /// an empty map when the file is absent (no checkpoint recorded tails yet).
+    /// Malformed lines are skipped (defensive; the file is only written by
+    /// `persist_durable_tails`).
+    fn read_durable_tails_at(dir: &Path) -> HashMap<u64, u64> {
+        let mut map = HashMap::new();
+        if let Ok(s) = std::fs::read_to_string(dir.join(TAILS_FILE)) {
+            for line in s.lines() {
+                let mut it = line.split_whitespace();
+                if let (Some(a), Some(b)) = (it.next(), it.next()) {
+                    if let (Ok(id), Ok(tail)) = (a.parse::<u64>(), b.parse::<u64>()) {
+                        map.insert(id, tail);
+                    }
+                }
+            }
+        }
+        map
+    }
+
+    /// Public reader for recovery: the persisted per-stream durable-tail map for
+    /// this shard (task 11b). Empty when no checkpoint has recorded tails. Recovery
+    /// seeds each stream's frontier from this map so a stream whose WAL records were
+    /// all recycled still has its torn per-stream-file tail truncated.
+    pub fn read_durable_tails(&self) -> HashMap<u64, u64> {
+        Self::read_durable_tails_at(&self.dir)
     }
 
     /// Unlink every WAL segment file whose entire lsn range is `< floor`, never
@@ -845,6 +965,20 @@ mod tests {
         p
     }
 
+    /// Minimal stream config for the checkpoint dirty-set test.
+    fn ckpt_test_cfg() -> crate::store::StreamConfig {
+        crate::store::StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        }
+    }
+
     /// Collect every on-disk segment's `(start_lsn, path)` sorted by start lsn.
     fn segs_on_disk(dir: &Path) -> Vec<(u64, PathBuf)> {
         let mut v: Vec<(u64, PathBuf)> = std::fs::read_dir(dir)
@@ -1200,26 +1334,33 @@ mod tests {
             async move { s.run_committer().await }
         });
 
-        // Stage a couple of records and register a touched per-stream file.
-        let l1 = sh.reserve_and_stage(RecordKind::Append, 42, 0, b"hello").unwrap();
-        let l2 = sh.reserve_and_stage(RecordKind::Append, 42, 5, b"world").unwrap();
-        // A stand-in for the stream's own file: write bytes WITHOUT fsync, then
-        // register it. checkpoint() must fdatasync it (we assert the bytes land).
-        let stream_file_path = dir.join("stream-42.data");
-        let f = Arc::new(
-            std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&stream_file_path)
-                .unwrap(),
-        );
+        // Build a real stream via the store so the dirty set can hold its
+        // `Arc<StreamState>` (checkpoint reads `Shared.tail` + `Shared.file`).
+        let store = crate::store::Store::new_with_tier(
+            dir.clone(),
+            crate::tier::TierConfig::default(),
+        )
+        .unwrap();
+        let st = match store.create("dirty-stream", ckpt_test_cfg(), None, 0).unwrap() {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let sid = st.id;
+        let stream_file_path = st.file_path.clone();
+
+        // Stage a couple of records and write the per-stream bytes WITHOUT fsync,
+        // then register the stream. checkpoint() must fdatasync its file (we assert
+        // the bytes land) and record its durable tail.
+        let l1 = sh.reserve_and_stage(RecordKind::Append, sid, 0, b"hello").unwrap();
+        let l2 = sh.reserve_and_stage(RecordKind::Append, sid, 5, b"world").unwrap();
         {
+            let f = Arc::clone(&st.shared.read().unwrap().file);
             use std::io::Write;
             (&*f).write_all(b"helloworld").unwrap();
+            // Reflect the written bytes in the logical tail so checkpoint records it.
+            st.shared.write().unwrap().tail = 10;
         }
-        sh.register_dirty(42, Arc::clone(&f));
+        sh.register_dirty(sid, Arc::clone(&st));
 
         sh.wait_durable(l2).await;
         assert!(sh.durable_lsn() >= l2, "both records durable in the WAL");
