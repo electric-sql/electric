@@ -484,6 +484,12 @@ impl Store {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name.ends_with(".meta.tmp") {
                 let _ = std::fs::remove_file(&p);
+            } else if name.ends_with(".compact.tmp") {
+                // A compaction temp file. It belongs to its data file and is
+                // handled by `recover_one_inner` (promoted when it holds the
+                // durable residual for a pending intent, else removed there). Do
+                // NOT treat it as an orphan data file — that would delete the
+                // durable residual before recovery can promote it.
             } else if name.ends_with(".meta") {
                 let data_path = PathBuf::from(p.as_os_str().to_str().unwrap().trim_end_matches(".meta"));
                 if data_path.exists() {
@@ -561,8 +567,32 @@ impl Store {
             },
             None => None,
         };
-        // Clean up any leftover compaction temp file from a crash mid-rewrite.
-        let _ = std::fs::remove_file(data_path.with_extension("compact.tmp"));
+        // A `pending_compaction` intent means a compaction crashed mid-flight. The
+        // temp file (`compact.tmp`) holds the fsynced full residual `[cut, tail)`
+        // (step 1's `sync_all` is NOT gated by relaxed), persisted durably BEFORE
+        // the intent (`tier.rs`). So when the intent is durable, an intact temp is
+        // the source of truth — finish the swap by promoting it. We must NOT trust
+        // `p.tail - old_file_size` against the OLD live file: under `relaxed` the
+        // old file's tail was never fsynced, so its on-disk size can be short,
+        // which would both over-report `tail` AND skew `file_base` (C3).
+        let tmp_path = data_path.with_extension("compact.tmp");
+        if let Some(p) = &meta.pending_compaction {
+            let want_residual = p.tail.checked_sub(p.new_file_base);
+            let tmp_len = std::fs::metadata(&tmp_path).ok().map(|m| m.len());
+            if let (Some(want), Some(have)) = (want_residual, tmp_len) {
+                if have == want {
+                    // Crash before the rename: promote the durable temp into place
+                    // (idempotent — completes step 3). Now the live file IS the full
+                    // residual regardless of the short un-synced old file.
+                    let _ = std::fs::rename(&tmp_path, data_path);
+                    let _ = fsync_parent_dir(data_path);
+                }
+                // else: a partial temp (intent not yet covering it) — fall through
+                // and treat as post-rename (live file authoritative).
+            }
+        }
+        // Remove any temp not promoted above (post-rename leftover, or a partial).
+        let _ = std::fs::remove_file(&tmp_path);
         let file = Arc::new(
             OpenOptions::new()
                 .read(true)
@@ -572,13 +602,26 @@ impl Store {
         );
         let written = file.metadata().ok()?.len();
         // `file_base` is the live file's logical start. With a `pending_compaction`
-        // intent the rewrite may have crashed mid-flight; because `tail` was frozen
-        // under the appender lock, the on-disk file ends at `tail` on either side of
-        // the rename, so `file_base = tail - file_size` recovers the right base for
-        // whichever file is present. Otherwise trust the persisted `file_base`
-        // (defaulting to `base_offset` for pre-compaction sidecars).
+        // intent and the durable temp promoted above, the live file IS the full
+        // residual `[new_file_base, tail)` — so `file_base = new_file_base`, derived
+        // from the durable cut and NOT from `tail - file_size` (a short un-synced
+        // file can't skew the mapping). If the temp was already gone (post-rename)
+        // the live file is likewise the residual, detected by its size matching
+        // `tail - new_file_base`. Only if neither holds (a full pre-rename old file
+        // with no recoverable temp — not reachable once the intent is durable,
+        // since the temp is fsynced first) do we fall back to the old
+        // `tail - file_size` mapping. Without an intent, trust the persisted
+        // `file_base` (defaulting to `base_offset` for pre-compaction sidecars).
         let (file_base, tail) = match meta.pending_compaction {
-            Some(p) if p.tail >= written => (p.tail - written, p.tail),
+            Some(p) if written == p.tail.saturating_sub(p.new_file_base) => {
+                // Live file is the residual (temp promoted, or crash after rename).
+                (p.new_file_base, p.tail)
+            }
+            Some(p) if p.tail >= written => {
+                // Fallback: a full old file still in place with no durable temp.
+                (p.tail - written, p.tail)
+            }
+            Some(p) => (p.new_file_base, p.new_file_base + written),
             _ => {
                 let fb = meta.file_base.unwrap_or(meta.base_offset);
                 (fb, fb + written)
@@ -1528,6 +1571,84 @@ mod tier_tests {
     #[tokio::test]
     async fn recovery_pending_intent_after_rename() {
         recover_with_pending_intent("pend-after", true).await;
+    }
+
+    /// C3 regression: under `relaxed`, a crash *after* the compaction intent is
+    /// persisted but *before* the rename leaves the OLD live file in place with an
+    /// un-fsynced (and thus possibly short) tail, while the fsynced `compact.tmp`
+    /// holds the full residual `[cut, tail)`. Recovery must prefer the durable temp
+    /// file — trusting `p.tail` against the short old file skews `file_base` and
+    /// over-reports the tail. Asserts no offset skew: the recovered live region
+    /// maps `[cut, tail)` exactly and the full logical range reads byte-identical.
+    #[tokio::test]
+    async fn recovery_pending_intent_prefers_fsynced_temp_when_old_file_short() {
+        let dir = tmp_dir("pend-relaxed-short");
+        let total = 300 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        let (sealed, tail, file_path) = {
+            let mut cfg = local_tier(&dir, 64 * 1024);
+            cfg.compact_bytes = 0; // craft the crash state by hand
+            let store = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+            let st = match store.create("s/pend", octet_cfg(), None, 0).unwrap() {
+                CreateResult::Created(s) => s,
+                _ => panic!("create failed"),
+            };
+            for chunk in payload.chunks(8 * 1024) {
+                append_wire(&st, chunk).await;
+            }
+            store.maybe_seal(&st).await; // seals, no compaction
+            let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
+            let tail = st.shared.read().unwrap().tail;
+            // compact step 1: write the FULL residual [sealed, tail) to compact.tmp
+            // and fsync it (the temp fsync is NOT gated by relaxed).
+            let residual = std::fs::read(&st.file_path).unwrap()[sealed as usize..].to_vec();
+            let tmp = st.file_path.with_extension("compact.tmp");
+            {
+                use std::io::Write;
+                let mut f = std::fs::File::create(&tmp).unwrap();
+                f.write_all(&residual).unwrap();
+                f.sync_all().unwrap();
+            }
+            // compact step 2: persist the intent durably.
+            *st.compaction.lock().unwrap() = Some(PendingCompaction {
+                new_file_base: sealed,
+                tail,
+            });
+            let stc = st.clone();
+            tokio::task::spawn_blocking(move || write_meta_sync(&stc, true))
+                .await
+                .unwrap()
+                .unwrap();
+            (sealed, tail, st.file_path.clone())
+        };
+        // Crash BEFORE the rename, under relaxed: the OLD live file is still in
+        // place but lost its un-fsynced suffix — simulate by truncating it short
+        // (drop the last 16 KiB of the un-synced tail). The temp holds the truth.
+        {
+            let full = std::fs::read(&file_path).unwrap();
+            let short = full.len() - 16 * 1024;
+            std::fs::write(&file_path, &full[..short]).unwrap();
+        }
+
+        let mut cfg = local_tier(&dir, 64 * 1024);
+        cfg.compact_bytes = 0;
+        let store2 = Arc::new(Store::new_with_tier(dir.clone(), cfg).unwrap());
+        let st = store2.get("s/pend").expect("stream recovered");
+        let (rtail, rfb) = {
+            let s = st.shared.read().unwrap();
+            (s.tail, s.file_base)
+        };
+        // No offset skew: file_base maps to the sealed watermark (the residual's
+        // logical start), and the tail is the frozen full tail — both from the
+        // durable temp, not the short old file.
+        assert_eq!(rfb, sealed, "file_base recovered to sealed watermark, no skew");
+        assert_eq!(rtail, tail, "tail recovered to the frozen full value");
+        let live_size = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(live_size, tail - sealed, "live file is the full residual");
+        let got = read_logical(&st, 0, total as u64).await;
+        assert_eq!(got, payload, "full read exact after relaxed crash-before-rename");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
