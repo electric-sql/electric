@@ -429,6 +429,9 @@ pub struct Store {
     pub tier_config: crate::tier::TierConfig,
     /// Remote object-storage backend, present only when tiering is enabled.
     pub blobstore: Option<crate::blobstore::SharedBlobStore>,
+    /// The sharded write-ahead log, present only under `--durability wal`. `None`
+    /// for `strict`/`fast`, which keeps the WAL inert and those paths unchanged.
+    pub wal: Option<Arc<crate::wal::walset::WalSet>>,
 }
 
 pub enum CreateResult {
@@ -464,6 +467,7 @@ impl Store {
             next_id: AtomicU64::new(seed & MAX_SAFE_INT),
             tier_config,
             blobstore,
+            wal: None,
         };
         store.recover(&streams_dir)?;
         Ok(store)

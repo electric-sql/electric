@@ -39,20 +39,42 @@ fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
-/// Durability mode for the append/close hot path. Default strict (`false`): ack only
-/// after the covering `fdatasync` (`SyncCoalescer::sync_to`). Relaxed (`true`): ack on
-/// the page-cache write, skipping the hot-path `fdatasync` — durability then comes from
-/// S3-offload (cold) + future replication (hot tail). Set once at startup from
+/// Durability mode for the append/close hot path. Set once at startup from
 /// `--durability`; mirrors the `set_splice_appends` / `set_read_offload` flag pattern.
-static DURABILITY_RELAXED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-pub fn set_durability_relaxed(relaxed: bool) {
-    DURABILITY_RELAXED.store(relaxed, std::sync::atomic::Ordering::Relaxed);
+///
+/// - `Strict` (default): ack only after the covering `fdatasync`
+///   (`SyncCoalescer::sync_to`).
+/// - `Wal`: the per-stream file write (page cache) is the read view as today, then
+///   the bytes are staged into the sharded WAL and the ack waits on the WAL shard's
+///   group-commit `fdatasync` instead of a per-stream one.
+/// - `Fast`: ack on the page-cache write, skipping the hot-path `fdatasync` —
+///   durability then comes from S3-offload (cold) + future replication (hot tail).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DurabilityMode {
+    Strict,
+    Wal,
+    Fast,
 }
 
-pub fn durability_relaxed() -> bool {
-    DURABILITY_RELAXED.load(std::sync::atomic::Ordering::Relaxed)
+/// Process-global durability mode, encoded as a `u8` (`Strict` is the zero default so
+/// an unset flag is strict). Same single-`AtomicU8` choke-point pattern the bool used.
+static DURABILITY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn set_durability(mode: DurabilityMode) {
+    let v = match mode {
+        DurabilityMode::Strict => 0,
+        DurabilityMode::Wal => 1,
+        DurabilityMode::Fast => 2,
+    };
+    DURABILITY_MODE.store(v, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn durability() -> DurabilityMode {
+    match DURABILITY_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => DurabilityMode::Wal,
+        2 => DurabilityMode::Fast,
+        _ => DurabilityMode::Strict,
+    }
 }
 
 const SSE_MAX_DURATION: Duration = Duration::from_secs(60);
@@ -513,7 +535,7 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let target = ap.written;
                 let file = ap.file.clone();
                 drop(ap);
-                if maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
+                if maybe_sync_on_ack(durability(), &store, &st, &wire, file, target).await.is_err() {
                     return text_response(500, "fsync failed");
                 }
             }
@@ -579,20 +601,41 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
     });
 }
 
-/// Gate the covering data `fdatasync` on the durability mode. `strict`
-/// (`relaxed == false`) awaits `sync_to` exactly as before; `relaxed` returns `Ok`
-/// without syncing — the ack happens on the page-cache write. Every append/close
-/// `sync_to` site routes through this one helper so all three are gated together.
+/// Gate the ack's durability on the durability mode. Every append/close `sync_to`
+/// site routes through this one helper so all three modes are decided in one place.
+///
+/// - `Strict`: await the covering per-stream `fdatasync` (`sync_to`), exactly as before.
+/// - `Fast`: return `Ok` without syncing — the ack happens on the page-cache write.
+/// - `Wal`: the per-stream file write already happened upstream (the read view); stage
+///   the wire bytes into the stream's WAL shard and await the shard's group-commit
+///   `fdatasync`. `stream_offset` is the pre-append logical offset = `target − wire.len()`.
+///
+/// `Strict`/`Fast` ignore `store`/`wire`, so those paths stay byte-for-byte unchanged.
 async fn maybe_sync_on_ack(
-    relaxed: bool,
+    mode: DurabilityMode,
+    store: &Arc<Store>,
     st: &StreamState,
+    wire: &Bytes,
     file: std::sync::Arc<std::fs::File>,
     target: u64,
 ) -> std::io::Result<()> {
-    if relaxed {
-        return Ok(());
+    match mode {
+        DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
+        DurabilityMode::Fast => Ok(()),
+        DurabilityMode::Wal => {
+            let wal = store.wal.as_ref().expect("wal mode requires Store.wal");
+            let shard = wal.shard_for(st.id);
+            let stream_offset = target - wire.len() as u64;
+            let lsn = shard.reserve_and_stage(
+                crate::wal::codec::RecordKind::Append,
+                st.id,
+                stream_offset,
+                wire,
+            );
+            shard.wait_durable(lsn).await;
+            Ok(())
+        }
     }
-    st.sync.sync_to(file, st, target).await
 }
 
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
@@ -947,7 +990,9 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
 
     // Covering fsync failed: not durable. Error out (and skip the close commit
     // below) rather than ack 2xx.
-    if !wire.is_empty() && maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
+    if !wire.is_empty()
+        && maybe_sync_on_ack(durability(), &store, &st, &wire, file, target).await.is_err()
+    {
         ret!(text_response(500, "fsync failed"), Conflict);
     }
 
@@ -1097,6 +1142,13 @@ where
     // means "empty append" → normal path returns the right 400/204.
     let close_req = req.header_is_true(H_CLOSED);
     if req.content_length == 0 || close_req {
+        return Fallback(fallback_marker);
+    }
+    // The splice fast path moves bytes socket→file in the kernel, so the body never
+    // enters userspace. WAL mode must stage those bytes into the WAL, which requires
+    // the wire buffer in userspace; fall back to the normal append path (which has
+    // `wire`) when WAL is selected. `strict`/`fast` are unaffected.
+    if matches!(durability(), DurabilityMode::Wal) {
         return Fallback(fallback_marker);
     }
     if req.content_length as usize > crate::api::MAX_BODY_BYTES {
@@ -1257,7 +1309,12 @@ where
 
     let target = ap.written;
     drop(ap);
-    if maybe_sync_on_ack(durability_relaxed(), &st, file, target).await.is_err() {
+    // WAL mode is excluded above (splice bypasses userspace), so this site only ever
+    // runs `Strict`/`Fast`, which ignore the `wire` argument — pass an empty one.
+    if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target)
+        .await
+        .is_err()
+    {
         // Not durable. Body was fully consumed, so keep-alive framing is intact.
         return Done(text_response(500, "fsync failed"));
     }
@@ -2153,13 +2210,15 @@ mod durability_tests {
 
     #[test]
     fn durability_flag_defaults_strict_and_flips() {
-        // Process-global flag. This is the ONLY test that mutates it; it resets at the
-        // end so no append-path test (which reads it) is perturbed.
-        assert!(!durability_relaxed(), "default must be strict");
-        set_durability_relaxed(true);
-        assert!(durability_relaxed(), "set_durability_relaxed(true) takes effect");
-        set_durability_relaxed(false); // reset
-        assert!(!durability_relaxed());
+        // Process-global flag. This test mutates it; it resets at the end so no
+        // append-path test (which reads it) is perturbed.
+        assert_eq!(durability(), DurabilityMode::Strict, "default must be strict");
+        set_durability(DurabilityMode::Wal);
+        assert_eq!(durability(), DurabilityMode::Wal, "set_durability(Wal) takes effect");
+        set_durability(DurabilityMode::Fast);
+        assert_eq!(durability(), DurabilityMode::Fast, "set_durability(Fast) takes effect");
+        set_durability(DurabilityMode::Strict); // reset
+        assert_eq!(durability(), DurabilityMode::Strict);
     }
 
     #[tokio::test]
@@ -2198,7 +2257,9 @@ mod durability_tests {
         let target = ap.written;
         let file = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(false, &st, file, target).await.unwrap();
+        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target)
+            .await
+            .unwrap();
         assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
 
         // Append 5 more; RELAXED must skip the fsync → watermark unchanged.
@@ -2207,10 +2268,99 @@ mod durability_tests {
         let target2 = ap.written;
         let file2 = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(true, &st, file2, target2).await.unwrap();
+        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2)
+            .await
+            .unwrap();
         assert_eq!(st.sync.synced(), target, "relaxed must skip fsync (watermark unchanged)");
         assert!(target2 > target, "the bytes were still written (tail advanced)");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn wal_mode_acks_after_durable() {
+        use crate::store::{CreateResult, Store, StreamConfig};
+        use crate::tier::TierConfig;
+        use crate::wal::walset::WalSet;
+
+        let dir = std::env::temp_dir().join(format!(
+            "ds-wal-mode-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Store with a 1-shard WalSet attached.
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("w", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // Write the per-stream file exactly as the handler does.
+        let wire = bytes::Bytes::from_static(b"hello-wal");
+        let mut ap = st.appender.lock().await;
+        write_wire(&st, &mut ap, &wire).unwrap();
+        let target = ap.written;
+        let file = ap.file.clone();
+        drop(ap);
+
+        // The bytes are in the per-stream file IMMEDIATELY (page cache), before ack.
+        assert_eq!(
+            std::fs::read(&st.file_path).unwrap(),
+            wire.as_ref(),
+            "per-stream file holds the bytes before the WAL ack"
+        );
+
+        // NO committer spawned yet → the shard's durable_lsn cannot advance, so the
+        // wal-mode helper must NOT return. Prove the ack is gated.
+        set_durability(DurabilityMode::Wal);
+        let ack = maybe_sync_on_ack(
+            DurabilityMode::Wal,
+            &store,
+            &st,
+            &wire,
+            std::sync::Arc::clone(&file),
+            target,
+        );
+        tokio::pin!(ack);
+        tokio::select! {
+            biased;
+            _ = &mut ack => panic!("wal ack returned before the committer made the append durable"),
+            _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+        }
+
+        // Now spawn the committer; the staged append becomes durable and the ack resolves.
+        wal.spawn_committers();
+        tokio::time::timeout(std::time::Duration::from_secs(5), ack)
+            .await
+            .expect("wal ack must resolve once the committer advances durable_lsn")
+            .unwrap();
+
+        // The shard's durable_lsn now covers the single staged append (lsn 1).
+        assert!(
+            wal.shard_for(st.id).durable_lsn() >= 1,
+            "durable_lsn covers the append after ack"
+        );
+
+        set_durability(DurabilityMode::Strict); // reset the global
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

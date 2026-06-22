@@ -128,10 +128,13 @@ fn main() {
             "--durability" => {
                 let v = val(args.next(), "--durability");
                 match v.as_str() {
-                    "strict" => handlers::set_durability_relaxed(false),
-                    "relaxed" => handlers::set_durability_relaxed(true),
+                    "strict" => handlers::set_durability(handlers::DurabilityMode::Strict),
+                    // `relaxed` is the legacy spelling of the page-cache-only mode,
+                    // now `fast`; keep it as an alias so existing deploys don't break.
+                    "fast" | "relaxed" => handlers::set_durability(handlers::DurabilityMode::Fast),
+                    "wal" => handlers::set_durability(handlers::DurabilityMode::Wal),
                     _ => {
-                        eprintln!("--durability must be strict|relaxed");
+                        eprintln!("--durability must be strict|wal|fast");
                         std::process::exit(2);
                     }
                 }
