@@ -174,8 +174,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
     |> list_shapes()
     |> Enum.flat_map(fn {handle, shape} ->
       case id_for_handle(stack_id, handle) do
-        {:ok, id} -> [{handle, id, shape}]
-        :error -> []
+        {:ok, id} ->
+          [{handle, id, shape}]
+
+        :error ->
+          # populate_shape_meta_table/2 mints/reuses an id for every current
+          # shape, so this is only reachable if the shape was removed between
+          # list_shapes/1 and this lookup. Log it so that race is visible.
+          Logger.warning("Skipping shape with no id mapping (concurrently removed?)",
+            shape_handle: handle
+          )
+
+          []
       end
     end)
   end
