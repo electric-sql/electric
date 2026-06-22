@@ -228,6 +228,10 @@ fn main() {
             // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
             // durable_lsn, never on checkpoint).
             spawn_checkpoint_ticker(Arc::clone(&walset));
+            // 1 Hz per-shard `WAL_STATS` emitter (spec §11): batch-size
+            // distribution + durability gauges. No-op unless built with
+            // `--features telemetry`; off the hot commit/append path.
+            wal::telemetry::spawn_emitter(Arc::clone(&walset));
         }
 
         let addr: SocketAddr = (host, port).into();

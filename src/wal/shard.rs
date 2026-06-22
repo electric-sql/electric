@@ -38,6 +38,7 @@ use tokio::sync::{watch, Notify};
 
 use super::codec::{encode_into, Record, RecordKind};
 use super::segment::{seg_path, FileSegment, SegmentWriter, SEGMENT_BYTES};
+use super::telemetry::{ShardStats, StatsSnapshot};
 
 /// Mutable, lock-guarded shard state.
 struct ShardInner {
@@ -90,6 +91,11 @@ pub struct Shard {
     /// streams — *before* recycling the WAL. This is decoupled from
     /// `reserve_and_stage`, which never needs the `StreamState`.
     dirty: Mutex<HashMap<u64, Arc<std::fs::File>>>,
+    /// Per-shard batch-size + durability counters (spec §11). Updated once per
+    /// successful committer `fdatasync` (`record_batch`) — cheap relaxed atomics,
+    /// no lock/alloc/syscall on the commit path. Read off-path by the 1 Hz
+    /// `WAL_STATS` emitter.
+    stats: ShardStats,
     /// Test-only seam: invoked at the very start of `reserve_and_stage`, before
     /// any lsn is reserved/staged (i.e. before this record's lsn can ever become
     /// durable). Lets a test assert the per-stream file was ALREADY registered
@@ -130,6 +136,7 @@ impl Shard {
             notify: Notify::new(),
             dir,
             dirty: Mutex::new(HashMap::new()),
+            stats: ShardStats::default(),
             #[cfg(test)]
             on_stage: Mutex::new(None),
         }))
@@ -483,6 +490,43 @@ impl Shard {
         total
     }
 
+    /// Number of on-disk WAL segment files for this shard (the `segments` gauge,
+    /// spec §11). Like [`Shard::wal_size_bytes`] this `read_dir`s the shard dir,
+    /// so it is called **only from the 1 Hz emitter**, never the commit path
+    /// (CQ-2). A growing `segments` with a flat `checkpoint_lsn` ⇒ checkpoint is
+    /// not keeping up.
+    pub fn wal_segments(&self) -> u64 {
+        let mut n = 0u64;
+        if let Ok(rd) = std::fs::read_dir(&self.dir) {
+            for entry in rd.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("wal") {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// Snapshot this shard's batch-size + commit counters for the emitter
+    /// (off-path; relaxed loads). See [`super::telemetry::StatsSnapshot`].
+    pub fn stats_snapshot(&self) -> StatsSnapshot {
+        self.stats.snapshot()
+    }
+
+    /// Current `durable_lsn` — the highest lsn made durable + acked. Cheap
+    /// (`watch::borrow`), read by the emitter and by [`Shard::checkpoint`].
+    pub fn durable_lsn_now(&self) -> u64 {
+        *self.durable_tx.borrow()
+    }
+
+    /// The shard's `tail_lsn` — the highest lsn **assigned** so far (`next_lsn - 1`,
+    /// `0` when empty). The gap `tail_lsn - durable_lsn` is the in-flight depth the
+    /// committer is draining. Cheap (one short lock).
+    pub fn tail_lsn(&self) -> u64 {
+        self.inner.lock().unwrap().next_lsn.saturating_sub(1)
+    }
+
     /// Await until this shard's `durable_lsn >= lsn`.
     pub async fn wait_durable(&self, lsn: u64) {
         let mut rx = self.durable_tx.subscribe();
@@ -541,6 +585,12 @@ impl Shard {
                         // fsync flushed all of the segment's dirty pages, so they
                         // are durable. (A record that became written *during* the
                         // fsync is picked up by the next iteration's notify.)
+                        //
+                        // BATCH SIZE (spec §11): the records THIS fdatasync made
+                        // durable = how far `durable_lsn` advances now =
+                        // `watermark - durable`. Recorded once per commit (not per
+                        // append) — a few relaxed atomics, off no critical lock.
+                        self.stats.record_batch(watermark - durable);
                         let _ = self.durable_tx.send(watermark);
                         // Loop again immediately (do not await) in case the
                         // watermark advanced further while we were fsyncing.
@@ -808,6 +858,41 @@ mod tests {
         assert!(seg_path(&dir, 1).exists(), "WAL segment retained (not recycled)");
 
         h.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn committer_records_batch_size_per_fdatasync() {
+        // Stage K records BEFORE the committer runs so a single fdatasync makes all
+        // K durable in one commit. Assert last_batch == K and avg == records/fsync.
+        const K: u64 = 6;
+        let dir = tmp("batch-stats");
+        let sh = Shard::open(dir.clone()).unwrap();
+
+        // Stage K records while no committer is running → they accumulate as a
+        // single not-yet-durable batch above durable_lsn (0).
+        let mut last = 0;
+        for i in 0..K {
+            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 4, b"data");
+        }
+        assert_eq!(sh.durable_lsn_now(), 0, "nothing durable until the committer runs");
+
+        // Now run the committer: one fdatasync should make all K durable at once.
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        sh.wait_durable(last).await;
+        h.abort();
+
+        let snap = sh.stats_snapshot();
+        assert_eq!(snap.fsync_count, 1, "a single fdatasync committed the whole batch");
+        assert_eq!(snap.last_batch, K, "last_batch == records made durable by that fsync");
+        assert_eq!(snap.records_committed, K);
+        assert_eq!(snap.avg(), K as f64, "avg == records_committed / fsync_count");
+        assert_eq!(snap.max(), K);
+        assert_eq!(sh.tail_lsn(), K, "tail_lsn == highest assigned lsn");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

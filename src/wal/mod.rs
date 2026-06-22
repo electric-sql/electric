@@ -15,4 +15,5 @@ pub mod codec;
 pub mod recovery;
 pub mod segment;
 pub mod shard;
+pub mod telemetry;
 pub mod walset;
