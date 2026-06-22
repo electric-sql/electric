@@ -46,7 +46,6 @@ pub trait SegmentWriter: Send + Sync {
 
 /// A WAL segment backed by an ordinary file, `fallocate`'d to full size.
 pub struct FileSegment {
-    path: PathBuf,
     file: std::fs::File,
 }
 
@@ -82,12 +81,7 @@ impl FileSegment {
             file.set_len(size)?;
         }
 
-        Ok(FileSegment { path, file })
-    }
-
-    /// The segment's path on disk.
-    pub fn path(&self) -> &Path {
-        &self.path
+        Ok(FileSegment { file })
     }
 }
 

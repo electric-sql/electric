@@ -553,14 +553,15 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 }
                 let target = ap.written;
                 let file = ap.file.clone();
-                // Logical pre-append offset for THIS append. Read `file_base` while
-                // still holding the appender lock so a concurrent compaction (which
-                // raises `file_base` and resets `ap.written` together under this same
-                // lock) cannot desync it from `target`.
-                let stream_offset =
-                    st.shared.read().unwrap().file_base + target - wire.len() as u64;
+                let mode = durability();
+                // Logical pre-append offset for THIS append — needed ONLY by the Wal
+                // arm. Read `file_base` (under the appender lock so a concurrent
+                // compaction that raises `file_base` + resets `ap.written` together
+                // can't desync it from `target`) ONLY in Wal mode. Strict/Fast take
+                // NO `st.shared` lock here — byte-for-byte the pre-WAL hot path.
+                let stream_offset = wal_stream_offset(mode, &st, target, &wire);
                 drop(ap);
-                if maybe_sync_on_ack(durability(), &store, &st, &wire, file, target, stream_offset)
+                if maybe_sync_on_ack(mode, &store, &st, &wire, file, target, stream_offset)
                     .await
                     .is_err()
                 {
@@ -636,14 +637,38 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
 /// - `Fast`: return `Ok` without syncing — the ack happens on the page-cache write.
 /// - `Wal`: the per-stream file write already happened upstream (the read view); stage
 ///   the wire bytes into the stream's WAL shard and await the shard's group-commit
-///   `fdatasync`. `stream_offset` is the **logical** pre-append offset for THIS append
-///   (`file_base + file-relative pre-append position`), computed by the caller from the
-///   SAME append context as `target` so a concurrent compaction/appender can't desync it.
-///   Recovery does `file_pos = stream_offset − file_base`, so for forked/compacted
-///   streams (`file_base > 0`) this MUST be logical, not the file-relative `target`.
+///   `fdatasync`. `stream_offset` is `Some(logical pre-append offset)` for THIS append
+///   (`file_base + file-relative pre-append position`), computed by the caller via
+///   [`wal_stream_offset`] from the SAME append context as `target` (under the appender
+///   lock) so a concurrent compaction/appender can't desync it. Recovery does
+///   `file_pos = stream_offset − file_base`, so for forked/compacted streams
+///   (`file_base > 0`) this MUST be logical, not the file-relative `target`.
 ///
-/// `Strict`/`Fast` ignore `store`/`wire`/`stream_offset`, so those paths stay
-/// byte-for-byte unchanged.
+/// `Strict`/`Fast` ignore `store`/`wire`/`stream_offset` and pass `stream_offset:
+/// None` (they never take the `st.shared` read lock), so those paths stay
+/// byte-for-byte unchanged from the pre-WAL base.
+/// Compute the **logical** pre-append `stream_offset` for the WAL record — but
+/// ONLY in `Wal` mode. In `Strict`/`Fast` this returns `None` WITHOUT touching
+/// `st.shared`, so the default (strict) and fast hot paths acquire exactly the
+/// locks the pre-WAL base did (no extra `st.shared.read()` per append).
+///
+/// MUST be called while the caller still holds the appender lock: `file_base`
+/// and `target` (`ap.written`) are reset together under that lock on compaction,
+/// so reading `file_base` here keeps it consistent with the captured `target`.
+fn wal_stream_offset(
+    mode: DurabilityMode,
+    st: &StreamState,
+    target: u64,
+    wire: &Bytes,
+) -> Option<u64> {
+    match mode {
+        DurabilityMode::Wal => {
+            Some(st.shared.read().unwrap().file_base + target - wire.len() as u64)
+        }
+        DurabilityMode::Strict | DurabilityMode::Fast => None,
+    }
+}
+
 async fn maybe_sync_on_ack(
     mode: DurabilityMode,
     store: &Arc<Store>,
@@ -651,12 +676,14 @@ async fn maybe_sync_on_ack(
     wire: &Bytes,
     file: std::sync::Arc<std::fs::File>,
     target: u64,
-    stream_offset: u64,
+    stream_offset: Option<u64>,
 ) -> std::io::Result<()> {
     match mode {
         DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
         DurabilityMode::Fast => Ok(()),
         DurabilityMode::Wal => {
+            let stream_offset = stream_offset
+                .expect("wal mode requires a precomputed logical stream_offset");
             let wal = store.wal.get().expect("wal mode requires Store.wal");
             let shard = wal.shard_for(st.id);
             // Register the touched per-stream file into the shard's dirty set
@@ -676,12 +703,17 @@ async fn maybe_sync_on_ack(
             // `Arc<File>`; the WAL stays ignorant of `StreamState`. Off the ack
             // gate — checkpoint runs asynchronously and never blocks the ack.
             shard.register_dirty(st.id, file);
+            // A transient WAL segment write error fails the ack (the request
+            // errors) rather than crashing the process — matching the committer's
+            // fail-loud-don't-ack discipline. The lsn was reserved but never
+            // written, so it stays a permanent gap that blocks the contiguous
+            // watermark, and durable_lsn never advances past it.
             let lsn = shard.reserve_and_stage(
                 crate::wal::codec::RecordKind::Append,
                 st.id,
                 stream_offset,
                 wire,
-            );
+            )?;
             shard.wait_durable(lsn).await;
             Ok(())
         }
@@ -1036,15 +1068,17 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     }
     let target = ap.written;
     let file = ap.file.clone();
-    // Logical pre-append offset for THIS append (see site above): read `file_base`
-    // under the appender lock so a concurrent compaction can't desync it from `target`.
-    let stream_offset = st.shared.read().unwrap().file_base + target - wire.len() as u64;
+    let mode = durability();
+    // Logical pre-append offset for THIS append (see site above) — Wal-only; read
+    // `file_base` under the appender lock so a concurrent compaction can't desync
+    // it from `target`. Strict/Fast take no `st.shared` lock here.
+    let stream_offset = wal_stream_offset(mode, &st, target, &wire);
     drop(ap);
 
     // Covering fsync failed: not durable. Error out (and skip the close commit
     // below) rather than ack 2xx.
     if !wire.is_empty()
-        && maybe_sync_on_ack(durability(), &store, &st, &wire, file, target, stream_offset)
+        && maybe_sync_on_ack(mode, &store, &st, &wire, file, target, stream_offset)
             .await
             .is_err()
     {
@@ -1366,8 +1400,8 @@ where
     drop(ap);
     // WAL mode is excluded above (splice bypasses userspace), so this site only ever
     // runs `Strict`/`Fast`, which ignore the `wire`/`stream_offset` arguments — pass an
-    // empty wire and the file-relative `target` (no WAL record is ever recorded here).
-    if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target, target)
+    // empty wire and `None` (no WAL record is ever recorded here).
+    if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target, None)
         .await
         .is_err()
     {
@@ -2334,7 +2368,7 @@ mod durability_tests {
         let target = ap.written;
         let file = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target, target - 10)
+        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target, None)
             .await
             .unwrap();
         assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
@@ -2345,7 +2379,7 @@ mod durability_tests {
         let target2 = ap.written;
         let file2 = ap.file.clone();
         drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2, target2)
+        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2, None)
             .await
             .unwrap();
         assert_eq!(st.sync.synced(), target, "relaxed must skip fsync (watermark unchanged)");
@@ -2418,7 +2452,7 @@ mod durability_tests {
             &wire,
             std::sync::Arc::clone(&file),
             target,
-            stream_offset,
+            Some(stream_offset),
         );
         tokio::pin!(ack);
         tokio::select! {
@@ -2516,7 +2550,7 @@ mod durability_tests {
             &wire,
             std::sync::Arc::clone(&file),
             target,
-            stream_offset,
+            Some(stream_offset),
         )
         .await
         .unwrap();
@@ -2648,7 +2682,7 @@ mod durability_tests {
             &wire,
             std::sync::Arc::clone(&file),
             target,
-            stream_offset,
+            Some(stream_offset),
         )
         .await
         .unwrap();

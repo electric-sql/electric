@@ -104,6 +104,12 @@ pub struct Shard {
     #[cfg(test)]
     #[allow(clippy::type_complexity)]
     on_stage: Mutex<Option<Box<dyn Fn(u64) + Send + Sync>>>,
+    /// Test-only fault injection: when set, the NEXT `reserve_and_stage`'s
+    /// `write_at` is simulated as failing (returns an `io::Error` instead of
+    /// writing). Lets a test prove a transient WAL write error FAILS the ack
+    /// (propagates a `Result::Err`) rather than panicking the process.
+    #[cfg(test)]
+    fail_next_write: std::sync::atomic::AtomicBool,
 }
 
 /// Name of the per-shard checkpoint-lsn file: `<shard_dir>/checkpoint` (plain
@@ -113,11 +119,19 @@ pub struct Shard {
 const CHECKPOINT_FILE: &str = "checkpoint";
 
 impl Shard {
-    /// Open (creating if needed) the shard rooted at `dir`, opening a fresh
-    /// active segment starting at lsn 1.
+    /// Open (creating if needed) the shard rooted at `dir`, opening the active
+    /// segment at lsn 1 and resetting the **in-memory** cursor (`write_pos == 0`,
+    /// `next_lsn == 1`).
     ///
-    /// (Recovery — resuming an existing shard's lsn/segment state — is a later
-    /// task; v1 opens a clean shard.)
+    /// **Non-destructive on disk:** the existing `<start>.wal` segment is opened
+    /// `truncate(false)`, so its pre-crash bytes survive for [`recovery`] to read
+    /// and replay. Because the in-memory cursor is reset to the start while the
+    /// on-disk segment still holds the old records, [`Shard::reset_after_recovery`]
+    /// MUST run after recovery and before any new append — it wipes the stale
+    /// on-disk segments so fresh appends can't leave a mis-decodable stale suffix
+    /// behind them (see that method's docs for the full crash-correctness argument).
+    ///
+    /// [`recovery`]: super::recovery
     pub fn open(dir: PathBuf) -> io::Result<std::sync::Arc<Shard>> {
         std::fs::create_dir_all(&dir)?;
         let seg_start_lsn = 1;
@@ -139,6 +153,8 @@ impl Shard {
             stats: ShardStats::default(),
             #[cfg(test)]
             on_stage: Mutex::new(None),
+            #[cfg(test)]
+            fail_next_write: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -207,13 +223,22 @@ impl Shard {
     /// The encode + `write_at` happen **after** releasing the assign lock, so
     /// concurrent appenders write disjoint reserved ranges without serializing
     /// on the lock (spec §5/§6). The committer is notified on every stage.
+    ///
+    /// # Errors
+    ///
+    /// A failed segment `write_at` returns the `io::Error` (the lsn was reserved
+    /// but never marked written, so it stays a permanent gap that blocks the
+    /// contiguous-written watermark — `durable_lsn` never advances past it). The
+    /// caller MUST fail the ack rather than treat the record as durable. We do
+    /// NOT panic the process on a transient write error — matching the
+    /// committer's fail-loud-don't-ack discipline.
     pub fn reserve_and_stage(
         &self,
         kind: RecordKind,
         stream_id: u64,
         stream_offset: u64,
         payload: &[u8],
-    ) -> u64 {
+    ) -> io::Result<u64> {
         // Test-only ordering seam (CQ-1): fires before any lsn is reserved, i.e.
         // before this record can ever become durable. A test uses it to assert the
         // stream was already registered dirty by the caller (register-before-stage).
@@ -246,7 +271,22 @@ impl Shard {
             &mut buf,
             &Record { lsn, kind, stream_id, stream_offset, payload },
         );
-        seg.write_at(off, &buf).expect("WAL segment write_at failed");
+        // Test-only fault injection: simulate a transient `write_at` failure for
+        // exactly this stage (the lsn stays a permanent gap, just like a real
+        // partial/failed write).
+        #[cfg(test)]
+        if self
+            .fail_next_write
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(io::Error::other("injected WAL segment write_at failure"));
+        }
+
+        // A transient write error must NOT panic the process: propagate it so the
+        // caller fails the ack. The reserved lsn was never marked written, so it
+        // remains a permanent gap blocking the contiguous-written watermark (the
+        // committer can never advance `durable_lsn` past it) — fail-loud, don't-ack.
+        seg.write_at(off, &buf)?;
 
         // --- Mark written + wake the committer. ---
         {
@@ -254,7 +294,7 @@ impl Shard {
             g.mark_written(lsn);
         }
         self.notify.notify_one();
-        lsn
+        Ok(lsn)
     }
 
     /// Register a touched stream's per-stream `Arc<File>` into this shard's dirty
@@ -475,6 +515,11 @@ impl Shard {
 
     /// Total bytes of this shard's on-disk WAL segments (the recyclable-growth
     /// signal: with checkpoint stalled, this grows as appends accumulate).
+    ///
+    /// Telemetry/test-only surface: consumed by the `telemetry`-feature emitter
+    /// (`telemetry::spawn_emitter`) and the WAL e2e tests, never on any default
+    /// build's hot path — hence the targeted dead-code allow there.
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn wal_size_bytes(&self) -> u64 {
         let mut total = 0u64;
         if let Ok(rd) = std::fs::read_dir(&self.dir) {
@@ -494,7 +539,8 @@ impl Shard {
     /// spec §11). Like [`Shard::wal_size_bytes`] this `read_dir`s the shard dir,
     /// so it is called **only from the 1 Hz emitter**, never the commit path
     /// (CQ-2). A growing `segments` with a flat `checkpoint_lsn` ⇒ checkpoint is
-    /// not keeping up.
+    /// not keeping up. Telemetry/test-only (see [`Shard::wal_size_bytes`]).
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn wal_segments(&self) -> u64 {
         let mut n = 0u64;
         if let Ok(rd) = std::fs::read_dir(&self.dir) {
@@ -510,12 +556,16 @@ impl Shard {
 
     /// Snapshot this shard's batch-size + commit counters for the emitter
     /// (off-path; relaxed loads). See [`super::telemetry::StatsSnapshot`].
+    /// Telemetry/test-only (see [`Shard::wal_size_bytes`]).
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn stats_snapshot(&self) -> StatsSnapshot {
         self.stats.snapshot()
     }
 
     /// Current `durable_lsn` — the highest lsn made durable + acked. Cheap
     /// (`watch::borrow`), read by the emitter and by [`Shard::checkpoint`].
+    /// Telemetry/test-only as a public accessor (see [`Shard::wal_size_bytes`]).
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn durable_lsn_now(&self) -> u64 {
         *self.durable_tx.borrow()
     }
@@ -523,6 +573,8 @@ impl Shard {
     /// The shard's `tail_lsn` — the highest lsn **assigned** so far (`next_lsn - 1`,
     /// `0` when empty). The gap `tail_lsn - durable_lsn` is the in-flight depth the
     /// committer is draining. Cheap (one short lock).
+    /// Telemetry/test-only (see [`Shard::wal_size_bytes`]).
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn tail_lsn(&self) -> u64 {
         self.inner.lock().unwrap().next_lsn.saturating_sub(1)
     }
@@ -577,14 +629,17 @@ impl Shard {
                 let fsync_res = seg.fdatasync();
                 match fsync_res {
                     Ok(()) => {
-                        // Re-snapshot AFTER the fsync: any lsn whose bytes were on
-                        // disk before this fsync completed is now durable. We
-                        // conservatively publish the watermark captured before the
-                        // fsync — every one of those records' bytes was written
-                        // (mark_written) before we read `written_high`, and the
-                        // fsync flushed all of the segment's dirty pages, so they
-                        // are durable. (A record that became written *during* the
-                        // fsync is picked up by the next iteration's notify.)
+                        // Publish the watermark we snapshotted BEFORE the
+                        // fdatasync, exactly as-is — do NOT re-snapshot. Every
+                        // record up to that watermark had its bytes written
+                        // (`mark_written`) before we read `written_high`, and the
+                        // fdatasync flushed all of the segment's dirty pages, so all
+                        // of them are now durable. Records that became written
+                        // *during* the fsync are deliberately EXCLUDED from this
+                        // publish (the fsync may not have covered their pages) and
+                        // are caught by the next iteration's notify. Re-snapshotting
+                        // here would over-advance `durable_lsn` past records this
+                        // fsync did not necessarily flush — a data-loss bug.
                         //
                         // BATCH SIZE (spec §11): the records THIS fdatasync made
                         // durable = how far `durable_lsn` advances now =
@@ -624,6 +679,14 @@ impl Shard {
     #[cfg(test)]
     pub fn is_dirty(&self, stream_id: u64) -> bool {
         self.dirty.lock().unwrap().contains_key(&stream_id)
+    }
+
+    /// Test-only: arm the next `reserve_and_stage` to simulate a `write_at`
+    /// failure (see `fail_next_write`).
+    #[cfg(test)]
+    pub fn fail_next_write(&self) {
+        self.fail_next_write
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Test-only: install the `reserve_and_stage` ordering seam (see `on_stage`).
@@ -670,9 +733,9 @@ mod tests {
         // The committer must NOT advance durable_lsn past the gap, even though l3's bytes
         // are on disk — durable_lsn may reach l1 but MUST stay < l3 until l2 is written.
         let sh = Shard::open(tmp("shard")).unwrap();
-        let l1 = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"a");
+        let l1 = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"a").unwrap();
         let _l2 = sh.reserve_only(); // #[cfg(test)] hook: assigns lsn, no write
-        let l3 = sh.reserve_and_stage(RecordKind::Append, 1, 2, b"c");
+        let l3 = sh.reserve_and_stage(RecordKind::Append, 1, 2, b"c").unwrap();
         let h = tokio::spawn({
             let s = sh.clone();
             async move { s.run_committer().await }
@@ -682,6 +745,36 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert!(sh.durable_lsn() >= l1, "l1 (and its contiguous prefix) is durable");
         assert!(sh.durable_lsn() < l3, "MUST NOT advance past the unwritten l2 gap to l3");
+        h.abort();
+    }
+
+    #[tokio::test]
+    async fn write_error_fails_the_stage_without_panicking() {
+        // A transient WAL `write_at` failure must surface as a `Result::Err`
+        // (so the caller fails the ack) — NOT a process panic. The reserved lsn
+        // stays a permanent gap, so a LATER good stage can never become durable
+        // past it (the committer's contiguous watermark is blocked).
+        let sh = Shard::open(tmp("write-err")).unwrap();
+
+        sh.fail_next_write();
+        let err = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"boom");
+        assert!(err.is_err(), "an injected write_at failure must return Err, not panic");
+
+        // The failed lsn (1) was reserved but never written → permanent gap. A
+        // subsequent good stage (lsn 2) is on disk, but the committer must NOT
+        // advance durable_lsn past the gap at lsn 1.
+        let l2 = sh.reserve_and_stage(RecordKind::Append, 1, 4, b"ok").unwrap();
+        assert_eq!(l2, 2, "the failed stage still consumed lsn 1 (it stays a gap)");
+        let h = tokio::spawn({
+            let s = sh.clone();
+            async move { s.run_committer().await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(
+            sh.durable_lsn(),
+            0,
+            "durable_lsn cannot advance past the unwritten (failed) lsn-1 gap"
+        );
         h.abort();
     }
 
@@ -699,7 +792,7 @@ mod tests {
         // Lay down several whole old records, then drop & re-open (non-destructive
         // open keeps the bytes — exactly the production crash-restart situation).
         for i in 0..6u64 {
-            sh.reserve_and_stage(RecordKind::Append, 1, i * 8, b"old-data");
+            sh.reserve_and_stage(RecordKind::Append, 1, i * 8, b"old-data").unwrap();
         }
         std::fs::write(dir.join("checkpoint"), "3").unwrap();
         let old_len_on_disk = {
@@ -736,7 +829,7 @@ mod tests {
             let s = sh.clone();
             async move { s.run_committer().await }
         });
-        let lsn = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"new");
+        let lsn = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"new").unwrap();
         assert_eq!(lsn, 1, "fresh WAL starts at lsn 1");
         sh.wait_durable(lsn).await;
         let raw = std::fs::read(seg_path(&dir, 1)).unwrap();
@@ -769,8 +862,8 @@ mod tests {
         });
 
         // Stage a couple of records and register a touched per-stream file.
-        let l1 = sh.reserve_and_stage(RecordKind::Append, 42, 0, b"hello");
-        let l2 = sh.reserve_and_stage(RecordKind::Append, 42, 5, b"world");
+        let l1 = sh.reserve_and_stage(RecordKind::Append, 42, 0, b"hello").unwrap();
+        let l2 = sh.reserve_and_stage(RecordKind::Append, 42, 5, b"world").unwrap();
         // A stand-in for the stream's own file: write bytes WITHOUT fsync, then
         // register it. checkpoint() must fdatasync it (we assert the bytes land).
         let stream_file_path = dir.join("stream-42.data");
@@ -843,7 +936,7 @@ mod tests {
         let size_before = sh.wal_size_bytes();
         let mut last = 0;
         for i in 0..16u64 {
-            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 5, b"abcde");
+            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 5, b"abcde").unwrap();
         }
         // Acks resolve with NO checkpoint having run.
         tokio::time::timeout(std::time::Duration::from_secs(5), sh.wait_durable(last))
@@ -873,7 +966,7 @@ mod tests {
         // single not-yet-durable batch above durable_lsn (0).
         let mut last = 0;
         for i in 0..K {
-            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 4, b"data");
+            last = sh.reserve_and_stage(RecordKind::Append, 7, i * 4, b"data").unwrap();
         }
         assert_eq!(sh.durable_lsn_now(), 0, "nothing durable until the committer runs");
 
@@ -914,7 +1007,7 @@ mod tests {
         let mut payloads = Vec::new();
         for i in 0..K {
             let p = format!("payload-{i}").into_bytes();
-            let lsn = sh.reserve_and_stage(RecordKind::Append, 7, i * 10, &p);
+            let lsn = sh.reserve_and_stage(RecordKind::Append, 7, i * 10, &p).unwrap();
             lsns.push(lsn);
             payloads.push(p);
         }

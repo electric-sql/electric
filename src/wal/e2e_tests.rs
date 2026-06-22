@@ -546,12 +546,14 @@ async fn e2e_sharding_below_file_base_record_skipped() {
         c.abort();
     }
     let shard = h.walset.shard_for(child.id);
-    shard.reserve_and_stage(
-        crate::wal::codec::RecordKind::Append,
-        child.id,
-        2, // < file_base (5) → must be skipped
-        b"BELOW-FRONTIER",
-    );
+    shard
+        .reserve_and_stage(
+            crate::wal::codec::RecordKind::Append,
+            child.id,
+            2, // < file_base (5) → must be skipped
+            b"BELOW-FRONTIER",
+        )
+        .unwrap();
     // Re-run a committer briefly so this staged record DOES become durable in the
     // WAL (proving the skip is in recovery's replay, not just an un-acked drop).
     let shard_arc = Arc::clone(shard);

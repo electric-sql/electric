@@ -111,6 +111,10 @@ impl ShardStats {
 
     /// Snapshot the current counters into a plain (non-atomic) [`StatsSnapshot`]
     /// for the emitter to format. Cheap relaxed loads.
+    ///
+    /// Telemetry/test-only: consumed by the `telemetry`-feature emitter and the
+    /// stats tests; unused in a default build, hence the targeted dead-code allow.
+    #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn snapshot(&self) -> StatsSnapshot {
         let mut buckets = [0u64; BATCH_BUCKETS.len() + 1];
         for (dst, src) in buckets.iter_mut().zip(self.buckets.iter()) {
@@ -129,6 +133,11 @@ impl ShardStats {
 /// A point-in-time copy of a shard's batch counters, with the distribution
 /// derivations (avg / p50 / p99 / max). Also aggregatable across shards via
 /// [`StatsSnapshot::merge`] for the aggregate `WAL_STATS` line.
+///
+/// Telemetry/test-only: only the `telemetry`-feature emitter and the stats tests
+/// construct/derive from this, so it carries a targeted dead-code allow for the
+/// default build.
+#[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
 #[derive(Debug, Clone, Default)]
 pub struct StatsSnapshot {
     pub records_committed: u64,
@@ -138,6 +147,10 @@ pub struct StatsSnapshot {
     pub buckets: [u64; BATCH_BUCKETS.len() + 1],
 }
 
+/// All derivations are telemetry/test-only (emitter + stats tests); targeted
+/// dead-code allow keeps the default build warning-clean without deleting the
+/// WAL_STATS surface.
+#[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
 impl StatsSnapshot {
     /// `avg = records_committed / fsync_count` (records-per-commit), `0` when no
     /// commit has happened.
