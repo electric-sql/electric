@@ -437,17 +437,40 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert ShapeStatus.shape_handle_for_log(stack_id, id) == "unknown, id: #{id}"
     end
 
-    test "ids minted on the restore path are resolvable both ways", %{stack_id: stack_id} do
-      {:ok, {handle, _id}} = ShapeStatus.add_shape(stack_id, shape!())
+    test "refresh preserves the id of an existing shape", %{stack_id: stack_id} do
+      {:ok, {handle, id}} = ShapeStatus.add_shape(stack_id, shape!())
       ShapeStatus.ShapeDb.mark_snapshot_complete(stack_id, handle)
 
       # refresh/1 repopulates the meta table from SQLite via
-      # populate_shape_meta_table/2, which mints a fresh id per restored handle.
+      # populate_shape_meta_table/2, reusing (not re-minting) the id for a handle
+      # it already knows, so the id stays stable across a refresh.
       :ok = ShapeStatus.refresh(stack_id)
 
-      assert {:ok, restored_id} = ShapeStatus.id_for_handle(stack_id, handle)
-      assert is_integer(restored_id)
-      assert {:ok, ^handle} = ShapeStatus.handle_for_id(stack_id, restored_id)
+      assert {:ok, ^id} = ShapeStatus.id_for_handle(stack_id, handle)
+      assert {:ok, ^handle} = ShapeStatus.handle_for_id(stack_id, id)
+    end
+
+    test "refresh prunes the reverse id mapping for handles removed elsewhere", %{
+      stack_id: stack_id
+    } do
+      {:ok, {removed_handle, removed_id}} = ShapeStatus.add_shape(stack_id, shape!())
+      {:ok, {kept_handle, kept_id}} = ShapeStatus.add_shape(stack_id, shape2!())
+      ShapeStatus.ShapeDb.mark_snapshot_complete(stack_id, removed_handle)
+      ShapeStatus.ShapeDb.mark_snapshot_complete(stack_id, kept_handle)
+
+      # Simulate another instance deleting the shape from the shared SQLite while
+      # our in-memory meta/reverse tables still reference it.
+      :ok = ShapeStatus.ShapeDb.remove_shape(stack_id, removed_handle)
+
+      :ok = ShapeStatus.refresh(stack_id)
+
+      # the removed handle's pre-refresh id no longer resolves in either direction
+      assert :error = ShapeStatus.id_for_handle(stack_id, removed_handle)
+      assert :error = ShapeStatus.handle_for_id(stack_id, removed_id)
+
+      # the surviving shape keeps its id
+      assert {:ok, ^kept_id} = ShapeStatus.id_for_handle(stack_id, kept_handle)
+      assert {:ok, ^kept_handle} = ShapeStatus.handle_for_id(stack_id, kept_id)
     end
 
     test "list_shapes_with_ids returns each shape's handle, id and shape", %{stack_id: stack_id} do

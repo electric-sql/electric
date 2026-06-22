@@ -108,6 +108,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
       generation = System.unique_integer([:positive, :monotonic])
       populate_shape_meta_table(stack_id, generation)
 
+      # Rows still on an old generation belong to handles that no longer exist
+      # (removed by another instance). Prune their reverse {id, handle} mappings
+      # before deleting the meta rows, otherwise the stale ids keep resolving via
+      # handle_for_id/2 and leak across refreshes.
+      stale_ids =
+        :ets.select(shape_meta_table(stack_id), [
+          {{:_, :_, :_, :_, :"$1", :"$2"}, [{:"/=", :"$1", generation}], [:"$2"]}
+        ])
+
+      Enum.each(stale_ids, &:ets.delete(shape_id_table(stack_id), &1))
+
       :ets.select_delete(shape_meta_table(stack_id), [
         {{:_, :_, :_, :_, :"$1", :_}, [{:"/=", :"$1", generation}], [true]}
       ])
@@ -549,8 +560,22 @@ defmodule Electric.ShapeCache.ShapeStatus do
         # any shapes where the snapshot didn't complete have been deleted
         # so there is no intermediate started-but-not-complete state
         # and completed implies started
-        id = mint_id(stack_id)
-        :ets.insert(shape_id_table(stack_id), {id, handle})
+
+        # Reuse the existing id for a handle already known to us (the refresh/1
+        # case) so ids stay stable across a refresh; only mint for handles we've
+        # not seen (first boot via initialize/1, or shapes a previous instance
+        # added while we were read-only). Re-minting here would orphan the old
+        # {id, handle} reverse mapping (see the sweep in refresh/1).
+        id =
+          case id_for_handle(stack_id, handle) do
+            {:ok, existing_id} ->
+              existing_id
+
+            :error ->
+              new_id = mint_id(stack_id)
+              :ets.insert(shape_id_table(stack_id), {new_id, handle})
+              new_id
+          end
 
         true =
           :ets.insert(table, {handle, hash, snapshot_complete?, start_time, generation, id})
