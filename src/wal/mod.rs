@@ -12,6 +12,7 @@
 #![allow(dead_code)]
 
 pub mod codec;
+pub mod recovery;
 pub mod segment;
 pub mod shard;
 pub mod walset;

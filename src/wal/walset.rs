@@ -108,6 +108,13 @@ impl WalSet {
         &self.shards[(fnv1a(stream_id) % self.n as u64) as usize]
     }
 
+    /// The shards, for per-shard parallel recovery (spec §9). The sets of
+    /// streams a shard owns are disjoint (`shard_for` routes deterministically),
+    /// so replaying shards concurrently needs no cross-shard synchronization.
+    pub fn shards(&self) -> &[Arc<Shard>] {
+        &self.shards
+    }
+
     /// Spawn each shard's `run_committer` (one tokio task per shard).
     pub fn spawn_committers(self: &Arc<Self>) {
         for shard in &self.shards {

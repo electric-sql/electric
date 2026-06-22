@@ -31,7 +31,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::{watch, Notify};
@@ -311,6 +311,97 @@ impl Shard {
                 // data loss (the segment's bytes are already fdatasync'd into the
                 // per-stream files), and the next checkpoint retries the unlink.
                 std::fs::remove_file(path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// This shard's directory (`<data-dir>/wal/<i>/`).
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// Read the persisted `checkpoint_lsn` (`<shard_dir>/checkpoint`, plain
+    /// decimal text). Returns `0` when the file is absent (no checkpoint yet) or
+    /// unparsable — `0` means "replay from the very first segment", which is the
+    /// safe default (re-applying already-checkpointed records is idempotent, and
+    /// the frontier skip in recovery guards the compacted prefix).
+    pub fn read_checkpoint_lsn(&self) -> u64 {
+        match std::fs::read_to_string(self.dir.join(CHECKPOINT_FILE)) {
+            Ok(s) => s.trim().parse::<u64>().unwrap_or(0),
+            Err(_) => 0,
+        }
+    }
+
+    /// Walk this shard's on-disk WAL segments in **lsn order** from
+    /// `checkpoint_lsn` and invoke `f` for every complete record, stopping at the
+    /// **first** `Torn`/`Incomplete` record (that ends the durable log — the
+    /// un-acked tail is discarded; spec §9). Records whose lsn `< checkpoint_lsn`
+    /// are skipped (already checkpoint-fsynced into the per-stream files).
+    ///
+    /// `f` receives `(kind, stream_id, stream_offset, payload)`. This keeps the
+    /// segment ordering / decode loop here (where `seg_path` and the segment
+    /// naming live) while leaving the file_base mapping + tail repair to
+    /// `recovery.rs`.
+    pub fn replay_from_checkpoint<F>(&self, checkpoint_lsn: u64, mut f: F) -> io::Result<()>
+    where
+        F: FnMut(RecordKind, u64, u64, &[u8]),
+    {
+        use super::codec::{decode_at, Decoded};
+
+        // Collect (start_lsn, path) of every on-disk segment, sorted by start lsn
+        // so we replay in total lsn order across segment boundaries.
+        let mut segs: Vec<(u64, PathBuf)> = Vec::new();
+        for entry in std::fs::read_dir(&self.dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let Some(stem) = name.strip_suffix(".wal") else {
+                continue;
+            };
+            if let Ok(start) = stem.parse::<u64>() {
+                segs.push((start, path));
+            }
+        }
+        segs.sort_by_key(|(s, _)| *s);
+
+        for (_start, path) in segs {
+            let raw = std::fs::read(&path)?;
+            let mut off = 0usize;
+            // Decode records back-to-back. A segment that is exactly packed (off
+            // reaches its decodable end with no torn record) falls through to the
+            // next segment in lsn order; the FIRST torn/incomplete record ends the
+            // durable log globally (spec §4/§9) — `return` from the whole walk.
+            while let Decoded::Record {
+                lsn,
+                kind,
+                stream_id,
+                stream_offset,
+                payload_off,
+                len,
+                total,
+            } = decode_at(&raw, off)
+            {
+                // Records below the checkpoint floor are already durably fsync'd
+                // into their per-stream files — skip, but keep advancing so we
+                // reach the live (post-checkpoint) tail.
+                if lsn >= checkpoint_lsn {
+                    f(kind, stream_id, stream_offset, &raw[payload_off..payload_off + len]);
+                }
+                off += total;
+                // A perfectly packed segment ends right at its decodable extent;
+                // stop scanning this segment and continue with the next one.
+                if off >= raw.len() {
+                    break;
+                }
+            }
+            // `decode_at` returned non-Record (torn/incomplete) before the end:
+            // the durable log ends here. Only a segment consumed exactly to its
+            // end (the `break` above) continues to the next segment.
+            if off < raw.len() {
+                return Ok(());
             }
         }
         Ok(())
