@@ -8,7 +8,7 @@ import {
 import { Stack, Text } from '../ui'
 import { ThinkingIndicator } from './ThinkingIndicator'
 import { ElapsedTime } from './ElapsedTime'
-import { formatElapsedDuration, toMillis } from '../lib/formatTime'
+import { formatElapsedDuration } from '../lib/formatTime'
 import styles from './ReasoningSection.module.css'
 
 /**
@@ -63,13 +63,11 @@ export type ReasoningEntry = {
 export function ReasoningBlock({
   entry,
   isStreaming,
-  timestamp,
   expanded,
   onToggle,
 }: {
   entry: ReasoningEntry
   isStreaming: boolean
-  timestamp?: number | null
   expanded: boolean
   onToggle: (key: string) => void
 }): React.ReactElement {
@@ -79,26 +77,24 @@ export function ReasoningBlock({
     [entry.key, onToggle]
   )
 
-  // Snapshot the elapsed duration at the moment streaming flips to
-  // `completed`, the same `sawStreamingRef` trick used for "done in
-  // Xs" on `AgentResponse`. For reasoning rows that were already
-  // settled on first mount (page reload, scrollback into older
-  // turns) we don't have a real end timestamp, so the closure stays
-  // a bare "Thought" without a duration — better than printing a
-  // wildly-wrong number from `now() - userMessageTime`.
-  const sawStreamingRef = useRef<boolean>(isLive)
-  if (isLive) sawStreamingRef.current = true
+  // Capture this reasoning row's first live render time. Later rows
+  // may start after tool calls, so using the parent run timestamp
+  // overstates their duration. Rows mounted already completed keep a
+  // bare "Thought" label because we do not know their actual end time.
+  const liveStartedAtMsRef = useRef<number | null>(null)
+  if (isLive && liveStartedAtMsRef.current == null) {
+    liveStartedAtMsRef.current = Date.now()
+  }
   const [finalDurationMs, setFinalDurationMs] = useState<number | null>(null)
   useEffect(() => {
     if (
       entry.status === `completed` &&
-      sawStreamingRef.current &&
-      timestamp != null &&
+      liveStartedAtMsRef.current != null &&
       finalDurationMs == null
     ) {
-      setFinalDurationMs(Math.max(0, Date.now() - toMillis(timestamp)))
+      setFinalDurationMs(Math.max(0, Date.now() - liveStartedAtMsRef.current))
     }
-  }, [entry.status, timestamp, finalDurationMs])
+  }, [entry.status, finalDurationMs])
 
   // Redacted thinking — opaque payload, nothing to render.
   if (entry.encrypted && entry.content.trim().length === 0) {
@@ -126,12 +122,12 @@ export function ReasoningBlock({
               </Text>
             </>
           )}
-          {timestamp != null && (
+          {liveStartedAtMsRef.current != null && (
             <>
               <Text size={1} tone="muted" className={styles.separator}>
                 ·
               </Text>
-              <ElapsedTime ts={timestamp} enabled={isLive} />
+              <ElapsedTime ts={liveStartedAtMsRef.current} enabled={isLive} />
             </>
           )}
         </Stack>
