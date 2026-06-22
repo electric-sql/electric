@@ -925,6 +925,16 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             // closure is fsynced, and the stream would recover OPEN — a
             // monotonicity violation (PROTOCOL.md §4.1). The reader
             // notification is deferred until after write_meta_sync completes.
+            // NOTE (relaxed): this guarantees the *closedness* never rolls back
+            // (the close-meta stays durable in both modes), but under `relaxed`
+            // the closed *position* can: the data fdatasync below is skipped, so an
+            // OS/power crash can lose the un-synced tail and recover a shorter
+            // closed stream (tail = on-disk size < the acked tail). A reader that
+            // saw EOF at the longer tail then faces a shorter closed stream. This
+            // is within relaxed's stated contract (lose the un-sealed hot tail on an
+            // OS/power crash; a closed stream is just hot tail ending in a close).
+            // The strong PROTOCOL.md §4.1 position-monotonicity guarantee is
+            // strict-only.
             s.closed = true;
             if let Some(p) = &producer {
                 s.closed_by = Some((p.id.clone(), p.epoch, p.seq));
@@ -941,9 +951,12 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         ret!(text_response(500, "fsync failed"), Conflict);
     }
 
-    // Closure ordering: data fdatasync (above) → durable meta commit → expose the
-    // closure to readers (closed_durable) and wake waiters. Readers never observe
-    // EOF for a closure that is not yet durable (PROTOCOL.md §4.1 monotonicity).
+    // Closure ordering: data fdatasync (above, strict-only) → durable meta commit →
+    // expose the closure to readers (closed_durable) and wake waiters. Readers never
+    // observe EOF for a closure that is not yet durable (PROTOCOL.md §4.1). Under
+    // `strict` the recovered closed tail also never moves backward; under `relaxed`
+    // the data fdatasync is skipped, so the *closedness* is still durable but its
+    // *position* can shrink on an OS/power crash (see the close-req note above).
     // Producer/access updates are debounced (documented crash window; see store::Meta).
     if close_req {
         let st2 = st.clone();

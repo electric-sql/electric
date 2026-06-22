@@ -65,10 +65,14 @@ pub struct Shared {
     /// close is accepted (so subsequent appends are rejected) and persisted to
     /// the sidecar. NOT what readers observe — see `closed_durable`.
     pub closed: bool,
-    /// Reader-observable EOF: set only AFTER the closure is durable (data fsync +
-    /// meta fsync). `tail()` reports this so a reader never observes EOF for a
-    /// closure a crash could roll back (PROTOCOL.md §4.1 monotonicity). On
-    /// recovery it equals the persisted `closed` (durable by definition).
+    /// Reader-observable EOF: set only AFTER the closure is durable (under `strict`,
+    /// the data fsync + meta fsync; under `relaxed`, the meta fsync — the data fsync
+    /// is skipped). `tail()` reports this so a reader never observes EOF for a
+    /// closure a crash could roll back (PROTOCOL.md §4.1). On recovery it equals the
+    /// persisted `closed` (durable by definition). Caveat (relaxed): the *closedness*
+    /// never rolls back, but the closed *position* can shrink on an OS/power crash
+    /// (the un-synced tail is lost; recovered `tail` = on-disk size). The full
+    /// strict-only position-monotonicity guarantee holds only under `strict`.
     pub closed_durable: bool,
     /// Producer that closed the stream (producer_id, epoch, seq), for idempotent re-close.
     pub closed_by: Option<(String, u64, u64)>,
