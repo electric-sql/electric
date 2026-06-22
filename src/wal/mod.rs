@@ -13,3 +13,4 @@
 
 pub mod codec;
 pub mod segment;
+pub mod shard;
