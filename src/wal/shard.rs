@@ -90,6 +90,14 @@ pub struct Shard {
     /// streams — *before* recycling the WAL. This is decoupled from
     /// `reserve_and_stage`, which never needs the `StreamState`.
     dirty: Mutex<HashMap<u64, Arc<std::fs::File>>>,
+    /// Test-only seam: invoked at the very start of `reserve_and_stage`, before
+    /// any lsn is reserved/staged (i.e. before this record's lsn can ever become
+    /// durable). Lets a test assert the per-stream file was ALREADY registered
+    /// into the dirty set by the time staging begins — proving `register_dirty`
+    /// precedes `reserve_and_stage` (CQ-1 ordering invariant, spec §7).
+    #[cfg(test)]
+    #[allow(clippy::type_complexity)]
+    on_stage: Mutex<Option<Box<dyn Fn(u64) + Send + Sync>>>,
 }
 
 /// Name of the per-shard checkpoint-lsn file: `<shard_dir>/checkpoint` (plain
@@ -122,6 +130,8 @@ impl Shard {
             notify: Notify::new(),
             dir,
             dirty: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            on_stage: Mutex::new(None),
         }))
     }
 
@@ -138,6 +148,16 @@ impl Shard {
         stream_offset: u64,
         payload: &[u8],
     ) -> u64 {
+        // Test-only ordering seam (CQ-1): fires before any lsn is reserved, i.e.
+        // before this record can ever become durable. A test uses it to assert the
+        // stream was already registered dirty by the caller (register-before-stage).
+        #[cfg(test)]
+        {
+            if let Some(cb) = self.on_stage.lock().unwrap().as_ref() {
+                cb(stream_id);
+            }
+        }
+
         // Framed length = fixed header + payload; we reserve exactly this range.
         let total = (super::codec::HEADER_LEN + payload.len()) as u64;
 
@@ -284,6 +304,12 @@ impl Shard {
                 None => false,
             };
             if fully_below {
+                // Asymmetry note (CQ-3): the checkpoint floor was already
+                // persisted (step 3) before we reach here. Propagating a failed
+                // unlink via `?` therefore leaves a persisted floor with a
+                // not-yet-recycled segment. That is SAFE — over-retention, never
+                // data loss (the segment's bytes are already fdatasync'd into the
+                // per-stream files), and the next checkpoint retries the unlink.
                 std::fs::remove_file(path)?;
             }
         }
@@ -390,6 +416,20 @@ impl Shard {
     #[cfg(test)]
     pub fn durable_lsn(&self) -> u64 {
         *self.durable_tx.borrow()
+    }
+
+    /// Test-only: whether `stream_id` is currently in the dirty set. Used to
+    /// prove the append path registers a stream BEFORE its lsn can become
+    /// durable (the checkpoint recycle-before-fsync ordering invariant, spec §7).
+    #[cfg(test)]
+    pub fn is_dirty(&self, stream_id: u64) -> bool {
+        self.dirty.lock().unwrap().contains_key(&stream_id)
+    }
+
+    /// Test-only: install the `reserve_and_stage` ordering seam (see `on_stage`).
+    #[cfg(test)]
+    pub fn set_on_stage_hook(&self, cb: Box<dyn Fn(u64) + Send + Sync>) {
+        *self.on_stage.lock().unwrap() = Some(cb);
     }
 
     /// Test-only: assign the next lsn + reserve its segment range, but write **no

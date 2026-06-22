@@ -640,18 +640,29 @@ async fn maybe_sync_on_ack(
         DurabilityMode::Wal => {
             let wal = store.wal.as_ref().expect("wal mode requires Store.wal");
             let shard = wal.shard_for(st.id);
+            // Register the touched per-stream file into the shard's dirty set
+            // (spec §7) BEFORE staging the WAL record. This MUST precede
+            // `reserve_and_stage`: once a record is staged, the committer can
+            // advance `durable_lsn` to cover its lsn at any moment, and a
+            // concurrent checkpoint snapping its floor there would
+            // `recycle_below` the segment carrying that lsn. If the stream were
+            // not yet in the dirty set, that checkpoint would unlink the WAL
+            // segment WITHOUT having `fdatasync`'d the stream's per-stream file
+            // → recycle-before-fsync data loss (spec §7 forbids this).
+            // Registering first closes that window: the stream is dirty before
+            // its lsn can ever become durable, so any checkpoint whose floor
+            // covers the lsn fdatasyncs this stream's file before recycling. The
+            // per-stream bytes are already in page cache (`write_wire` ran
+            // upstream), so registering before staging is safe. We hold its
+            // `Arc<File>`; the WAL stays ignorant of `StreamState`. Off the ack
+            // gate — checkpoint runs asynchronously and never blocks the ack.
+            shard.register_dirty(st.id, file);
             let lsn = shard.reserve_and_stage(
                 crate::wal::codec::RecordKind::Append,
                 st.id,
                 stream_offset,
                 wire,
             );
-            // Register the touched per-stream file into the shard's dirty set
-            // (spec §7) so the next checkpoint `fdatasync`s exactly this stream's
-            // file once. We already hold its `Arc<File>`; the WAL stays ignorant
-            // of `StreamState`. This is off the ack gate below — checkpoint runs
-            // asynchronously and never blocks the ack.
-            shard.register_dirty(st.id, file);
             shard.wait_durable(lsn).await;
             Ok(())
         }
@@ -2494,6 +2505,130 @@ mod durability_tests {
             }
             other => panic!("WAL record did not decode: {other:?}"),
         }
+
+        set_durability(DurabilityMode::Strict); // reset the global
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Ordering invariant (CQ-1): the wal-mode ack path MUST register the touched
+    /// per-stream file into the shard's dirty set BEFORE its lsn can ever become
+    /// durable. Otherwise a checkpoint whose floor snaps in the window between
+    /// `reserve_and_stage` and `register_dirty` could `recycle_below(floor)` the
+    /// WAL segment carrying that lsn while the stream's per-stream file was never
+    /// `fdatasync`'d this checkpoint → recycle-before-fsync data loss (spec §7).
+    ///
+    /// We prove the order deterministically with a `#[cfg(test)]` seam on the
+    /// shard: `Shard::set_on_stage_hook` installs a callback that fires at the
+    /// VERY START of `reserve_and_stage` — before any lsn is reserved, i.e.
+    /// strictly before this record's lsn can ever become durable. The hook
+    /// asserts the stream is ALREADY in the dirty set at that moment. That holds
+    /// iff `register_dirty(...)` ran BEFORE `reserve_and_stage(...)` in the wal
+    /// ack arm. If `register_dirty` is moved back to after `reserve_and_stage`
+    /// (the original window), the hook fires before registration and the
+    /// in-hook assertion (surfaced via an atomic flag the test checks) fails.
+    #[tokio::test]
+    async fn wal_registers_dirty_before_lsn_can_become_durable() {
+        use crate::store::{CreateResult, Store, StreamConfig};
+        use crate::tier::TierConfig;
+        use crate::wal::walset::WalSet;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dir = std::env::temp_dir().join(format!(
+            "ds-wal-dirty-order-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let mut store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal = Some(std::sync::Arc::clone(&wal));
+        let store = std::sync::Arc::new(store);
+
+        let cfg = StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        };
+        let st = match store.create("order", cfg, None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // Write the per-stream bytes upstream of the ack, exactly as the handler.
+        let wire = bytes::Bytes::from_static(b"order-wal");
+        let mut ap = st.appender.lock().await;
+        write_wire(&st, &mut ap, &wire).unwrap();
+        let target = ap.written;
+        let file = ap.file.clone();
+        drop(ap);
+
+        let shard = wal.shard_for(st.id);
+        let stream_id = st.id;
+
+        // Before the ack runs, the stream is NOT yet dirty.
+        assert!(
+            !shard.is_dirty(stream_id),
+            "precondition: stream not registered before the wal ack runs"
+        );
+
+        // Install the ordering seam: at the instant `reserve_and_stage` begins
+        // (the earliest point this record's lsn could become durable), record
+        // whether the stream was ALREADY registered dirty.
+        let hook_fired = std::sync::Arc::new(AtomicBool::new(false));
+        let dirty_at_stage = std::sync::Arc::new(AtomicBool::new(false));
+        {
+            let hook_shard = std::sync::Arc::clone(shard);
+            let fired = std::sync::Arc::clone(&hook_fired);
+            let dirty_seen = std::sync::Arc::clone(&dirty_at_stage);
+            shard.set_on_stage_hook(Box::new(move |sid| {
+                if sid == stream_id {
+                    dirty_seen.store(hook_shard.is_dirty(stream_id), Ordering::SeqCst);
+                    fired.store(true, Ordering::SeqCst);
+                }
+            }));
+        }
+
+        set_durability(DurabilityMode::Wal);
+        wal.spawn_committers();
+        let stream_offset = st.shared.read().unwrap().file_base + target - wire.len() as u64;
+
+        maybe_sync_on_ack(
+            DurabilityMode::Wal,
+            &store,
+            &st,
+            &wire,
+            std::sync::Arc::clone(&file),
+            target,
+            stream_offset,
+        )
+        .await
+        .unwrap();
+
+        // The seam must have fired (the wal arm went through `reserve_and_stage`).
+        assert!(hook_fired.load(Ordering::SeqCst), "reserve_and_stage seam must fire");
+
+        // THE INVARIANT: the stream was already dirty when staging began, i.e.
+        // `register_dirty` precedes `reserve_and_stage`. Fails if registration is
+        // moved back after staging — the exact recycle-before-fsync window (CQ-1).
+        assert!(
+            dirty_at_stage.load(Ordering::SeqCst),
+            "stream must be registered dirty BEFORE reserve_and_stage runs \
+             (register_dirty must precede staging so a checkpoint floor can never \
+              cover the lsn before the per-stream file is in the dirty set)"
+        );
+
+        // And after the ack the stream is still dirty and the append is durable.
+        assert!(shard.is_dirty(stream_id), "stream stays dirty until next checkpoint");
+        assert!(shard.durable_lsn() >= 1, "durable_lsn covers the append after ack");
 
         set_durability(DurabilityMode::Strict); // reset the global
         let _ = std::fs::remove_dir_all(&dir);
