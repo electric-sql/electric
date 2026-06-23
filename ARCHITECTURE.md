@@ -8,7 +8,7 @@ durable cheaply and the read leave the kernel as few times as possible.
 - [The model](#the-model)
 - [High-level: write path and read path](#high-level-write-path-and-read-path)
 - [Write path in detail](#write-path-in-detail)
-- [Durability modes](#durability-modes)
+- [Durability](#durability)
 - [Read path in detail](#read-path-in-detail)
 - [Keeping I/O fast from ingestion to fan-out](#keeping-io-fast-from-ingestion-to-fan-out)
 - [Where the time goes](#where-the-time-goes)
@@ -46,7 +46,7 @@ flowchart LR
     W3 --> W4[["per-stream appender mutex"]]
     W4 --> W5["write_all → data file<br/>(lands in page cache)"]
     W5 --> W6["update tail + resident cache"]
-    W6 --> W7["group-commit fsync<br/>(SyncCoalescer)"]
+    W6 --> W7["group-commit fsync<br/>(WAL shard committer)"]
     W7 --> W8["publish tail<br/>(watch channel)"]
     W8 --> W9["204 / 200 — only after durable"]
   end
@@ -95,60 +95,40 @@ Everything else is independent.
    the **resident tail cache**, then **publish the new tail** on the `watch`
    channel. Note the order: the cache is populated _before_ the wake, so a woken
    subscriber reliably hits it.
-5. **Durability** — _mode-selectable_ (`--durability`, default `strict`). In
-   `strict` the append awaits the `SyncCoalescer`: concurrent appenders in flight
-   share **one** barrier fsync (`fdatasync` on Linux, `F_FULLFSYNC` on macOS), and
-   the response returns only after the fsync that covers this append. `wal` instead
-   acks on a shared write-ahead-log commit — see
-   [Durability modes](#durability-modes) below. Whatever the mode, this
-   is the _only_ step that changes; everything above and the entire read path are
-   identical.
+5. **Durability** — the append is staged into the stream's assigned WAL shard, and the
+   response returns only after the shard's group-commit committer `fdatasync`s the segment
+   covering this record. See [Durability](#durability) below. Everything above and the
+   entire read path are identical regardless of workload.
 
 Visibility vs durability are deliberately decoupled: the bytes are in the page
 cache (and the tail is published) before durability resolves, so a live reader
 sees data with minimal latency, while the _appender_ doesn't get its 2xx until the
 data is durable.
 
-## Durability modes
+## Durability
 
-`--durability {strict|wal}` (default `strict`) is a single **latency-vs-
-durability knob on one shared architecture**. Both modes keep the same per-stream
-wire-byte file, the same page-cache write, the same pre-durability tail publish,
-and the same read/fan-out path. They differ **only in when an append is
-acknowledged relative to durability** — step 5 above. Both are crash-safe.
+The server uses a **single, unconditional WAL-based durability path**: an append
+is acked only after its record is durable in the sharded write-ahead log.
 
-| mode                   | append acks after…                                      | mechanism                                                                                                                                                        | a crash loses                           |
-| ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| **`strict`** (default) | the **per-stream file** is fsync'd                      | per-stream group-commit barrier fsync (`SyncCoalescer`) — concurrent appenders to a stream fold into one `fdatasync`                                             | nothing acked                           |
-| **`wal`**              | the append is committed to a **shared write-ahead log** | the record is staged into one of N sharded WAL segments; a per-shard group-commit committer `fdatasync`s the segment and advances a durable watermark before ack | nothing acked (recovered by WAL replay) |
+Every append is written to the per-stream data file (page cache, no hot fsync —
+this is the read surface) and simultaneously staged into one of N WAL shards
+(FNV-1a stream→shard routing, N = CPU cores by default). A per-shard group-commit
+committer `fdatasync`s the segment covering those records and advances a durable
+watermark; the ack is released only then. Because one committer batches **many
+streams' appends into a single fat WAL fsync**, the server is cardinality-insensitive
+— it is as fast on 10,000 streams as on 10.
 
-How each fits the architecture:
+Per-stream files are `fdatasync`'d off the ack path at a periodic **checkpoint**,
+after which the bounded WAL is recycled. On boot, recovery replays the WAL from
+its oldest retained segment, reconciles each stream's durable tail (torn-tail
+repair via truncation + `fdatasync`), then resets the WAL for fresh appends.
 
-- **`strict`** is the model the rest of this document describes: one fsync **per
-  stream per commit**, coalesced across that stream's concurrent appenders. Its
-  parallelism comes from **having many streams** — each its own file, so the device
-  can flush them concurrently. It shines where fsyncs parallelize cheaply (NVMe) and
-  stream cardinality is high.
+The invariant: **visibility is never gated on durability**. Bytes land in the page
+cache and the tail is published before the WAL `fdatasync`, so live readers see an
+append at memory latency while the appender's acknowledgement waits for the WAL
+commit.
 
-- **`wal`** decouples the durability fsync from the per-stream files. Every append
-  is _also_ appended to a **sharded write-ahead log** (FNV-1a stream→shard routing,
-  N shards = cores by default), and the ack waits on the WAL `fdatasync`, not the
-  stream file's. Because one committer batches **many streams' appends into a single
-  fat WAL fsync** (group commit), `wal` minimizes fsync _operations_ — the win on
-  slow/serializing storage where each fsync is expensive. The per-stream files still
-  receive the bytes (they remain the read surface, served by `sendfile` unchanged)
-  and are fsync'd off the hot path at a periodic **checkpoint**, after which the
-  bounded WAL is recycled. Recovery replays the WAL from its oldest live segment and
-  reconciles each stream's durable tail (torn-tail repair). The contrast in one
-  line: **`strict` = one fsync _per stream_; `wal` = one fsync _per shard_,
-  batched** — trading fsync-parallelism (strict: many files) for fsync-count (wal:
-  few fat commits). Both are crash-safe; `wal` is the win on slow/serializing
-  storage. Full design: [`durable-wal.md`](../../docs/durable-wal.md).
-
-The invariant across both modes: **visibility is never gated on durability**. Bytes
-land in the page cache and the tail is published before any fsync, so live readers
-see an append at memory latency regardless of mode — only the _appender's
-acknowledgement_ moves with the knob.
+Full design and as-built reference: [`durable-wal.md`](../../docs/durable-wal.md).
 
 ## Read path in detail
 
@@ -255,8 +235,7 @@ disjoint cores, 2 repeats. Headlines (full table in the README / PR):
 - **Large resident reads** (1 MB): **11.2k/s at ~266% CPU** — zero-copy `sendfile`
   does the page-cache → socket transfer at a fraction of a buffered copy's CPU.
 - **Appends:** fsync-bound; group-commit folds concurrent appends into ~one fsync —
-  **210k/s** @ conn 256. `--splice-appends` holds the rate at ~half the CPU
-  (76% → 43%) for binary streams.
+  **210k/s** @ conn 256.
 
 ## Tiering: hot buffer → cold storage (optional)
 
@@ -329,11 +308,6 @@ sizes, a planned follow-up for very large cold ranges.
 
 ## Optional fast paths & observability
 
-- **`splice(2)` binary appends** (`--splice-appends`, raw + Linux, off by default).
-  Binary streams store the body verbatim, so the append body can move socket → file
-  in the kernel with no userspace copy. It's a **CPU** lever (same append rate at
-  roughly half to a third of the server CPU), not a throughput one — appends are
-  fsync-bound. JSON (which transforms the body) and chunked bodies fall back.
 - **OpenTelemetry** (`--features telemetry`, off by default, zero-cost when off).
   A `ds.request` span plus lean, bounded-cardinality metrics aimed at the two
   pivots this document keeps returning to: **`ds.append.fsync.batch_size`**

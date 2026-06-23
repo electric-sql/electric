@@ -31,8 +31,6 @@ features. Builds on Linux and macOS, x64 and arm64.
 # build (run from packages/server-rust)
 cargo build --release        # → ./target/release/durable-streams-server
 cargo test  --release        # unit + integration tests (protocol conformance: see Conformance below)
-# optional Linux-only feature: io_uring strict fsync (enables the --strict-io-uring flag)
-cargo build --release --features strict-uring
 
 # run
 ./target/release/durable-streams-server --port 4438 --data-dir ./data
@@ -71,14 +69,12 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 | `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory; persists across restarts                     |
 | `--long-poll-timeout-ms` | `30000`                        | how long a `live=long-poll` request blocks before returning 204 |
 
-**Durability** — selects the append ack-path; all three share the same reads/visibility. See [ARCHITECTURE.md › Durability modes](ARCHITECTURE.md#durability-modes).
+**Durability** — the server uses a single WAL-based durability path. An append is acked only after its record is durable in the sharded write-ahead log (per-shard group-commit `fdatasync`). See [ARCHITECTURE.md › Durability](ARCHITECTURE.md#durability).
 
-| Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                                                           |
-| --------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--durability`        | `strict`  | `strict` \| `wal` — see _Choosing a configuration_ below                                                                                                                                                                                                                                                                                              |
-| `--wal-shards`        | CPU cores | (`wal` only) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                                                  |
-| `--wal-segment-bytes` | `128 MiB` | (`wal` only) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                                                        |
-| `--strict-io-uring`   | off       | (`strict` only; Linux + the `strict-uring` build feature) replace per-stream `spawn_blocking` `fdatasync` with one shared io_uring ring batching many streams' fsyncs into a single `io_uring_enter` — a CPU-per-append lever; falls back to `spawn_blocking` if io_uring is unavailable. Build with `cargo build --release --features strict-uring`. |
+| Flag                  | Default   | Description                                                                             |
+| --------------------- | --------- | --------------------------------------------------------------------------------------- |
+| `--wal-shards`        | CPU cores | shard / group-commit-committer count; persisted on first run, a later run must match it |
+| `--wal-segment-bytes` | `128 MiB` | per-shard WAL segment size; lower it only to force segment rolls in tests/benches       |
 
 **Read path** — performance knobs; none change protocol behaviour. Leave at defaults unless a benchmark says otherwise.
 
@@ -86,7 +82,6 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 | -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--tail-cache-bytes` | `0` (Linux) / `65536` (macOS) | resident tail-cache cap in bytes; `0` disables it (every read resolves to the file via `sendfile`/`pread`). Off by default on Linux (`sendfile` is already fast), on by default on macOS (no `sendfile`).         |
 | `--read-offload`     | `tail`                        | Linux: where `sendfile` reads run — `inline` (async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (blocking pool). `tail` keeps a cold backfill's disk fault off the async workers. |
-| `--splice-appends`   | off                           | Linux: zero-copy `splice(2)` for **binary** appends (socket → file). A CPU lever (~½–⅓ the append CPU), not a throughput lever; JSON/chunked/non-Linux fall back.                                                 |
 
 **Cold-storage tier** — off by default; see [Tiered storage](#tiered-storage-cold-offload). With `--tier off` the server is byte-identical to a single-file deployment.
 
@@ -108,26 +103,23 @@ S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID`
 
 ### Choosing a configuration
 
-| Your situation                                               | Use                                                                                                                                          |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Durable, on NVMe / many streams** (the default)            | `--durability strict` — one coalesced fsync per stream per commit; parallelism comes from having many stream files.                          |
-| **Slow / cloud disk (e.g. EBS), or fsync latency dominates** | `--durability wal` — batches many streams into one fat fsync per shard, minimizing fsync _operations_; crash-safe (recovered by WAL replay). |
-| **Bounded local disk with long history**                     | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy.                                  |
-| **Cutting append CPU on a Linux binary-append workload**     | add `--splice-appends`.                                                                                                                      |
-| **High fan-out p99 across many streams on Linux**            | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                                                  |
+| Your situation                                    | Use                                                                                                         |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Bounded local disk with long history**          | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
+| **High fan-out p99 across many streams on Linux** | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
 
 ## What it implements
 
 Core protocol: create / append / read (catch-up, long-poll, SSE), HEAD, DELETE, JSON mode, idempotent producers (`Producer-Id` / `Producer-Epoch` / `Stream-Seq`), close, TTL / expiry, cursors, ETags / 304, security headers, and stream forks.
 
-Durable by default (`--durability strict`): an append returns only after the fsync that covers it; `wal` is also crash-safe and trades that for fewer fsyncs / lower latency on slow storage (see [Durability modes](ARCHITECTURE.md#durability-modes)). State survives restarts — on boot the store rebuilds every stream from its data file plus a `.meta` sidecar and re-links fork chains (under `wal`, recovery also replays the write-ahead log). (Crash window per [PROTOCOL.md](../../PROTOCOL.md): producer dedup state may lag the data file, so producers should bump their epoch on restart.)
+Durable: an append returns only after its record is durable in the sharded write-ahead log (WAL). The WAL acks on a group-commit `fdatasync` and recovers cleanly on restart (no torn records). State survives restarts — on boot the store rebuilds every stream from its data file plus a `.meta` sidecar, re-links fork chains, and replays the WAL to reconcile any un-checkpointed tail. (Crash window per [PROTOCOL.md](../../PROTOCOL.md): producer dedup state may lag the data file, so producers should bump their epoch on restart.)
 
 **Not implemented: subscriptions / the `__ds` control plane.** Webhook and pull-wake subscriptions (the protocol's `__ds` routes, Ed25519-signed delivery, JWKS) are not part of this server. Clients consume streams directly via long-poll / SSE; if you need push delivery, run it as a separate component on top.
 
 ## How it's built
 
 - **Contiguous wire-byte storage** — each stream's data file holds exactly the bytes that go on the wire, so a catch-up read is a literal byte range. No reframing, no per-message copies.
-- **Selectable, coalesced durability** — `strict` (default) folds a stream's concurrent appenders into one group-commit fsync (`fdatasync` on Linux, `F_FULLFSYNC` on macOS); `wal` batches many streams into a shared sharded write-ahead log (fewer, fatter fsyncs — best on slow storage). Both are crash-safe; same visibility and reads — only the ack-path durability changes. See [Durability modes](ARCHITECTURE.md#durability-modes).
+- **Sharded WAL durability** — appends are acked only after their record is durable in the sharded write-ahead log. One group-commit committer per shard batches many streams' appends into a single `fdatasync` (`F_FULLFSYNC` on macOS), minimizing fsync operations regardless of stream cardinality. Per-stream files are the read view; checkpoint periodically fsyncs them and recycles WAL segments. See [Durability](ARCHITECTURE.md#durability).
 - **Per-stream serialization, lock-free reads** — one async mutex per stream orders appends; reads take a brief snapshot and do positioned `pread`s, never blocking the writer.
 - **watch-channel wakeups** drive long-poll and SSE subscribers, so there's no polling loop.
 - **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte) and binary appends with `splice(2)`; elsewhere it falls back to positioned reads.
@@ -181,12 +173,6 @@ Both registries authenticate via OIDC trusted publishing, so the workflow stores
 no registry tokens. A one-time manual bootstrap is required before the first
 tag-driven release — see [the bootstrap runbook](./RELEASING.md).
 
-The prebuilt **Linux** binaries (tarball + npm) are built with `--features
-strict-uring`, so the io_uring fsync executor (`--durability strict
---strict-io-uring`) is available; it stays off unless that flag is passed. macOS
-binaries are built with default features. `cargo install durable-streams` builds
-default features too — add `--features strict-uring` on Linux to opt in.
-
 ---
 
 ## Benchmarks
@@ -207,6 +193,6 @@ an engine-level comparison against [Ursula](https://github.com/tonbo-io/ursula).
 
 **Read scaling by server cores** (1 KB, conn 256): 2c → **193k /s**, 4c → **256k /s**, 8c → 236k /s (the load generator on its 3 cores saturates past 4 server cores).
 
-**Appends** (100 B): 116k /s @ conn 64, **210k /s** @ conn 256. **`--splice-appends`** (1 MB binary): 375 → 404 /s at ~half the CPU (76 % → 43 %) — a CPU lever, not a throughput one. **Cold-tier read** (`--tier local`, via `Body::Channel`): ~5 GB/s.
+**Appends** (100 B): 116k /s @ conn 64, **210k /s** @ conn 256. **Cold-tier read** (`--tier local`, via `Body::Channel`): ~5 GB/s.
 
 Hot reads stay sub-millisecond (p50 ≤ 0.11 ms) even under a 512 MB-capped cold backfill. cv across repeats is < 1 % for most cells.
