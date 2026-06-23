@@ -31,10 +31,17 @@ defmodule ElectricTelemetry.SystemMetrics do
   # expensive to run every tick, so we gate it to run roughly once a minute. With a
   # 5s poll interval, every 12th tick is ~60s.
   #
-  # We gate with a simple counter in `:persistent_term` rather than a second
-  # `:telemetry_poller` child: the poller's period is shared across all measurements
-  # (see `ElectricTelemetry.Poller.child_spec/2`), so there is no per-measurement
-  # period to configure, and a counter-gate keeps this self-contained.
+  # We gate with an atomic `:counters` ref rather than a second `:telemetry_poller`
+  # child: the poller's period is shared across all measurements (see
+  # `ElectricTelemetry.Poller.child_spec/2`), so there is no per-measurement period
+  # to configure, and a counter-gate keeps this self-contained.
+  #
+  # The `:counters` ref is created once and cached in `:persistent_term` (a single
+  # put per gate key, ever). We deliberately avoid bumping the tick count via
+  # `:persistent_term.put` on every poll: each `:persistent_term.put` triggers a
+  # global scan of all process heaps for GC, which is exactly the per-tick overhead a
+  # cheap telemetry module must avoid. `:counters.add/3` is a lock-free atomic with no
+  # such cost and no read-modify-write race.
   @fragmentation_interval_ticks 12
 
   @doc """
@@ -160,23 +167,30 @@ defmodule ElectricTelemetry.SystemMetrics do
   end
 
   defp due?(opts) do
-    cond do
-      Keyword.get(opts, :force, false) ->
-        true
-
-      true ->
-        gate_key = Keyword.get(opts, :gate_key, @fragmentation_gate_key)
-        tick = increment_gate(gate_key)
-        rem(tick, @fragmentation_interval_ticks) == 0
+    if Keyword.get(opts, :force, false) do
+      true
+    else
+      gate_key = Keyword.get(opts, :gate_key, @fragmentation_gate_key)
+      ref = gate_counter(gate_key)
+      :counters.add(ref, 1, 1)
+      # The first tick reads 1, so the gate fires on the Nth tick (not on boot).
+      rem(:counters.get(ref, 1), @fragmentation_interval_ticks) == 0
     end
   end
 
-  # Returns the post-increment tick count. The first tick is 1, so the gate fires
-  # on the @fragmentation_interval_ticks-th tick.
-  defp increment_gate(gate_key) do
-    next = :persistent_term.get(gate_key, 0) + 1
-    :persistent_term.put(gate_key, next)
-    next
+  # Returns a cached single-slot `:counters` ref for the gate key, creating and
+  # caching it on first use. The `:persistent_term.put` here happens at most once per
+  # gate key (on first call), never on the per-tick hot path.
+  defp gate_counter(gate_key) do
+    case :persistent_term.get(gate_key, :undefined) do
+      :undefined ->
+        ref = :counters.new(1, [:write_concurrency])
+        :persistent_term.put(gate_key, ref)
+        ref
+
+      ref ->
+        ref
+    end
   end
 
   # `:recon_alloc.fragmentation/1` returns a proplist per allocator with carrier and
