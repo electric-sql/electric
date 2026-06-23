@@ -180,6 +180,22 @@ defmodule ElectricTelemetry.SystemMetrics do
     ElectricTelemetry.SystemMetrics.Cgroup.measurement(telemetry_opts, opts)
   end
 
+  @doc """
+  Host/process `/proc` metrics, sampled every poll tick.
+
+  Reads `/proc/meminfo` and the BEAM's own `/proc/<pid>/status` and
+  `/proc/<pid>/io` and emits the `host.mem.*` and `host.proc.beam.*` families.
+  Parsing lives in `ElectricTelemetry.SystemMetrics.Proc`; this is a thin
+  delegator so it registers like the other measurements. No-ops on non-Linux.
+
+  Options are forwarded to `Proc.measurement/2` (`:proc_root`, `:pid` and `:os`
+  overrides for tests).
+  """
+  @spec proc_measurement(map(), keyword()) :: :ok
+  def proc_measurement(telemetry_opts, opts \\ []) do
+    ElectricTelemetry.SystemMetrics.Proc.measurement(telemetry_opts, opts)
+  end
+
   defp due?(opts) do
     if Keyword.get(opts, :force, false) do
       true

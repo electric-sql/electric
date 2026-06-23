@@ -27,6 +27,7 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
   """
 
   alias ElectricTelemetry.SystemMetrics
+  alias ElectricTelemetry.SystemMetrics.ProcfsParse
 
   @default_root "/sys/fs/cgroup"
 
@@ -273,24 +274,16 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
 
   ## low-level file/number helpers -----------------------------------------
 
+  # The format-agnostic file/integer primitives are shared with the /proc
+  # reader (ProcfsParse); the colon- vs space-delimited stat parsers above stay
+  # separate because they parse genuinely different file layouts.
+
   # Read a single-integer file (memory.current, usage_in_bytes, cpuacct.usage).
   defp read_int_file(path), do: parse_int(read_raw_file(path))
 
-  defp read_raw_file(path) do
-    case File.read(path) do
-      {:ok, content} -> String.trim(content)
-      {:error, _reason} -> nil
-    end
-  end
+  defp read_raw_file(path), do: ProcfsParse.read_raw_file(path)
 
-  defp parse_int(nil), do: nil
-
-  defp parse_int(str) do
-    case Integer.parse(String.trim(str)) do
-      {int, ""} -> int
-      _ -> nil
-    end
-  end
+  defp parse_int(value), do: ProcfsParse.parse_int(value)
 
   defp parse_float(str) do
     case Float.parse(String.trim(str)) do
