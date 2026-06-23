@@ -14,6 +14,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   require Repatch
   alias Electric.Utils
+  alias Electric.Postgres.Configuration
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.PublicationManager
 
@@ -173,6 +174,154 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2)
       assert_pub_tables(ctx, [ctx.relation, alt_relation])
+    end
+
+    @tag update_debounce_timeout: 50
+    test "batches a burst of new relations", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "CREATE TABLE other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      alt_relation = {"public", "other_table"}
+      alt_relation_oid = lookup_relation_oid(ctx.pool, alt_relation)
+      test_pid = self()
+
+      Repatch.patch(
+        Configuration,
+        :configure_tables_for_replication,
+        [mode: :shared],
+        fn conn, publication, additions, replica_identity_relations ->
+          send(test_pid, {:batch_configuration, additions, replica_identity_relations})
+
+          Repatch.real(
+            Configuration.configure_tables_for_replication(
+              conn,
+              publication,
+              additions,
+              replica_identity_relations
+            )
+          )
+        end
+      )
+
+      tasks = [
+        Task.async(fn ->
+          shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
+        end),
+        Task.async(fn ->
+          shape = generate_shape({alt_relation_oid, alt_relation}, @where_clause_1)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape)
+        end)
+      ]
+
+      assert_receive {:batch_configuration, additions, replica_identity_relations}, 1_000
+
+      assert MapSet.new(additions) ==
+               MapSet.new([ctx.relation_with_oid, {alt_relation_oid, alt_relation}])
+
+      assert MapSet.new(replica_identity_relations) == MapSet.new(additions)
+      assert Task.await_many(tasks) == [:ok, :ok]
+      assert_pub_tables(ctx, [ctx.relation, alt_relation])
+    end
+
+    @tag update_debounce_timeout: 50
+    test "registers a complete shape tree in one publication batch", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "CREATE TABLE other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      alt_relation = {"public", "other_table"}
+      alt_relation_oid = lookup_relation_oid(ctx.pool, alt_relation)
+      test_pid = self()
+
+      Repatch.patch(
+        Configuration,
+        :configure_tables_for_replication,
+        [mode: :shared],
+        fn conn, publication, additions, replica_identity_relations ->
+          send(test_pid, {:batch_configuration, additions, replica_identity_relations})
+
+          Repatch.real(
+            Configuration.configure_tables_for_replication(
+              conn,
+              publication,
+              additions,
+              replica_identity_relations
+            )
+          )
+        end
+      )
+
+      shapes = [
+        {@shape_handle_1, generate_shape(ctx.relation_with_oid, @where_clause_1)},
+        {@shape_handle_2, generate_shape({alt_relation_oid, alt_relation}, @where_clause_1)}
+      ]
+
+      assert :ok == PublicationManager.register_shapes(ctx.stack_id, shapes)
+
+      assert_receive {:batch_configuration, additions, replica_identity_relations}, 1_000
+
+      assert MapSet.new(additions) ==
+               MapSet.new([ctx.relation_with_oid, {alt_relation_oid, alt_relation}])
+
+      assert MapSet.new(replica_identity_relations) == MapSet.new(additions)
+      assert_pub_tables(ctx, [ctx.relation, alt_relation])
+    end
+
+    @tag update_debounce_timeout: 200
+    test "does not starve publication updates while registrations continue", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "CREATE TABLE other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      alt_relation = {"public", "other_table"}
+      alt_relation_oid = lookup_relation_oid(ctx.pool, alt_relation)
+      test_pid = self()
+
+      Repatch.patch(
+        Configuration,
+        :configure_tables_for_replication,
+        [mode: :shared],
+        fn conn, publication, additions, replica_identity_relations ->
+          send(test_pid, {:batch_configuration, additions, replica_identity_relations})
+
+          Repatch.real(
+            Configuration.configure_tables_for_replication(
+              conn,
+              publication,
+              additions,
+              replica_identity_relations
+            )
+          )
+        end
+      )
+
+      assert :ok ==
+               PublicationManager.register_shapes(ctx.stack_id, [
+                 {@shape_handle_1, generate_shape(ctx.relation_with_oid, @where_clause_1)}
+               ])
+
+      Process.sleep(100)
+
+      assert :ok ==
+               PublicationManager.register_shapes(ctx.stack_id, [
+                 {@shape_handle_2,
+                  generate_shape({alt_relation_oid, alt_relation}, @where_clause_1)}
+               ])
+
+      assert_receive {:batch_configuration, additions, replica_identity_relations}, 150
+
+      assert MapSet.new(additions) ==
+               MapSet.new([ctx.relation_with_oid, {alt_relation_oid, alt_relation}])
+
+      assert MapSet.new(replica_identity_relations) == MapSet.new(additions)
     end
 
     @tag update_debounce_timeout: 100

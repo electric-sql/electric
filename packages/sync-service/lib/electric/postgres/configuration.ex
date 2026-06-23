@@ -128,6 +128,34 @@ defmodule Electric.Postgres.Configuration do
     )
   end
 
+  @spec configure_tables_for_replication(
+          Postgrex.conn(),
+          String.t(),
+          [Electric.oid_relation()],
+          [Electric.oid_relation()],
+          timeout()
+        ) :: :ok | {:error, term()}
+  def configure_tables_for_replication(
+        conn,
+        publication_name,
+        additions,
+        replica_identity_relations,
+        timeout \\ @default_action_timeout
+      ) do
+    additions = Enum.sort(additions)
+    replica_identity_relations = Enum.sort(replica_identity_relations)
+
+    run_in_transaction(
+      conn,
+      fn conn ->
+        add_tables_to_publication!(conn, publication_name, additions)
+        set_tables_replica_identity_full!(conn, replica_identity_relations)
+        :ok
+      end,
+      timeout
+    )
+  end
+
   @spec drop_table_from_publication(
           Postgrex.conn(),
           String.t(),
@@ -188,6 +216,46 @@ defmodule Electric.Postgres.Configuration do
             {:error, reason}
         end
     end
+  end
+
+  defp add_tables_to_publication!(_conn, _publication_name, []), do: :ok
+
+  defp add_tables_to_publication!(conn, publication_name, additions) do
+    tables =
+      additions
+      |> Enum.map(fn {_oid, relation} -> Utils.relation_to_sql(relation) end)
+      |> Enum.join(", ")
+
+    Postgrex.query!(
+      conn,
+      "ALTER PUBLICATION #{Utils.quote_name(publication_name)} ADD TABLE #{tables}",
+      []
+    )
+  end
+
+  defp set_tables_replica_identity_full!(_conn, []), do: :ok
+
+  defp set_tables_replica_identity_full!(conn, relations) do
+    statements =
+      Enum.map_join(relations, "\n", fn {_oid, relation} ->
+        "  ALTER TABLE #{Utils.relation_to_sql(relation)} REPLICA IDENTITY FULL;"
+      end)
+
+    delimiter = dollar_quote_delimiter(statements)
+
+    Postgrex.query!(
+      conn,
+      "DO #{delimiter}\nBEGIN\n#{statements}\nEND\n#{delimiter};",
+      []
+    )
+  end
+
+  defp dollar_quote_delimiter(contents) do
+    delimiter = "$electric_#{System.unique_integer([:positive])}$"
+
+    if String.contains?(contents, delimiter),
+      do: dollar_quote_delimiter(contents),
+      else: delimiter
   end
 
   @spec exec_set_replica_identity_full(Postgrex.conn(), String.t()) :: :ok | {:error, term()}

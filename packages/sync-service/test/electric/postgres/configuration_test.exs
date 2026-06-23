@@ -69,6 +69,38 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
     end
 
+    test "configures multiple tables for replication as one batch", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      Postgrex.query!(
+        conn,
+        "CREATE TABLE other_items (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      relations =
+        for relation <- [{"public", "items"}, {"public", "other_items"}] do
+          {get_table_oid(conn, relation), relation}
+        end
+
+      assert :ok =
+               Configuration.configure_tables_for_replication(
+                 conn,
+                 publication,
+                 relations,
+                 relations
+               )
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items"},
+               {"public", "other_items"}
+             ]
+
+      assert get_table_identity(conn, {"public", "items"}) == "f"
+      assert get_table_identity(conn, {"public", "other_items"}) == "f"
+    end
+
     test "drops table from publication", %{
       pool: conn,
       publication_name: publication

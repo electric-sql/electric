@@ -213,10 +213,58 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     {:noreply, state}
   end
 
-  def handle_continue({:perform_relation_actions, [{action, filter} | rest]}, state) do
+  def handle_continue({:perform_relation_actions, relation_actions}, state) do
+    case addition_batch(relation_actions) do
+      {:ok, additions, replica_identity_relations} ->
+        result =
+          OpenTelemetry.with_span(
+            "publication_manager.update_publication_relations",
+            [
+              action: "batch_add",
+              relation_count: length(additions),
+              replica_identity_count: length(replica_identity_relations)
+            ],
+            state.stack_id,
+            fn ->
+              Configuration.configure_tables_for_replication(
+                state.db_pool,
+                state.publication_name,
+                additions,
+                replica_identity_relations
+              )
+            end
+          )
+
+        case result do
+          :ok ->
+            notify_filters_result(additions, {:ok, :configured}, state)
+            {:noreply, state, {:continue, {:perform_relation_actions, []}}}
+
+          {:error, error} ->
+            Logger.debug(
+              "Batch publication update failed; retrying relations individually: #{inspect(error)}"
+            )
+
+            {:noreply, state,
+             {:continue, {:perform_relation_actions_individually, relation_actions}}}
+        end
+
+      :not_batchable ->
+        {:noreply, state, {:continue, {:perform_relation_actions_individually, relation_actions}}}
+    end
+  end
+
+  def handle_continue({:perform_relation_actions_individually, []}, state) do
+    {:noreply, state, {:continue, {:perform_relation_actions, []}}}
+  end
+
+  def handle_continue(
+        {:perform_relation_actions_individually, [{action, filter} | rest]},
+        state
+      ) do
     {_oid, rel} = filter
 
-    res =
+    result =
       OpenTelemetry.with_span(
         "publication_manager.update_publication_relation",
         [action: inspect(action), relation: Utils.relation_to_sql(rel)],
@@ -224,9 +272,9 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         fn -> do_publication_update(action, filter, state) end
       )
 
-    notify_filter_result(filter, res, state)
+    notify_filter_result(filter, result, state)
 
-    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
+    {:noreply, state, {:continue, {:perform_relation_actions_individually, rest}}}
   end
 
   @spec check_publication_status(state()) ::
@@ -306,6 +354,22 @@ defmodule Electric.Replication.PublicationManager.Configurator do
              filter
            ) do
       {:ok, :dropped}
+    end
+  end
+
+  defp addition_batch(relation_actions) do
+    if length(relation_actions) > 1 and
+         Enum.all?(relation_actions, fn {action, _filter} ->
+           action in [:add, :add_and_configure]
+         end) do
+      additions = Enum.map(relation_actions, &elem(&1, 1))
+
+      replica_identity_relations =
+        for {:add_and_configure, filter} <- relation_actions, do: filter
+
+      {:ok, additions, replica_identity_relations}
+    else
+      :not_batchable
     end
   end
 
