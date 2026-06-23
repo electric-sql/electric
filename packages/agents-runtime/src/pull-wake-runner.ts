@@ -515,6 +515,12 @@ export function createPullWakeRunner(
         config.runtime.dispatchWake(notification, {
           claimHeaders: resolveClaimHeaders,
           claimTokenHeader: config.claimTokenHeader,
+          onDoneNextWake: (nextStreamPath) => {
+            scheduleDeferredWakeClaim(
+              { ...event, stream: nextStreamPath },
+              signal
+            )
+          },
         })
       } catch (err) {
         reportError(err)

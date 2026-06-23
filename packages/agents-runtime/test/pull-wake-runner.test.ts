@@ -170,6 +170,7 @@ describe(`createPullWakeRunner`, () => {
     expect(testRuntime.dispatchWake).toHaveBeenCalledWith(claimed, {
       claimHeaders: expect.any(Function),
       claimTokenHeader: `electric-claim-token`,
+      onDoneNextWake: expect.any(Function),
     })
     expect(testRuntime.drainWakes).not.toHaveBeenCalled()
     expect(runner.offset).toBe(`42`)
@@ -376,6 +377,54 @@ describe(`createPullWakeRunner`, () => {
     })
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requestGenerations).toEqual([1, 2])
+
+    await runner.stop()
+  })
+
+  it(`reclaims immediately when a dispatched wake reports pending work on done`, async () => {
+    const event = { ...wakeEvent(`one`), generation: 1 }
+    const claimed = notification(`one`)
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json(claimed)
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    let doneNextWake: ((streamPath: string) => void) | undefined
+    const testRuntime = {
+      ...runtime(),
+      dispatchWake: vi.fn((_notification, options) => {
+        doneNextWake = options?.onDoneNextWake
+      }),
+    }
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield event
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    })
+
+    doneNextWake?.(`/chat/one/main`)
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(2)
+    })
 
     await runner.stop()
   })

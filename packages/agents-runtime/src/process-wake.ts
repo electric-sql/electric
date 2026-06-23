@@ -75,6 +75,7 @@ interface ClaimCallbackResponse {
   claimToken?: string
   token?: string
   writeToken?: string
+  next_wake?: boolean
   error?: { code?: string; message?: string }
 }
 
@@ -2643,7 +2644,7 @@ export async function processWake(
         log.info(`shutdown requested, sending done callback at checkpoint`)
       }
       try {
-        await sendDone(
+        const doneResponse = await sendDone(
           callback,
           activeClaimToken,
           claimHeaderConfig,
@@ -2651,6 +2652,9 @@ export async function processWake(
           streamPath,
           doneOffset === `-1` ? null : doneOffset
         )
+        if (doneResponse.next_wake) {
+          config.onDoneNextWake?.(streamPath)
+        }
       } catch (err) {
         cleanupErrors.push(toError(err))
       }
@@ -2692,7 +2696,7 @@ async function sendDone(
   epoch: number,
   streamPath: string,
   offset: string | null
-): Promise<void> {
+): Promise<ClaimCallbackResponse> {
   const response = await fetch(callback, {
     method: `POST`,
     headers: await createClaimCallbackHeaders(claimHeaderConfig, token),
@@ -2703,15 +2707,16 @@ async function sendDone(
     }),
   })
 
+  const body = await response.text().catch(() => `<body unreadable>`)
   if (!response.ok) {
-    let body = ``
-    try {
-      body = await response.text()
-    } catch {
-      body = `<body unreadable>`
-    }
     throw new Error(
       `Done callback failed (${response.status}): ${body || response.statusText}`
     )
+  }
+
+  const raw = parseClaimCallbackResponseBody(body)
+  return {
+    ...raw,
+    ok: raw.ok === undefined ? response.ok && raw.error === undefined : raw.ok,
   }
 }
