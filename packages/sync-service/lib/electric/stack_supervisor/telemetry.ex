@@ -161,6 +161,27 @@ defmodule Electric.StackSupervisor.Telemetry do
         :pending ->
           :ok
       end
+
+      report_per_shape_disk_usage(stack_id)
+    end
+
+    # Emit `electric.storage.dir.bytes` for the top-N largest shapes only (the
+    # disk walk bounds cardinality by keeping just the top-N buckets). Each
+    # series is tagged with the shape handle.
+    defp report_per_shape_disk_usage(stack_id) do
+      case ElectricTelemetry.DiskUsage.current_dirs(stack_id) do
+        {:ok, top_dirs} ->
+          Enum.each(top_dirs, fn {shape_handle, bytes} ->
+            Electric.Telemetry.OpenTelemetry.execute(
+              [:electric, :storage, :dir],
+              %{bytes: bytes},
+              %{stack_id: stack_id, shape: shape_handle}
+            )
+          end)
+
+        :pending ->
+          :ok
+      end
     end
   else
     def report_disk_usage(_stack_id, _telemetry_opts) do
