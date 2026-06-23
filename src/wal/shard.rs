@@ -1494,4 +1494,80 @@ mod tests {
             }
         }
     }
+
+    /// CQ-1 invariant: `register_dirty` must happen-before `reserve_and_stage`.
+    ///
+    /// At the moment `reserve_and_stage` begins (before any lsn is assigned),
+    /// the stream must already be in the shard's dirty set so a concurrent
+    /// checkpoint can never recycle the WAL segment carrying that lsn before
+    /// the per-stream file has been `fdatasync`'d (spec §7, register-before-stage).
+    ///
+    /// The `set_on_stage_hook` seam fires at the very first instruction of
+    /// `reserve_and_stage`, letting us snapshot `is_dirty(stream_id)` at the
+    /// earliest possible moment the record's lsn could become durable.
+    #[tokio::test]
+    async fn wal_registers_dirty_before_lsn_can_become_durable() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let dir = tmp("dirty-order");
+        let sh = Shard::open(dir.clone()).unwrap();
+
+        // Build a real stream via the store so register_dirty gets a proper
+        // Arc<StreamState> (same as the production maybe_sync_on_ack path does).
+        let store = crate::store::Store::new_with_tier(
+            dir.clone(),
+            crate::tier::TierConfig::default(),
+        )
+        .unwrap();
+        let st = match store.create("order-stream", ckpt_test_cfg(), None, 0).unwrap() {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let stream_id = st.id;
+
+        // Precondition: stream is NOT yet dirty before any ack runs.
+        assert!(
+            !sh.is_dirty(stream_id),
+            "precondition: stream not in dirty set before registration"
+        );
+
+        // Install the ordering seam: captures is_dirty(stream_id) at the very
+        // start of reserve_and_stage (before this record's lsn is even assigned).
+        let hook_fired = Arc::new(AtomicBool::new(false));
+        let dirty_at_stage = Arc::new(AtomicBool::new(false));
+        {
+            let sh2 = Arc::clone(&sh);
+            let fired = Arc::clone(&hook_fired);
+            let dirty_seen = Arc::clone(&dirty_at_stage);
+            sh.set_on_stage_hook(Box::new(move |sid| {
+                if sid == stream_id {
+                    dirty_seen.store(sh2.is_dirty(stream_id), Ordering::SeqCst);
+                    fired.store(true, Ordering::SeqCst);
+                }
+            }));
+        }
+
+        // Mimic maybe_sync_on_ack: register_dirty BEFORE reserve_and_stage.
+        // This is the exact production ordering the CQ-1 invariant mandates.
+        sh.register_dirty(stream_id, Arc::clone(&st));
+        sh.reserve_and_stage(RecordKind::Append, stream_id, 0, b"cq1-probe").unwrap();
+
+        // THE INVARIANT: the hook must have fired and seen is_dirty == true.
+        assert!(
+            hook_fired.load(Ordering::SeqCst),
+            "reserve_and_stage seam must fire (WAL arm executed)"
+        );
+        assert!(
+            dirty_at_stage.load(Ordering::SeqCst),
+            "stream must be registered dirty BEFORE reserve_and_stage begins \
+             (register_dirty must precede staging — if this fails, a checkpoint \
+              floor can advance past the lsn before the per-stream file is in \
+              the dirty set, violating the recycle-before-fsync ordering, CQ-1)"
+        );
+
+        // The stream remains dirty after the stage (checkpoint hasn't run yet).
+        assert!(sh.is_dirty(stream_id), "stream stays dirty until checkpoint drains it");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

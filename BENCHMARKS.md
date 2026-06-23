@@ -69,6 +69,8 @@ cores.
 `--splice-appends` (1 MB binary): 375 → 404 /s at **76% → 43% CPU** (a CPU
 lever, not a throughput one). Cold-tier read (`--tier local`): ~**5 GB/s**.
 
+> **Historical note:** `--splice-appends` was removed in the WAL-only refactor; rows referencing it below are preserved as historical data but the flag no longer exists (the server exits 2 if passed).
+
 ## Byte vs JSON mode
 
 The server speaks two body modes: **binary** stores the POST body verbatim

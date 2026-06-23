@@ -125,7 +125,7 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
         // ~40k subscribers that kernel memory, not the ~27 KiB of Rust per-conn
         // heap, dominates RSS and drives the OOM. A fixed 64 KiB recv / 64 KiB
         // send buffer is still ample for this server's traffic: SSE is receive-
-        // light, and the splice/sendfile upload+download paths read/write in
+        // light, and the sendfile upload+download paths read/write in
         // large chunks driven by socket readiness, so a 64 KiB kernel queue keeps
         // a normal link saturated — we only forgo autotuning's growth into the
         // MiB range, which is what bloats idle connections. Best-effort: clamped
