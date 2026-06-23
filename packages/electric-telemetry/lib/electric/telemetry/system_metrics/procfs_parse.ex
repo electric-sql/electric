@@ -60,9 +60,9 @@ defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   end
 
   # Parse a "<Key>:<whitespace><int>[ <unit>]" file (status, io) into a map of
-  # binary key -> integer. The first whitespace-delimited token after the colon
-  # is taken as the value; any trailing unit (e.g. "kB") is ignored. Lines whose
-  # value doesn't parse as an integer are dropped.
+  # binary key -> integer. The text after the colon is trimmed and split on
+  # spaces; the first token is taken as the value and any trailing unit (e.g.
+  # "kB") is ignored. Lines whose value doesn't parse as an integer are dropped.
   defp parse_keyed_kv(content) do
     content
     |> String.split("\n", trim: true)
