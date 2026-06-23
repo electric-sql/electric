@@ -183,6 +183,12 @@ no registry tokens. A one-time manual bootstrap is required before the first
 tag-driven release — see
 [the bootstrap runbook](../../docs/superpowers/runbooks/server-rust-release-bootstrap.md).
 
+The prebuilt **Linux** binaries (tarball + npm) are built with `--features
+strict-uring`, so the io_uring fsync executor (`--durability strict
+--strict-io-uring`) is available; it stays off unless that flag is passed. macOS
+binaries are built with default features. `cargo install durable-streams` builds
+default features too — add `--features strict-uring` on Linux to opt in.
+
 ---
 
 ## Benchmarks
