@@ -1,5 +1,5 @@
 [package]
-name = "durable-streams-server"
+name = "durable-streams"
 version = "0.1.0"
 edition = "2021"
 description = "High-performance Durable Streams server (Rust)"
@@ -9,6 +9,13 @@ rust-version = "1.75"
 repository = "https://github.com/durable-streams/durable-streams"
 homepage = "https://electric-sql.com/primitives/durable-streams"
 readme = "README.md"
+
+# The crate is named `durable-streams` (the bare crate name `durable-streams-server`
+# is taken on crates.io), but the produced binary keeps its historical name so the
+# conformance harness, release workflow, and docs are unaffected.
+[[bin]]
+name = "durable-streams-server"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
