@@ -1778,4 +1778,167 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, insert_other) == MapSet.new([])
     end
   end
+
+  describe "subquery index memory usage" do
+    # This isn't a pass/fail test with tight bounds — it seeds the SubqueryIndex
+    # the way the running system does (realistic shape-handle keys + UUID
+    # membership values) and prints a memory report so we can see where the bytes
+    # go for seeded subqueries.
+    #
+    # Run it (it's excluded by default) with:
+    #
+    #   mix test --include memory test/electric/shapes/filter_test.exs
+    #
+    # Term sizes that drive the numbers below:
+    #
+    #   * Shape handles. `Electric.Shapes.Shape.generate_id/1` builds handles as
+    #     "#{hash}-#{unix_microseconds}" — a `:erlang.phash2` hash (up to ~9
+    #     digits) joined to a 16-digit microsecond timestamp, i.e. ~26-byte
+    #     binaries. In the live system these frequently arrive as *sub-binaries*
+    #     of a larger request/replication buffer, but ETS flattens any
+    #     sub-binary whose own size is < 64 bytes into a fresh heap binary when
+    #     the row is inserted. So every index row that mentions a handle stores
+    #     its own copy (a ~26-byte heap binary boxes to 6 words = 48 bytes); the
+    #     handle is NOT shared between rows.
+    #
+    #   * UUID membership values are stored in their 16-byte binary form (what
+    #     `Ecto.UUID.dump/1` produces), which boxes to a 4-word (32-byte) heap
+    #     binary, also copied into every row that mentions it.
+    #
+    # For each seeded value the index writes ~2 rows: an exact `:membership` row
+    # and a `:node_positive_member` routing row, each repeating the handle and
+    # the value in its key tuple. That per-(shape, value) duplication is what the
+    # report quantifies.
+
+    @tag :memory
+    @tag timeout: 120_000
+    test "report: seeded subqueries on shared vs separate nodes" do
+      wordsize = :erlang.system_info(:wordsize)
+
+      # Anchor the realistic sizes against genuinely-generated terms.
+      sample_shape =
+        Shape.new!("table",
+          where: "id IN (SELECT id FROM another_table)",
+          inspector: @inspector,
+          feature_flags: ["allow_subqueries"]
+        )
+
+      {_hash, real_handle} = Shape.generate_id(sample_shape)
+      sample_value = uuid_value(1, 1)
+
+      IO.puts("""
+
+      ====================== SubqueryIndex memory report ======================
+      wordsize: #{wordsize} bytes
+
+      sample shape handle: #{inspect(real_handle)}
+        byte_size: #{byte_size(real_handle)} bytes
+        flat_size: #{:erts_debug.flat_size(real_handle)} words = \
+      #{:erts_debug.flat_size(real_handle) * wordsize} bytes (boxed, as copied per ETS row)
+
+      sample uuid value: #{byte_size(sample_value)}-byte binary
+        flat_size: #{:erts_debug.flat_size(sample_value)} words = \
+      #{:erts_debug.flat_size(sample_value) * wordsize} bytes (boxed, as copied per ETS row)
+      """)
+
+      scenarios = [
+        {"1000 shapes · shared node · 50 values each", 1000, 50, &shared_node_where/1},
+        {"1000 shapes · separate nodes · 50 values each", 1000, 50, &separate_node_where/1},
+        {"50 shapes · shared node · 1000 values each", 50, 1000, &shared_node_where/1}
+      ]
+
+      for {label, shape_count, values_per_shape, where_fun} <- scenarios do
+        report = measure_subquery_memory(shape_count, values_per_shape, where_fun)
+        print_subquery_report(label, report, wordsize)
+      end
+
+      assert true
+    end
+  end
+
+  # A subquery predicate every shape shares -> all shapes register on one node.
+  defp shared_node_where(_i), do: "id IN (SELECT id FROM another_table)"
+
+  # A distinct outer equality per shape -> every shape gets its own subquery node.
+  defp separate_node_where(i), do: "number = #{i} AND id IN (SELECT id FROM another_table)"
+
+  # A realistic shape handle: the real hash of the shape (exactly as
+  # `Shape.generate_id/1` computes it) joined to a unique synthetic microsecond
+  # timestamp so the handles are distinct, ~26-byte binaries like production.
+  defp realistic_handle(shape, i), do: "#{Shape.hash(shape)}-#{1_750_000_000_000_000 + i}"
+
+  # A unique 16-byte binary, the in-memory form of a uuid membership value.
+  defp uuid_value(i, v), do: <<i::64, v::64>>
+
+  defp measure_subquery_memory(shape_count, values_per_shape, where_fun) do
+    filter = Filter.new()
+    index = Filter.subquery_index(filter)
+
+    for i <- 1..shape_count do
+      shape =
+        Shape.new!("table",
+          where: where_fun.(i),
+          inspector: @inspector,
+          feature_flags: ["allow_subqueries"]
+        )
+
+      handle = realistic_handle(shape, i)
+      Filter.add_shape(filter, handle, shape)
+
+      values = MapSet.new(for v <- 1..values_per_shape, do: uuid_value(i, v))
+      SubqueryIndex.seed_membership(index, handle, @subquery_ref, 0, values)
+      SubqueryIndex.mark_ready(index, handle)
+    end
+
+    table = filter.subquery_index
+
+    %{
+      shape_count: shape_count,
+      values_per_shape: values_per_shape,
+      total_values: shape_count * values_per_shape,
+      memory_words: :ets.info(table, :memory),
+      rows: :ets.info(table, :size),
+      by_tag: subquery_tag_breakdown(table)
+    }
+  end
+
+  # Group every row by the leading tag atom in its key tuple and sum the boxed
+  # heap size of each group, so we can see which row kind dominates.
+  defp subquery_tag_breakdown(table) do
+    table
+    |> :ets.tab2list()
+    |> Enum.group_by(fn {key, _value} -> elem(key, 0) end)
+    |> Enum.map(fn {tag, rows} ->
+      flat_words = Enum.reduce(rows, 0, fn row, acc -> acc + :erts_debug.flat_size(row) end)
+      {tag, %{count: length(rows), flat_words: flat_words}}
+    end)
+    |> Enum.sort_by(fn {_tag, %{flat_words: words}} -> -words end)
+  end
+
+  defp print_subquery_report(label, report, wordsize) do
+    memory_bytes = report.memory_words * wordsize
+    per_value = if report.total_values > 0, do: memory_bytes / report.total_values, else: 0.0
+    per_row = if report.rows > 0, do: memory_bytes / report.rows, else: 0.0
+
+    IO.puts("""
+    ------------------------------------------------------------------------
+    #{label}
+      shapes:           #{report.shape_count}
+      values/shape:     #{report.values_per_shape}
+      total values:     #{report.total_values}
+      ETS rows:         #{report.rows}
+      ETS memory:       #{memory_bytes} bytes (#{Float.round(memory_bytes / 1024 / 1024, 2)} MiB)
+      per seeded value: #{Float.round(per_value, 1)} bytes
+      per ETS row:      #{Float.round(per_row, 1)} bytes
+      rows by tag (boxed heap size):\
+    """)
+
+    for {tag, %{count: count, flat_words: words}} <- report.by_tag do
+      IO.puts(
+        "        #{String.pad_trailing(inspect(tag), 24)} " <>
+          "#{String.pad_leading(Integer.to_string(count), 8)} rows  " <>
+          "#{String.pad_leading(Integer.to_string(words * wordsize), 12)} bytes"
+      )
+    end
+  end
 end
