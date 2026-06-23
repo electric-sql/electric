@@ -2507,14 +2507,24 @@ defmodule Electric.Plug.RouterTest do
     test "return 400 if same subquery is used with both positive and negative polarity", %{
       opts: opts
     } do
-      assert %{status: 400} =
-               conn("GET", "/v1/shape", %{
-                 table: "outer_table",
-                 offset: "-1",
-                 where:
-                   "inner_id IN (SELECT id FROM inner_table) OR NOT inner_id IN (SELECT id FROM inner_table)"
-               })
-               |> Router.call(opts)
+      conn =
+        conn("GET", "/v1/shape", %{
+          table: "outer_table",
+          offset: "-1",
+          where:
+            "inner_id IN (SELECT id FROM inner_table) OR NOT inner_id IN (SELECT id FROM inner_table)"
+        })
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert %{
+               "errors" => %{
+                 "where" => [
+                   "a subquery dependency cannot be used with both positive and negative polarity in the same filter"
+                 ]
+               }
+             } = Jason.decode!(conn.resp_body)
     end
 
     @tag with_sql: [
