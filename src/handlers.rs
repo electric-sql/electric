@@ -39,57 +39,6 @@ fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
-/// Durability mode for the append/close hot path. Set once at startup from
-/// `--durability`.
-///
-/// - `Strict` (default): ack only after the covering `fdatasync`
-///   (`SyncCoalescer::sync_to`).
-/// - `Wal`: the per-stream file write (page cache) is the read view as today, then
-///   the bytes are staged into the sharded WAL and the ack waits on the WAL shard's
-///   group-commit `fdatasync` instead of a per-stream one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DurabilityMode {
-    Strict,
-    Wal,
-}
-
-/// Process-global durability mode, encoded as a `u8` (`Strict` is the zero default so
-/// an unset flag is strict). Same single-`AtomicU8` choke-point pattern the bool used.
-static DURABILITY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-
-impl Default for DurabilityMode {
-    /// `strict` is the default mode (an unset `--durability` flag).
-    fn default() -> Self {
-        DurabilityMode::Strict
-    }
-}
-
-/// Parse the `--durability` flag value into a [`DurabilityMode`].
-/// Accepts `strict` | `wal`; returns `None` for an unknown value — the
-/// caller maps that to a usage error.
-pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
-    match s {
-        "strict" => Some(DurabilityMode::Strict),
-        "wal" => Some(DurabilityMode::Wal),
-        _ => None,
-    }
-}
-
-pub fn set_durability(mode: DurabilityMode) {
-    let v = match mode {
-        DurabilityMode::Strict => 0,
-        DurabilityMode::Wal => 1,
-    };
-    DURABILITY_MODE.store(v, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub fn durability() -> DurabilityMode {
-    match DURABILITY_MODE.load(std::sync::atomic::Ordering::Relaxed) {
-        1 => DurabilityMode::Wal,
-        _ => DurabilityMode::Strict,
-    }
-}
-
 const SSE_MAX_DURATION: Duration = Duration::from_secs(60);
 const CACHEABLE: &str = "public, max-age=60, stale-while-revalidate=300";
 
@@ -546,16 +495,12 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                     return text_response(500, "write failed");
                 }
                 let target = ap.written;
-                let file = ap.file.clone();
-                let mode = durability();
-                // Logical pre-append offset for THIS append — needed ONLY by the Wal
-                // arm. Read `file_base` (under the appender lock so a concurrent
+                // Read `file_base` under the appender lock so a concurrent
                 // compaction that raises `file_base` + resets `ap.written` together
-                // can't desync it from `target`) ONLY in Wal mode. Strict takes
-                // NO `st.shared` lock here — byte-for-byte the pre-WAL hot path.
-                let stream_offset = wal_stream_offset(mode, &st, target, &wire);
+                // can't desync it from `target`.
+                let stream_offset = wal_stream_offset(&st, target, &wire);
                 drop(ap);
-                if maybe_sync_on_ack(mode, &store, &st, &wire, file, target, stream_offset)
+                if maybe_sync_on_ack(&store, &st, &wire, stream_offset)
                     .await
                     .is_err()
                 {
@@ -624,93 +569,35 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
     });
 }
 
-/// Gate the ack's durability on the durability mode. Every append/close `sync_to`
-/// site routes through this one helper so both modes are decided in one place.
-///
-/// - `Strict`: await the covering per-stream `fdatasync` (`sync_to`), exactly as before.
-/// - `Wal`: the per-stream file write already happened upstream (the read view); stage
-///   the wire bytes into the stream's WAL shard and await the shard's group-commit
-///   `fdatasync`. `stream_offset` is `Some(logical pre-append offset)` for THIS append
-///   (`file_base + file-relative pre-append position`), computed by the caller via
-///   [`wal_stream_offset`] from the SAME append context as `target` (under the appender
-///   lock) so a concurrent compaction/appender can't desync it. Recovery does
-///   `file_pos = stream_offset − file_base`, so for forked/compacted streams
-///   (`file_base > 0`) this MUST be logical, not the file-relative `target`.
-///
-/// `Strict` ignores `store`/`wire`/`stream_offset` and passes `stream_offset:
-/// None` (it never takes the `st.shared` read lock), so that path stays
-/// byte-for-byte unchanged from the pre-WAL base.
-/// Compute the **logical** pre-append `stream_offset` for the WAL record — but
-/// ONLY in `Wal` mode. In `Strict` this returns `None` WITHOUT touching
-/// `st.shared`, so the default (strict) hot path acquires exactly the
-/// locks the pre-WAL base did (no extra `st.shared.read()` per append).
+/// Compute the logical pre-append `stream_offset` for the WAL record.
 ///
 /// MUST be called while the caller still holds the appender lock: `file_base`
 /// and `target` (`ap.written`) are reset together under that lock on compaction,
 /// so reading `file_base` here keeps it consistent with the captured `target`.
-fn wal_stream_offset(
-    mode: DurabilityMode,
-    st: &StreamState,
-    target: u64,
-    wire: &Bytes,
-) -> Option<u64> {
-    match mode {
-        DurabilityMode::Wal => {
-            Some(st.shared.read().unwrap().file_base + target - wire.len() as u64)
-        }
-        DurabilityMode::Strict => None,
-    }
+fn wal_stream_offset(st: &StreamState, target: u64, wire: &Bytes) -> u64 {
+    st.shared.read().unwrap().file_base + target - wire.len() as u64
 }
 
 async fn maybe_sync_on_ack(
-    mode: DurabilityMode,
     store: &Arc<Store>,
     st: &Arc<StreamState>,
     wire: &Bytes,
-    file: std::sync::Arc<std::fs::File>,
-    target: u64,
-    stream_offset: Option<u64>,
+    stream_offset: u64,
 ) -> std::io::Result<()> {
-    match mode {
-        DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
-        DurabilityMode::Wal => {
-            let stream_offset = stream_offset
-                .expect("wal mode requires a precomputed logical stream_offset");
-            let wal = store.wal.get().expect("wal mode requires Store.wal");
-            let shard = wal.shard_for(st.id);
-            // Register the touched per-stream file into the shard's dirty set
-            // (spec §7) BEFORE staging the WAL record. This MUST precede
-            // `reserve_and_stage`: once a record is staged, the committer can
-            // advance `durable_lsn` to cover its lsn at any moment, and a
-            // concurrent checkpoint snapping its floor there would
-            // `recycle_below` the segment carrying that lsn. If the stream were
-            // not yet in the dirty set, that checkpoint would unlink the WAL
-            // segment WITHOUT having `fdatasync`'d the stream's per-stream file
-            // → recycle-before-fsync data loss (spec §7 forbids this).
-            // Registering first closes that window: the stream is dirty before
-            // its lsn can ever become durable, so any checkpoint whose floor
-            // covers the lsn fdatasyncs this stream's file before recycling. The
-            // per-stream bytes are already in page cache (`write_wire` ran
-            // upstream), so registering before staging is safe. We register the
-            // stream's `Arc<StreamState>` so checkpoint can read its current
-            // durable tail (task 11b) alongside the file it fsyncs. Off the ack
-            // gate — checkpoint runs asynchronously and never blocks the ack.
-            shard.register_dirty(st.id, Arc::clone(st));
-            // A transient WAL segment write error fails the ack (the request
-            // errors) rather than crashing the process — matching the committer's
-            // fail-loud-don't-ack discipline. The lsn was reserved but never
-            // written, so it stays a permanent gap that blocks the contiguous
-            // watermark, and durable_lsn never advances past it.
-            let lsn = shard.reserve_and_stage(
-                crate::wal::codec::RecordKind::Append,
-                st.id,
-                stream_offset,
-                wire,
-            )?;
-            shard.wait_durable(lsn).await;
-            Ok(())
-        }
-    }
+    let wal = store.wal.get().expect("WAL must be attached before serving");
+    let shard = wal.shard_for(st.id);
+    // Register the touched per-stream file into the shard's dirty set
+    // (spec §7) BEFORE staging the WAL record — see the full ordering note in
+    // the WAL spec. Registering first closes the recycle-before-fsync window.
+    shard.register_dirty(st.id, Arc::clone(st));
+    let lsn = shard.reserve_and_stage(
+        crate::wal::codec::RecordKind::Append,
+        st.id,
+        stream_offset,
+        wire,
+    )?;
+    shard.wait_durable(lsn).await;
+    Ok(())
 }
 
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
@@ -1050,30 +937,24 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         }
     }
     let target = ap.written;
-    let file = ap.file.clone();
-    let mode = durability();
-    // Logical pre-append offset for THIS append (see site above) — Wal-only; read
-    // `file_base` under the appender lock so a concurrent compaction can't desync
-    // it from `target`. Strict takes no `st.shared` lock here.
-    let stream_offset = wal_stream_offset(mode, &st, target, &wire);
+    // Read `file_base` under the appender lock so a concurrent compaction can't desync
+    // it from `target`.
+    let stream_offset = wal_stream_offset(&st, target, &wire);
     drop(ap);
 
     // Covering fsync failed: not durable. Error out (and skip the close commit
     // below) rather than ack 2xx.
     if !wire.is_empty()
-        && maybe_sync_on_ack(mode, &store, &st, &wire, file, target, stream_offset)
+        && maybe_sync_on_ack(&store, &st, &wire, stream_offset)
             .await
             .is_err()
     {
         ret!(text_response(500, "fsync failed"), Conflict);
     }
 
-    // Closure ordering: data fdatasync (above, strict-only) → durable meta commit →
-    // expose the closure to readers (closed_durable) and wake waiters. Readers never
-    // observe EOF for a closure that is not yet durable (PROTOCOL.md §4.1). Under
-    // `strict` the recovered closed tail also never moves backward; under `fast`
-    // the data fdatasync is skipped, so the *closedness* is still durable but its
-    // *position* can shrink on an OS/power crash (see the close-req note above).
+    // Closure ordering: WAL fsync → durable meta commit → expose the closure to
+    // readers (closed_durable) and wake waiters. Readers never observe EOF for a
+    // closure that is not yet durable (PROTOCOL.md §4.1).
     // Producer/access updates are debounced (documented crash window; see store::Meta).
     if close_req {
         let st2 = st.clone();
@@ -1954,400 +1835,3 @@ mod bug1_tests {
     }
 }
 
-#[cfg(test)]
-mod durability_tests {
-    use super::*;
-
-    #[test]
-    fn durability_flag_defaults_strict_and_flips() {
-        // Default mode is Strict (an unset --durability flag).
-        assert_eq!(DurabilityMode::default(), DurabilityMode::Strict, "default must be strict");
-
-        // --durability parsing: strict|wal. `fast` and `relaxed` are no longer
-        // accepted (the fast mode was removed — wal is both faster and durable).
-        assert_eq!(parse_durability("strict"), Some(DurabilityMode::Strict));
-        assert_eq!(parse_durability("wal"), Some(DurabilityMode::Wal));
-        assert_eq!(parse_durability("fast"), None, "`fast` mode was removed");
-        assert_eq!(parse_durability("relaxed"), None, "`relaxed` is not a recognized mode");
-        assert_eq!(parse_durability("bogus"), None, "unknown value → usage error");
-
-        // --wal-shards parses to an Option<usize> (the `requested_n` passed to
-        // WalSet::open). An absent flag is `None` (→ persisted N or default_n at
-        // init); a present flag is `Some(n)`.
-        let parsed: Option<usize> = "4".parse().ok();
-        assert_eq!(parsed, Some(4usize), "--wal-shards N parses to Some(N)");
-        let absent: Option<usize> = None;
-        assert_eq!(absent, None, "an absent --wal-shards defaults to None");
-
-        // Process-global flag round-trips through set/get. Reset at the end so no
-        // append-path test (which reads it) is perturbed.
-        set_durability(DurabilityMode::Wal);
-        assert_eq!(durability(), DurabilityMode::Wal, "set_durability(Wal) takes effect");
-        set_durability(DurabilityMode::Strict); // reset
-        assert_eq!(durability(), DurabilityMode::Strict);
-    }
-
-    #[tokio::test]
-    async fn maybe_sync_on_ack_strict_syncs() {
-        use crate::store::{CreateResult, Store, StreamConfig};
-        use crate::tier::TierConfig;
-
-        let dir = std::env::temp_dir().join(format!(
-            "ds-durab-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = std::sync::Arc::new(Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap());
-        let cfg = StreamConfig {
-            content_type: "application/octet-stream".into(),
-            ttl_seconds: None,
-            expires_at: None,
-            expires_at_raw: None,
-            create_closed: false,
-            forked_from: None,
-            fork_offset_raw: None,
-            fork_sub_offset: None,
-        };
-        let st = match store.create("s", cfg, None, 0).unwrap() {
-            CreateResult::Created(s) => s,
-            _ => panic!("create failed"),
-        };
-
-        // Write 10 bytes via the same path the handler uses, then STRICT-sync.
-        let mut ap = st.appender.lock().await;
-        write_wire(&st, &mut ap, &bytes::Bytes::from_static(b"0123456789")).unwrap();
-        let target = ap.written;
-        let file = ap.file.clone();
-        drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Strict, &store, &st, &bytes::Bytes::from_static(b"0123456789"), file, target, None)
-            .await
-            .unwrap();
-        assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[tokio::test]
-    async fn wal_mode_acks_after_durable() {
-        use crate::store::{CreateResult, Store, StreamConfig};
-        use crate::tier::TierConfig;
-        use crate::wal::walset::WalSet;
-
-        let dir = std::env::temp_dir().join(format!(
-            "ds-wal-mode-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-
-        // Store with a 1-shard WalSet attached.
-        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal.set(std::sync::Arc::clone(&wal)).ok();
-        let store = std::sync::Arc::new(store);
-
-        let cfg = StreamConfig {
-            content_type: "application/octet-stream".into(),
-            ttl_seconds: None,
-            expires_at: None,
-            expires_at_raw: None,
-            create_closed: false,
-            forked_from: None,
-            fork_offset_raw: None,
-            fork_sub_offset: None,
-        };
-        let st = match store.create("w", cfg, None, 0).unwrap() {
-            CreateResult::Created(s) => s,
-            _ => panic!("create failed"),
-        };
-
-        // Write the per-stream file exactly as the handler does.
-        let wire = bytes::Bytes::from_static(b"hello-wal");
-        let mut ap = st.appender.lock().await;
-        write_wire(&st, &mut ap, &wire).unwrap();
-        let target = ap.written;
-        let file = ap.file.clone();
-        drop(ap);
-
-        // The bytes are in the per-stream file IMMEDIATELY (page cache), before ack.
-        assert_eq!(
-            std::fs::read(&st.file_path).unwrap(),
-            wire.as_ref(),
-            "per-stream file holds the bytes before the WAL ack"
-        );
-
-        // NO committer spawned yet → the shard's durable_lsn cannot advance, so the
-        // wal-mode helper must NOT return. Prove the ack is gated.
-        set_durability(DurabilityMode::Wal);
-        let stream_offset =
-            st.shared.read().unwrap().file_base + target - wire.len() as u64;
-        let ack = maybe_sync_on_ack(
-            DurabilityMode::Wal,
-            &store,
-            &st,
-            &wire,
-            std::sync::Arc::clone(&file),
-            target,
-            Some(stream_offset),
-        );
-        tokio::pin!(ack);
-        tokio::select! {
-            biased;
-            _ = &mut ack => panic!("wal ack returned before the committer made the append durable"),
-            _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
-        }
-
-        // Now spawn the committer; the staged append becomes durable and the ack resolves.
-        wal.spawn_committers();
-        tokio::time::timeout(std::time::Duration::from_secs(5), ack)
-            .await
-            .expect("wal ack must resolve once the committer advances durable_lsn")
-            .unwrap();
-
-        // The shard's durable_lsn now covers the single staged append (lsn 1).
-        assert!(
-            wal.shard_for(st.id).durable_lsn() >= 1,
-            "durable_lsn covers the append after ack"
-        );
-
-        set_durability(DurabilityMode::Strict); // reset the global
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// Regression for the WAL `stream_offset` logical-vs-file-relative bug: a
-    /// forked/compacted stream has `file_base > 0`, and the WAL record's
-    /// `stream_offset` is defined as the LOGICAL pre-append offset (recovery does
-    /// `file_pos = stream_offset − file_base`). The buggy code recorded the
-    /// file-relative `target − wire.len()`, which is short by `file_base` and
-    /// underflows/mis-positions on recovery. This test seeds `file_base > 0` and
-    /// asserts the recorded `stream_offset` is logical, i.e. `stream_offset −
-    /// file_base` equals the correct file position (0 for the first append).
-    #[tokio::test]
-    async fn wal_record_offset_is_logical_for_forked_stream() {
-        use crate::store::{CreateResult, Store, StreamConfig};
-        use crate::tier::TierConfig;
-        use crate::wal::codec::{decode_at, Decoded};
-        use crate::wal::walset::WalSet;
-
-        let dir = std::env::temp_dir().join(format!(
-            "ds-wal-forked-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-
-        // 1-shard WalSet so the record lands in `<dir>/wal/0/1.wal`.
-        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal.set(std::sync::Arc::clone(&wal)).ok();
-        let store = std::sync::Arc::new(store);
-
-        let cfg = StreamConfig {
-            content_type: "application/octet-stream".into(),
-            ttl_seconds: None,
-            expires_at: None,
-            expires_at_raw: None,
-            create_closed: false,
-            forked_from: None,
-            fork_offset_raw: None,
-            fork_sub_offset: None,
-        };
-        // A forked stream: base_offset > 0 → file_base starts at base_offset > 0.
-        const FILE_BASE: u64 = 1000;
-        let st = match store.create("forked", cfg, None, FILE_BASE).unwrap() {
-            CreateResult::Created(s) => s,
-            _ => panic!("create failed"),
-        };
-        assert_eq!(
-            st.shared.read().unwrap().file_base,
-            FILE_BASE,
-            "forked stream must start with file_base > 0"
-        );
-
-        // Append via the same path the handler uses.
-        let wire = bytes::Bytes::from_static(b"forked-payload");
-        let mut ap = st.appender.lock().await;
-        write_wire(&st, &mut ap, &wire).unwrap();
-        let target = ap.written;
-        let file = ap.file.clone();
-        let file_base = st.shared.read().unwrap().file_base;
-        let stream_offset = file_base + target - wire.len() as u64;
-        drop(ap);
-
-        set_durability(DurabilityMode::Wal);
-        wal.spawn_committers();
-        maybe_sync_on_ack(
-            DurabilityMode::Wal,
-            &store,
-            &st,
-            &wire,
-            std::sync::Arc::clone(&file),
-            target,
-            Some(stream_offset),
-        )
-        .await
-        .unwrap();
-
-        // Read the staged record back from the shard's segment and assert the
-        // recorded stream_offset is LOGICAL. The first append's file position is 0,
-        // so the logical offset must equal file_base. The buggy `target − wire.len()`
-        // would record 0 here (the file-relative pre-offset), failing this assert.
-        let seg = std::fs::read(dir.join("wal").join("0").join("1.wal")).unwrap();
-        match decode_at(&seg, 0) {
-            Decoded::Record { stream_id, stream_offset: rec_off, payload_off, len, .. } => {
-                assert_eq!(stream_id, st.id);
-                assert_eq!(&seg[payload_off..payload_off + len], wire.as_ref());
-                assert_eq!(
-                    rec_off, FILE_BASE,
-                    "WAL stream_offset must be LOGICAL (file_base + file-relative pre-offset), \
-                     not the file-relative `target − wire.len()`"
-                );
-                // Recovery maps file_pos = stream_offset − file_base; the first
-                // append must land at file position 0.
-                assert_eq!(
-                    rec_off - file_base,
-                    0,
-                    "stream_offset − file_base must position the payload at file pos 0"
-                );
-            }
-            other => panic!("WAL record did not decode: {other:?}"),
-        }
-
-        set_durability(DurabilityMode::Strict); // reset the global
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// Ordering invariant (CQ-1): the wal-mode ack path MUST register the touched
-    /// per-stream file into the shard's dirty set BEFORE its lsn can ever become
-    /// durable. Otherwise a checkpoint whose floor snaps in the window between
-    /// `reserve_and_stage` and `register_dirty` could `recycle_below(floor)` the
-    /// WAL segment carrying that lsn while the stream's per-stream file was never
-    /// `fdatasync`'d this checkpoint → recycle-before-fsync data loss (spec §7).
-    ///
-    /// We prove the order deterministically with a `#[cfg(test)]` seam on the
-    /// shard: `Shard::set_on_stage_hook` installs a callback that fires at the
-    /// VERY START of `reserve_and_stage` — before any lsn is reserved, i.e.
-    /// strictly before this record's lsn can ever become durable. The hook
-    /// asserts the stream is ALREADY in the dirty set at that moment. That holds
-    /// iff `register_dirty(...)` ran BEFORE `reserve_and_stage(...)` in the wal
-    /// ack arm. If `register_dirty` is moved back to after `reserve_and_stage`
-    /// (the original window), the hook fires before registration and the
-    /// in-hook assertion (surfaced via an atomic flag the test checks) fails.
-    #[tokio::test]
-    async fn wal_registers_dirty_before_lsn_can_become_durable() {
-        use crate::store::{CreateResult, Store, StreamConfig};
-        use crate::tier::TierConfig;
-        use crate::wal::walset::WalSet;
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let dir = std::env::temp_dir().join(format!(
-            "ds-wal-dirty-order-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-
-        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
-        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
-        store.wal.set(std::sync::Arc::clone(&wal)).ok();
-        let store = std::sync::Arc::new(store);
-
-        let cfg = StreamConfig {
-            content_type: "application/octet-stream".into(),
-            ttl_seconds: None,
-            expires_at: None,
-            expires_at_raw: None,
-            create_closed: false,
-            forked_from: None,
-            fork_offset_raw: None,
-            fork_sub_offset: None,
-        };
-        let st = match store.create("order", cfg, None, 0).unwrap() {
-            CreateResult::Created(s) => s,
-            _ => panic!("create failed"),
-        };
-
-        // Write the per-stream bytes upstream of the ack, exactly as the handler.
-        let wire = bytes::Bytes::from_static(b"order-wal");
-        let mut ap = st.appender.lock().await;
-        write_wire(&st, &mut ap, &wire).unwrap();
-        let target = ap.written;
-        let file = ap.file.clone();
-        drop(ap);
-
-        let shard = wal.shard_for(st.id);
-        let stream_id = st.id;
-
-        // Before the ack runs, the stream is NOT yet dirty.
-        assert!(
-            !shard.is_dirty(stream_id),
-            "precondition: stream not registered before the wal ack runs"
-        );
-
-        // Install the ordering seam: at the instant `reserve_and_stage` begins
-        // (the earliest point this record's lsn could become durable), record
-        // whether the stream was ALREADY registered dirty.
-        let hook_fired = std::sync::Arc::new(AtomicBool::new(false));
-        let dirty_at_stage = std::sync::Arc::new(AtomicBool::new(false));
-        {
-            let hook_shard = std::sync::Arc::clone(shard);
-            let fired = std::sync::Arc::clone(&hook_fired);
-            let dirty_seen = std::sync::Arc::clone(&dirty_at_stage);
-            shard.set_on_stage_hook(Box::new(move |sid| {
-                if sid == stream_id {
-                    dirty_seen.store(hook_shard.is_dirty(stream_id), Ordering::SeqCst);
-                    fired.store(true, Ordering::SeqCst);
-                }
-            }));
-        }
-
-        set_durability(DurabilityMode::Wal);
-        wal.spawn_committers();
-        let stream_offset = st.shared.read().unwrap().file_base + target - wire.len() as u64;
-
-        maybe_sync_on_ack(
-            DurabilityMode::Wal,
-            &store,
-            &st,
-            &wire,
-            std::sync::Arc::clone(&file),
-            target,
-            Some(stream_offset),
-        )
-        .await
-        .unwrap();
-
-        // The seam must have fired (the wal arm went through `reserve_and_stage`).
-        assert!(hook_fired.load(Ordering::SeqCst), "reserve_and_stage seam must fire");
-
-        // THE INVARIANT: the stream was already dirty when staging began, i.e.
-        // `register_dirty` precedes `reserve_and_stage`. Fails if registration is
-        // moved back after staging — the exact recycle-before-fsync window (CQ-1).
-        assert!(
-            dirty_at_stage.load(Ordering::SeqCst),
-            "stream must be registered dirty BEFORE reserve_and_stage runs \
-             (register_dirty must precede staging so a checkpoint floor can never \
-              cover the lsn before the per-stream file is in the dirty set)"
-        );
-
-        // And after the ack the stream is still dirty and the append is durable.
-        assert!(shard.is_dirty(stream_id), "stream stays dirty until next checkpoint");
-        assert!(shard.durable_lsn() >= 1, "durable_lsn covers the append after ack");
-
-        set_durability(DurabilityMode::Strict); // reset the global
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}

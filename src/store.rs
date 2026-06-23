@@ -12,8 +12,6 @@ use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-#[cfg(feature = "telemetry")]
-use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex as StdMutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -90,175 +88,13 @@ pub struct Appender {
     pub written: u64,
 }
 
-struct SyncInner {
-    synced: u64,
-    in_flight: bool,
-}
-
-/// Decrements the pending-appender counter on drop, covering every exit path of
-/// `sync_to` (including the early `synced >= target` return). Telemetry-only:
-/// the counter exists solely to feed the group-commit batch-size metric, so it
-/// is compiled out (no atomic on the append hot path) in a default build.
-#[cfg(feature = "telemetry")]
-struct PendingGuard<'a>(&'a AtomicUsize);
-
-#[cfg(feature = "telemetry")]
-impl Drop for PendingGuard<'_> {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::AcqRel);
-    }
-}
-
-/// Coalesces fsyncs: concurrent appenders share one in-flight barrier-fsync,
-/// mirroring the Node server's FileHandlePool.fsyncFile leader/follower scheme.
-pub struct SyncCoalescer {
-    inner: StdMutex<SyncInner>,
-    tx: watch::Sender<u64>,
-    /// Appenders currently inside `sync_to` (incremented on entry, decremented
-    /// on return). The leader snapshots this when it starts a barrier-fsync to
-    /// record how many appends coalesced into the one fsync — the group-commit
-    /// health signal (`ds.append.fsync.batch_size`). Telemetry-only: gated out of
-    /// default builds so the contended atomic never touches the append hot path.
-    #[cfg(feature = "telemetry")]
-    pending: AtomicUsize,
-}
-
-impl SyncCoalescer {
-    /// Test-only: the current durable watermark (bytes proven synced). Lets a test
-    /// assert that `strict` advanced it and `fast` did not (fsync was skipped).
-    #[cfg(test)]
-    pub fn synced(&self) -> u64 {
-        self.inner.lock().unwrap().synced
-    }
-
-    fn new() -> Self {
-        let (tx, _rx) = watch::channel(0u64);
-        SyncCoalescer {
-            inner: StdMutex::new(SyncInner {
-                synced: 0,
-                in_flight: false,
-            }),
-            tx,
-            #[cfg(feature = "telemetry")]
-            pending: AtomicUsize::new(0),
-        }
-    }
-
-    /// Wait until at least `target` bytes are durable, issuing a sync if needed.
-    ///
-    /// Returns `Err` if the covering fsync failed: the caller MUST then surface
-    /// an error (never a durable ack), since the data may not have reached stable
-    /// storage. Followers re-loop and a new leader retries the fsync.
-    pub async fn sync_to(
-        &self,
-        file: Arc<File>,
-        stream: &StreamState,
-        target: u64,
-    ) -> std::io::Result<()> {
-        // Count this caller as a pending appender for the whole call, so the
-        // leader's batch-size snapshot reflects everyone waiting on a fsync.
-        // Telemetry-only — no atomic on the append path in a default build.
-        #[cfg(feature = "telemetry")]
-        self.pending.fetch_add(1, Ordering::AcqRel);
-        #[cfg(feature = "telemetry")]
-        let _guard = PendingGuard(&self.pending);
-        loop {
-            let lead = {
-                let mut s = self.inner.lock().unwrap();
-                if s.synced >= target {
-                    return Ok(());
-                }
-                if s.in_flight {
-                    false
-                } else {
-                    s.in_flight = true;
-                    true
-                }
-            };
-            if lead {
-                // Snapshot the coalesced batch size at the moment we commit to a
-                // fsync: every appender currently in `sync_to` (including this
-                // leader) folds into this one barrier-fsync. (Telemetry-only.)
-                #[cfg(feature = "telemetry")]
-                let batch = self.pending.load(Ordering::Acquire) as u64;
-                #[cfg(not(feature = "telemetry"))]
-                let batch = 0u64;
-                // Sync covers everything written at the time the fsync starts
-                // (file-local bytes: logical tail minus the live file's base).
-                let covers = {
-                    let s = stream.shared.read().unwrap();
-                    s.tail - s.file_base
-                };
-                let f = file.clone();
-                let t = crate::telemetry::Timer::start();
-                // Releases leadership if this future is cancelled mid-fsync.
-                let mut guard = LeaderGuard {
-                    coalescer: self,
-                    armed: true,
-                };
-                let fsync_res: std::io::Result<()> =
-                    match tokio::task::spawn_blocking(move || barrier_fsync(&f)).await {
-                        Ok(inner) => inner,
-                        Err(e) => Err(std::io::Error::other(e)),
-                    };
-                guard.armed = false;
-                crate::telemetry::record_fsync(t.elapsed_secs(), batch);
-                {
-                    let mut s = self.inner.lock().unwrap();
-                    // Advance the durable watermark only on a successful fsync.
-                    if fsync_res.is_ok() {
-                        s.synced = s.synced.max(covers);
-                    }
-                    s.in_flight = false;
-                    self.tx.send_replace(s.synced);
-                }
-                fsync_res?;
-            } else {
-                let mut rx = self.tx.subscribe();
-                // Re-check state after subscribing to avoid missed wakeups.
-                {
-                    let s = self.inner.lock().unwrap();
-                    if s.synced >= target {
-                        return Ok(());
-                    }
-                }
-                let _ = rx.changed().await;
-            }
-        }
-    }
-}
-
-/// Releases group-commit leadership if the leader future is dropped (cancelled)
-/// mid-fsync. Disarmed on the normal path once the await completes and the inline
-/// commit clears `in_flight` itself.
-struct LeaderGuard<'a> {
-    coalescer: &'a SyncCoalescer,
-    armed: bool,
-}
-
-impl Drop for LeaderGuard<'_> {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        // Cancelled mid-fsync: release leadership and wake waiters so a new leader
-        // is elected. Non-panicking lock (we may be unwinding).
-        if let Ok(mut s) = self.coalescer.inner.lock() {
-            s.in_flight = false;
-            let synced = s.synced;
-            drop(s);
-            self.coalescer.tx.send_replace(synced);
-        }
-    }
-}
-
 /// macOS uses fcntl(F_FULLFSYNC) for a true flush-to-platter (power-loss
 /// durable), accepting slower fsyncs in macOS dev; the no-loss guarantee holds
 /// on every platform. On Linux use fdatasync.
 ///
 /// Returns the fsync result: a failure (e.g. EIO writeback error) MUST be
 /// surfaced to the caller so an append is never acked as durable when the data
-/// did not reach stable storage. See `SyncCoalescer::sync_to`.
+/// did not reach stable storage.
 pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
     #[cfg(target_os = "macos")]
@@ -299,7 +135,6 @@ pub struct StreamState {
     pub appender: AsyncMutex<Appender>,
     pub shared: RwLock<Shared>,
     pub tail_tx: watch::Sender<Tail>,
-    pub sync: SyncCoalescer,
     /// True while a debounced meta flush is pending.
     pub meta_dirty: AtomicBool,
     /// Serializes sidecar writes for this stream. Concurrent writers (append
@@ -687,7 +522,6 @@ impl Store {
                 soft_deleted: meta.soft_deleted,
             }),
             tail_tx,
-            sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),
@@ -855,7 +689,6 @@ impl Store {
                 soft_deleted: false,
             }),
             tail_tx,
-            sync: SyncCoalescer::new(),
             meta_dirty: AtomicBool::new(false),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),

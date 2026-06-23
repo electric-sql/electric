@@ -70,12 +70,11 @@ fn main() {
     let mut tier = tier::TierConfig::default();
     // `--wal-shards N` (the WAL shard count). `None` ⇒ on a fresh data dir use the
     // core count; on an existing one reuse the persisted N. A value ≠ the persisted
-    // N is rejected with exit 2 (spec §5). Only consulted under `--durability wal`.
+    // N is rejected with exit 2 (spec §5).
     let mut wal_shards: Option<usize> = None;
     // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
-    // Only consulted under `--durability wal`; useful for forcing rolls in tests
-    // and benches without writing a full 128 MiB segment.
+    // Useful for forcing rolls in tests and benches without writing a full 128 MiB segment.
     let mut wal_segment_bytes: Option<u64> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -136,16 +135,6 @@ fn main() {
             "--tier-local-dir" => {
                 tier.local_dir = Some(val(args.next(), "--tier-local-dir").into());
             }
-            "--durability" => {
-                let v = val(args.next(), "--durability");
-                match handlers::parse_durability(&v) {
-                    Some(mode) => handlers::set_durability(mode),
-                    None => {
-                        eprintln!("--durability must be strict|wal");
-                        std::process::exit(2);
-                    }
-                }
-            }
             "--wal-shards" => {
                 let n: usize = parse_val(args.next(), "--wal-shards");
                 if n == 0 {
@@ -198,7 +187,7 @@ fn main() {
             Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"),
         );
 
-        // ---- WAL wiring (`--durability wal` only) ----
+        // ---- WAL wiring (always-on) ----
         //
         // Order is load-bearing for crash-correctness (spec §9):
         //   1. `WalSet::open` is NON-DESTRUCTIVE — it opens the existing on-disk
@@ -221,38 +210,34 @@ fn main() {
         //      per-shard committers, and start the checkpoint ticker. No append can
         //      run before this point (we have not begun serving yet), so no durable
         //      record is lost and no new append collides with un-recovered WAL data.
-        if handlers::durability() == handlers::DurabilityMode::Wal {
-            let open_res = match wal_segment_bytes {
-                Some(sz) => wal::walset::WalSet::open_with_segment_size(
-                    &data_dir, wal_shards, workers, sz,
-                ),
-                None => wal::walset::WalSet::open(&data_dir, wal_shards, workers),
-            };
-            let walset = open_res.unwrap_or_else(|e| {
-                eprintln!("error: {e}");
-                std::process::exit(2);
-            });
-            wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
-            walset
-                .reset_after_recovery()
-                .expect("WAL reset after recovery failed");
-            // Attach so the append path's `maybe_sync_on_ack` sees it (lock-free
-            // `OnceLock::get` on the hot path). Empty for strict = inert.
-            store
-                .wal
-                .set(Arc::clone(&walset))
-                .unwrap_or_else(|_| panic!("WAL already attached"));
-            walset.spawn_committers();
-            // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
-            // shard's touched per-stream files and recycle its WAL below the
-            // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
-            // durable_lsn, never on checkpoint).
-            spawn_checkpoint_ticker(Arc::clone(&walset));
-            // 1 Hz per-shard `WAL_STATS` emitter (spec §11): batch-size
-            // distribution + durability gauges. No-op unless built with
-            // `--features telemetry`; off the hot commit/append path.
-            wal::telemetry::spawn_emitter(Arc::clone(&walset));
-        }
+        let open_res = match wal_segment_bytes {
+            Some(sz) => wal::walset::WalSet::open_with_segment_size(
+                &data_dir, wal_shards, workers, sz,
+            ),
+            None => wal::walset::WalSet::open(&data_dir, wal_shards, workers),
+        };
+        let walset = open_res.unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        });
+        wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
+        walset
+            .reset_after_recovery()
+            .expect("WAL reset after recovery failed");
+        store
+            .wal
+            .set(Arc::clone(&walset))
+            .unwrap_or_else(|_| panic!("WAL already attached"));
+        walset.spawn_committers();
+        // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
+        // shard's touched per-stream files and recycle its WAL below the
+        // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
+        // durable_lsn, never on checkpoint).
+        spawn_checkpoint_ticker(Arc::clone(&walset));
+        // 1 Hz per-shard `WAL_STATS` emitter (spec §11): batch-size
+        // distribution + durability gauges. No-op unless built with
+        // `--features telemetry`; off the hot commit/append path.
+        wal::telemetry::spawn_emitter(Arc::clone(&walset));
 
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");

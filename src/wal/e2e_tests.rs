@@ -1,66 +1,30 @@
-//! End-to-end durability + sharding integration tests for `--durability wal`
-//! (design spec §13). **The integration gate**: where the framing, committers,
-//! sharded `WalSet`, checkpoint, and per-shard recovery built+unit-tested in
-//! Tasks 1–9 are exercised together over the REAL append/recover/read flow —
-//! the genuine HTTP handler path (`handlers::handle` → `handle_create` /
-//! `handle_append_inner` → `write_wire` → `maybe_sync_on_ack` → WAL
-//! `reserve_and_stage`/`wait_durable`), a simulated crash (drop the store +
-//! committers WITHOUT a graceful shutdown), and the full startup recovery
-//! sequence (`WalSet::open` → sidecar pass → `wal::recovery::recover` →
-//! `reset_after_recovery` → re-attach + `spawn_committers`).
+//! End-to-end durability + sharding integration tests (design spec §13).
+//! **The integration gate**: where the framing, committers, sharded `WalSet`,
+//! checkpoint, and per-shard recovery built+unit-tested in Tasks 1–9 are
+//! exercised together over the REAL append/recover/read flow — the genuine HTTP
+//! handler path (`handlers::handle` → `handle_create` / `handle_append_inner`
+//! → `write_wire` → `maybe_sync_on_ack` → WAL `reserve_and_stage`/`wait_durable`),
+//! a simulated crash (drop the store + committers WITHOUT a graceful shutdown),
+//! and the full startup recovery sequence (`WalSet::open` → sidecar pass →
+//! `wal::recovery::recover` → `reset_after_recovery` → re-attach + `spawn_committers`).
 //!
 //! Unlike the unit tests, these never hand-build a WAL segment or call a
 //! `wal::*` helper directly to *produce* the durable state: every acked record
 //! gets durable through the same code an HTTP `POST`/`PUT` runs in production.
 //! That is the point — to catch bugs that only appear when the pieces are wired
 //! together (paths that pass in isolation but not end-to-end).
-//!
-//! # The global-durability-mode hazard
-//!
-//! `handlers::durability()` reads a **process-global** atomic. Driving the real
-//! handler path therefore requires flipping that global to `Wal`, which would
-//! race other tests in this binary (cargo runs tests in parallel threads). All
-//! tests here take [`DURABILITY_LOCK`] for their whole body and restore `Strict`
-//! before releasing it, so they are serialized w.r.t. each other and leave the
-//! global as the default for every other test.
 
 use std::io;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use tokio::task::JoinHandle;
 
 use crate::api::{Method, Req};
-use crate::handlers::{self, DurabilityMode};
+use crate::handlers;
 use crate::store::Store;
 use crate::tier::TierConfig;
 use crate::wal::walset::WalSet;
-
-/// Serializes every test that flips the process-global durability mode, so the
-/// parallel test runner can't interleave a `Wal` window with another test's
-/// `durability()` read. Held for the whole test body; `Strict` restored before
-/// drop. `lock().unwrap_or_else(into_inner)` tolerates a poisoned lock from an
-/// unrelated panicking test (the global is reset by every test anyway).
-static DURABILITY_LOCK: Mutex<()> = Mutex::new(());
-
-/// RAII: hold the serialization lock + set `Wal`; restore `Strict` on drop even
-/// if the test panics (so a failing test can't leave the global `Wal` and break
-/// every subsequent strict/fast test in the binary).
-struct WalModeGuard(#[allow(dead_code)] MutexGuard<'static, ()>);
-
-impl WalModeGuard {
-    fn acquire() -> WalModeGuard {
-        let g = DURABILITY_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        handlers::set_durability(DurabilityMode::Wal);
-        WalModeGuard(g)
-    }
-}
-
-impl Drop for WalModeGuard {
-    fn drop(&mut self) {
-        handlers::set_durability(DurabilityMode::Strict);
-    }
-}
 
 /// A unique temp data dir for one test.
 fn tmp(tag: &str) -> std::path::PathBuf {
@@ -215,7 +179,6 @@ fn fork_offset(bytes: u64) -> String {
 /// (staged but its committer never advanced `durable_lsn`) must be ABSENT.
 #[tokio::test]
 async fn e2e_no_loss_two_shards_acked_records_survive_crash() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("noloss");
 
     // 4 shards so a handful of streams reliably spreads across ≥2 of them.
@@ -284,7 +247,6 @@ async fn e2e_no_loss_two_shards_acked_records_survive_crash() {
 async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
     use crate::wal::codec::HEADER_LEN;
 
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("noloss-unacked");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -356,7 +318,6 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
 /// whole, valid JSON values.
 #[tokio::test]
 async fn e2e_no_torn_json_tail_repaired_to_whole_records() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("torn-json");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -414,7 +375,6 @@ async fn e2e_no_torn_json_tail_repaired_to_whole_records() {
 /// must still compute the frontier and truncate the torn tail.
 #[tokio::test]
 async fn e2e_no_torn_tail_when_last_durable_record_below_checkpoint() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("torn-below-ckpt");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -462,7 +422,6 @@ async fn e2e_no_torn_tail_when_last_durable_record_below_checkpoint() {
 /// spread the streams across ≥2 shards (else the test is vacuous).
 #[tokio::test]
 async fn e2e_sharding_parallel_recovery_across_shards() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("sharding");
 
     let h = Harness::boot(&dir, Some(4), 4).unwrap();
@@ -511,7 +470,6 @@ async fn e2e_sharding_parallel_recovery_across_shards() {
 /// file holds only the in-range record; the below-frontier record is not applied.
 #[tokio::test]
 async fn e2e_sharding_below_file_base_record_skipped() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("below-base");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -598,7 +556,6 @@ async fn e2e_sharding_below_file_base_record_skipped() {
 /// (the `is_err()` the brief calls out — main.rs maps it to exit 2).
 #[tokio::test]
 async fn e2e_n_stability_shard_resolution_ignores_core_count() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("n-stability");
 
     // Persist N = 4, seeded with default_n = 4.
@@ -654,7 +611,6 @@ async fn e2e_n_stability_shard_resolution_ignores_core_count() {
 /// delays WAL recycling, it never backpressures the ack path).
 #[tokio::test]
 async fn e2e_checkpoint_non_blocking_appends_ack_and_wal_grows() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("ckpt-nonblock");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -704,7 +660,6 @@ async fn e2e_checkpoint_non_blocking_appends_ack_and_wal_grows() {
 /// inversion, over the real wire.
 #[tokio::test]
 async fn e2e_forked_stream_full_http_path_recovers_correctly() {
-    let _guard = WalModeGuard::acquire();
     let dir = tmp("forked-http");
 
     let h = Harness::boot(&dir, Some(2), 2).unwrap();
@@ -752,5 +707,100 @@ async fn e2e_forked_stream_full_http_path_recovers_correctly() {
         "fork tail = file_base + recovered bytes"
     );
     h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7) COMPAT: strict-created data dir reopens WAL-only without data loss
+// ===========================================================================
+
+/// A data dir with per-stream files but NO `wal/` subtree (as a `strict`-era
+/// deployment would have) reopens WAL-only without losing data. The WAL recovery
+/// replays an empty WAL (no records → no truncations) and leaves the per-stream
+/// files untouched. This is the characterization test that must PASS before the
+/// WAL is made unconditional in main.rs.
+#[tokio::test]
+async fn strict_created_dir_reopens_wal_only_without_data_loss() {
+    use std::io::Write;
+    let dir = tmp("strict-compat");
+
+    // --- Phase 1: write data directly to per-stream files (no WAL), simulating
+    // a strict-mode deployment. We bypass the HTTP handler and write directly
+    // via the appender so no WAL is touched.
+    {
+        let store = Arc::new(
+            crate::store::Store::new_with_tier(dir.clone(), crate::tier::TierConfig::default()).unwrap(),
+        );
+        let st = {
+            let s = Arc::clone(&store);
+            tokio::task::spawn_blocking(move || {
+                s.create(
+                    "s/keep",
+                    crate::store::StreamConfig {
+                        content_type: "application/octet-stream".into(),
+                        ttl_seconds: None,
+                        expires_at: None,
+                        expires_at_raw: None,
+                        create_closed: false,
+                        forked_from: None,
+                        fork_offset_raw: None,
+                        fork_sub_offset: None,
+                    },
+                    None,
+                    0,
+                )
+            })
+            .await
+            .unwrap()
+            .unwrap()
+        };
+        let st = match st {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed in Phase 1"),
+        };
+        // Append bytes directly to the per-stream file (no WAL).
+        {
+            let mut ap = st.appender.lock().await;
+            (&*ap.file).write_all(b"hello-world").unwrap();
+            ap.written += 11;
+            let mut s = st.shared.write().unwrap();
+            s.tail = s.file_base + ap.written;
+        }
+        // Persist the tail to the sidecar so recovery sees it on reopen.
+        let st2 = Arc::clone(&st);
+        tokio::task::spawn_blocking(move || crate::store::write_meta_sync(&st2, true))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    // Remove any wal/ subtree — a strict-era dir has none.
+    std::fs::remove_dir_all(dir.join("wal")).ok();
+
+    // --- Phase 2: reopen WAL-only (the exact main.rs startup sequence).
+    let store = Arc::new(
+        crate::store::Store::new_with_tier(dir.clone(), crate::tier::TierConfig::default()).unwrap(),
+    );
+    let walset = crate::wal::walset::WalSet::open(&dir, None, 1).unwrap();
+    // An empty WAL replay must NOT truncate pre-existing per-stream data.
+    crate::wal::recovery::recover(&store, &walset).unwrap();
+    walset.reset_after_recovery().unwrap();
+    store
+        .wal
+        .set(Arc::clone(&walset))
+        .unwrap_or_else(|_| panic!("wal already set"));
+
+    let st = store.get("s/keep").expect("stream must survive WAL-only reopen");
+    let got = std::fs::read(&st.file_path).unwrap();
+    assert_eq!(
+        got,
+        b"hello-world",
+        "pre-WAL data must survive a WAL-only reopen without loss"
+    );
+    assert_eq!(
+        st.tail().bytes,
+        11,
+        "recovered tail must equal the bytes written in Phase 1"
+    );
+
     let _ = std::fs::remove_dir_all(&dir);
 }
