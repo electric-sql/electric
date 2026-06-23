@@ -2,8 +2,7 @@
 //! `strict-uring` feature + `--strict-io-uring`). A single shared ring on one
 //! dedicated thread batches many streams' per-stream-file `fdatasync`s into one
 //! `io_uring_enter`, replacing `SyncCoalescer`'s per-stream
-//! `spawn_blocking(barrier_fsync)`. See the design spec
-//! `docs/superpowers/specs/2026-06-23-strict-io-uring-fsync-design.md`.
+//! `spawn_blocking(barrier_fsync)`.
 //!
 //! The whole module is `#[cfg(all(target_os = "linux", feature = "strict-uring"))]`;
 //! on any other build it is empty and `--strict-io-uring` falls back to spawn_blocking.
