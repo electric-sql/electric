@@ -164,6 +164,22 @@ defmodule ElectricTelemetry.SystemMetrics do
     :ok
   end
 
+  @doc """
+  cgroup (v1/v2) accounting metrics, sampled every poll tick.
+
+  Reads the container's cgroup files and emits the `cgroup.*` family (memory,
+  cpu, io, and — on v2 — PSI pressure). Parsing lives in
+  `ElectricTelemetry.SystemMetrics.Cgroup`; this is a thin delegator so it
+  registers like the other measurements. No-ops when no cgroup is detected.
+
+  Options are forwarded to `Cgroup.measurement/2` (`:cgroup_root` and
+  `:cgroup_version` overrides for tests).
+  """
+  @spec cgroup_measurement(map(), keyword()) :: :ok
+  def cgroup_measurement(telemetry_opts, opts \\ []) do
+    ElectricTelemetry.SystemMetrics.Cgroup.measurement(telemetry_opts, opts)
+  end
+
   defp due?(opts) do
     if Keyword.get(opts, :force, false) do
       true
