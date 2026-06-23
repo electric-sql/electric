@@ -150,7 +150,7 @@ fn main() {
                 match handlers::parse_durability(&v) {
                     Some(mode) => handlers::set_durability(mode),
                     None => {
-                        eprintln!("--durability must be strict|wal|fast");
+                        eprintln!("--durability must be strict|wal");
                         std::process::exit(2);
                     }
                 }
@@ -249,7 +249,7 @@ fn main() {
                 .reset_after_recovery()
                 .expect("WAL reset after recovery failed");
             // Attach so the append path's `maybe_sync_on_ack` sees it (lock-free
-            // `OnceLock::get` on the hot path). Empty for strict/fast = inert.
+            // `OnceLock::get` on the hot path). Empty for strict = inert.
             store
                 .wal
                 .set(Arc::clone(&walset))

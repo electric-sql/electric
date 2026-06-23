@@ -47,13 +47,10 @@ fn long_poll_timeout_dur() -> Duration {
 /// - `Wal`: the per-stream file write (page cache) is the read view as today, then
 ///   the bytes are staged into the sharded WAL and the ack waits on the WAL shard's
 ///   group-commit `fdatasync` instead of a per-stream one.
-/// - `Fast`: ack on the page-cache write, skipping the hot-path `fdatasync` —
-///   durability then comes from S3-offload (cold) + future replication (hot tail).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DurabilityMode {
     Strict,
     Wal,
-    Fast,
 }
 
 /// Process-global durability mode, encoded as a `u8` (`Strict` is the zero default so
@@ -68,12 +65,11 @@ impl Default for DurabilityMode {
 }
 
 /// Parse the `--durability` flag value into a [`DurabilityMode`].
-/// Accepts `strict` | `wal` | `fast`; returns `None` for an unknown value — the
+/// Accepts `strict` | `wal`; returns `None` for an unknown value — the
 /// caller maps that to a usage error.
 pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
     match s {
         "strict" => Some(DurabilityMode::Strict),
-        "fast" => Some(DurabilityMode::Fast),
         "wal" => Some(DurabilityMode::Wal),
         _ => None,
     }
@@ -83,7 +79,6 @@ pub fn set_durability(mode: DurabilityMode) {
     let v = match mode {
         DurabilityMode::Strict => 0,
         DurabilityMode::Wal => 1,
-        DurabilityMode::Fast => 2,
     };
     DURABILITY_MODE.store(v, std::sync::atomic::Ordering::Relaxed);
 }
@@ -91,7 +86,6 @@ pub fn set_durability(mode: DurabilityMode) {
 pub fn durability() -> DurabilityMode {
     match DURABILITY_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         1 => DurabilityMode::Wal,
-        2 => DurabilityMode::Fast,
         _ => DurabilityMode::Strict,
     }
 }
@@ -557,7 +551,7 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 // Logical pre-append offset for THIS append — needed ONLY by the Wal
                 // arm. Read `file_base` (under the appender lock so a concurrent
                 // compaction that raises `file_base` + resets `ap.written` together
-                // can't desync it from `target`) ONLY in Wal mode. Strict/Fast take
+                // can't desync it from `target`) ONLY in Wal mode. Strict takes
                 // NO `st.shared` lock here — byte-for-byte the pre-WAL hot path.
                 let stream_offset = wal_stream_offset(mode, &st, target, &wire);
                 drop(ap);
@@ -631,10 +625,9 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
 }
 
 /// Gate the ack's durability on the durability mode. Every append/close `sync_to`
-/// site routes through this one helper so all three modes are decided in one place.
+/// site routes through this one helper so both modes are decided in one place.
 ///
 /// - `Strict`: await the covering per-stream `fdatasync` (`sync_to`), exactly as before.
-/// - `Fast`: return `Ok` without syncing — the ack happens on the page-cache write.
 /// - `Wal`: the per-stream file write already happened upstream (the read view); stage
 ///   the wire bytes into the stream's WAL shard and await the shard's group-commit
 ///   `fdatasync`. `stream_offset` is `Some(logical pre-append offset)` for THIS append
@@ -644,12 +637,12 @@ fn maybe_seal_bg(store: &Arc<Store>, st: &Arc<StreamState>) {
 ///   `file_pos = stream_offset − file_base`, so for forked/compacted streams
 ///   (`file_base > 0`) this MUST be logical, not the file-relative `target`.
 ///
-/// `Strict`/`Fast` ignore `store`/`wire`/`stream_offset` and pass `stream_offset:
-/// None` (they never take the `st.shared` read lock), so those paths stay
+/// `Strict` ignores `store`/`wire`/`stream_offset` and passes `stream_offset:
+/// None` (it never takes the `st.shared` read lock), so that path stays
 /// byte-for-byte unchanged from the pre-WAL base.
 /// Compute the **logical** pre-append `stream_offset` for the WAL record — but
-/// ONLY in `Wal` mode. In `Strict`/`Fast` this returns `None` WITHOUT touching
-/// `st.shared`, so the default (strict) and fast hot paths acquire exactly the
+/// ONLY in `Wal` mode. In `Strict` this returns `None` WITHOUT touching
+/// `st.shared`, so the default (strict) hot path acquires exactly the
 /// locks the pre-WAL base did (no extra `st.shared.read()` per append).
 ///
 /// MUST be called while the caller still holds the appender lock: `file_base`
@@ -665,7 +658,7 @@ fn wal_stream_offset(
         DurabilityMode::Wal => {
             Some(st.shared.read().unwrap().file_base + target - wire.len() as u64)
         }
-        DurabilityMode::Strict | DurabilityMode::Fast => None,
+        DurabilityMode::Strict => None,
     }
 }
 
@@ -680,7 +673,6 @@ async fn maybe_sync_on_ack(
 ) -> std::io::Result<()> {
     match mode {
         DurabilityMode::Strict => st.sync.sync_to(file, st, target).await,
-        DurabilityMode::Fast => Ok(()),
         DurabilityMode::Wal => {
             let stream_offset = stream_offset
                 .expect("wal mode requires a precomputed logical stream_offset");
@@ -1051,16 +1043,6 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             // closure is fsynced, and the stream would recover OPEN — a
             // monotonicity violation (PROTOCOL.md §4.1). The reader
             // notification is deferred until after write_meta_sync completes.
-            // NOTE (fast): this guarantees the *closedness* never rolls back
-            // (the close-meta stays durable in both modes), but under `fast`
-            // the closed *position* can: the data fdatasync below is skipped, so an
-            // OS/power crash can lose the un-synced tail and recover a shorter
-            // closed stream (tail = on-disk size < the acked tail). A reader that
-            // saw EOF at the longer tail then faces a shorter closed stream. This
-            // is within fast's stated contract (lose the un-sealed hot tail on an
-            // OS/power crash; a closed stream is just hot tail ending in a close).
-            // The strong PROTOCOL.md §4.1 position-monotonicity guarantee is
-            // strict-only.
             s.closed = true;
             if let Some(p) = &producer {
                 s.closed_by = Some((p.id.clone(), p.epoch, p.seq));
@@ -1072,7 +1054,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     let mode = durability();
     // Logical pre-append offset for THIS append (see site above) — Wal-only; read
     // `file_base` under the appender lock so a concurrent compaction can't desync
-    // it from `target`. Strict/Fast take no `st.shared` lock here.
+    // it from `target`. Strict takes no `st.shared` lock here.
     let stream_offset = wal_stream_offset(mode, &st, target, &wire);
     drop(ap);
 
@@ -1400,7 +1382,7 @@ where
     let target = ap.written;
     drop(ap);
     // WAL mode is excluded above (splice bypasses userspace), so this site only ever
-    // runs `Strict`/`Fast`, which ignore the `wire`/`stream_offset` arguments — pass an
+    // runs `Strict`, which ignores the `wire`/`stream_offset` arguments — pass an
     // empty wire and `None` (no WAL record is ever recorded here).
     if maybe_sync_on_ack(durability(), &store, &st, &Bytes::new(), file, target, None)
         .await
@@ -2304,12 +2286,12 @@ mod durability_tests {
         // Default mode is Strict (an unset --durability flag).
         assert_eq!(DurabilityMode::default(), DurabilityMode::Strict, "default must be strict");
 
-        // --durability parsing: strict|wal|fast. `relaxed` (the old name for
-        // `fast`) is no longer accepted.
+        // --durability parsing: strict|wal. `fast` and `relaxed` are no longer
+        // accepted (the fast mode was removed — wal is both faster and durable).
         assert_eq!(parse_durability("strict"), Some(DurabilityMode::Strict));
         assert_eq!(parse_durability("wal"), Some(DurabilityMode::Wal));
-        assert_eq!(parse_durability("fast"), Some(DurabilityMode::Fast));
-        assert_eq!(parse_durability("relaxed"), None, "`relaxed` was renamed to `fast`");
+        assert_eq!(parse_durability("fast"), None, "`fast` mode was removed");
+        assert_eq!(parse_durability("relaxed"), None, "`relaxed` is not a recognized mode");
         assert_eq!(parse_durability("bogus"), None, "unknown value → usage error");
 
         // --wal-shards parses to an Option<usize> (the `requested_n` passed to
@@ -2324,14 +2306,12 @@ mod durability_tests {
         // append-path test (which reads it) is perturbed.
         set_durability(DurabilityMode::Wal);
         assert_eq!(durability(), DurabilityMode::Wal, "set_durability(Wal) takes effect");
-        set_durability(DurabilityMode::Fast);
-        assert_eq!(durability(), DurabilityMode::Fast, "set_durability(Fast) takes effect");
         set_durability(DurabilityMode::Strict); // reset
         assert_eq!(durability(), DurabilityMode::Strict);
     }
 
     #[tokio::test]
-    async fn maybe_sync_on_ack_strict_syncs_fast_skips() {
+    async fn maybe_sync_on_ack_strict_syncs() {
         use crate::store::{CreateResult, Store, StreamConfig};
         use crate::tier::TierConfig;
 
@@ -2370,18 +2350,6 @@ mod durability_tests {
             .await
             .unwrap();
         assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
-
-        // Append 5 more; FAST must skip the fsync → watermark unchanged.
-        let mut ap = st.appender.lock().await;
-        write_wire(&st, &mut ap, &bytes::Bytes::from_static(b"abcde")).unwrap();
-        let target2 = ap.written;
-        let file2 = ap.file.clone();
-        drop(ap);
-        maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2, None)
-            .await
-            .unwrap();
-        assert_eq!(st.sync.synced(), target, "fast must skip fsync (watermark unchanged)");
-        assert!(target2 > target, "the bytes were still written (tail advanced)");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

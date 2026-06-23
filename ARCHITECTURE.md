@@ -99,29 +99,28 @@ Everything else is independent.
    `strict` the append awaits the `SyncCoalescer`: concurrent appenders in flight
    share **one** barrier fsync (`fdatasync` on Linux, `F_FULLFSYNC` on macOS), and
    the response returns only after the fsync that covers this append. `wal` instead
-   acks on a shared write-ahead-log commit, and `fast` acks on the page-cache
-   write — see [Durability modes](#durability-modes) below. Whatever the mode, this
+   acks on a shared write-ahead-log commit — see
+   [Durability modes](#durability-modes) below. Whatever the mode, this
    is the _only_ step that changes; everything above and the entire read path are
    identical.
 
 Visibility vs durability are deliberately decoupled: the bytes are in the page
 cache (and the tail is published) before durability resolves, so a live reader
 sees data with minimal latency, while the _appender_ doesn't get its 2xx until the
-data is durable (in `fast`, "durable" is "in the page cache").
+data is durable.
 
 ## Durability modes
 
-`--durability {strict|wal|fast}` (default `strict`) is a single **latency-vs-
-durability knob on one shared architecture**. Every mode keeps the same per-stream
+`--durability {strict|wal}` (default `strict`) is a single **latency-vs-
+durability knob on one shared architecture**. Both modes keep the same per-stream
 wire-byte file, the same page-cache write, the same pre-durability tail publish,
 and the same read/fan-out path. They differ **only in when an append is
-acknowledged relative to durability** — step 5 above.
+acknowledged relative to durability** — step 5 above. Both are crash-safe.
 
-| mode                   | append acks after…                                      | mechanism                                                                                                                                                        | a crash loses                            |
-| ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **`strict`** (default) | the **per-stream file** is fsync'd                      | per-stream group-commit barrier fsync (`SyncCoalescer`) — concurrent appenders to a stream fold into one `fdatasync`                                             | nothing acked                            |
-| **`wal`**              | the append is committed to a **shared write-ahead log** | the record is staged into one of N sharded WAL segments; a per-shard group-commit committer `fdatasync`s the segment and advances a durable watermark before ack | nothing acked (recovered by WAL replay)  |
-| **`fast`**             | the bytes are in the **page cache**                     | no ack-path fsync; durability is deferred to the OS background flush                                                                                             | the appends written since the last flush |
+| mode                   | append acks after…                                      | mechanism                                                                                                                                                        | a crash loses                           |
+| ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **`strict`** (default) | the **per-stream file** is fsync'd                      | per-stream group-commit barrier fsync (`SyncCoalescer`) — concurrent appenders to a stream fold into one `fdatasync`                                             | nothing acked                           |
+| **`wal`**              | the append is committed to a **shared write-ahead log** | the record is staged into one of N sharded WAL segments; a per-shard group-commit committer `fdatasync`s the segment and advances a durable watermark before ack | nothing acked (recovered by WAL replay) |
 
 How each fits the architecture:
 
@@ -143,16 +142,10 @@ How each fits the architecture:
   reconciles each stream's durable tail (torn-tail repair). The contrast in one
   line: **`strict` = one fsync _per stream_; `wal` = one fsync _per shard_,
   batched** — trading fsync-parallelism (strict: many files) for fsync-count (wal:
-  few fat commits). Full design: [`durable-wal.md`](../../docs/durable-wal.md).
+  few fat commits). Both are crash-safe; `wal` is the win on slow/serializing
+  storage. Full design: [`durable-wal.md`](../../docs/durable-wal.md).
 
-- **`fast`** removes the ack-path fsync entirely: an append acks the moment its
-  bytes are in the page cache and the tail is published. Same visibility, same
-  reads — only the durability guarantee changes (a crash can lose appends since the
-  last OS flush). It's the latency floor for workloads that tolerate a bounded loss
-  window or provide durability elsewhere. See
-  [`relaxed-durability.md`](../../docs/relaxed-durability.md).
-
-The invariant across all three: **visibility is never gated on durability**. Bytes
+The invariant across both modes: **visibility is never gated on durability**. Bytes
 land in the page cache and the tail is published before any fsync, so live readers
 see an append at memory latency regardless of mode — only the _appender's
 acknowledgement_ moves with the knob.
