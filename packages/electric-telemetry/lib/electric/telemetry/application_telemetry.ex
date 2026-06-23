@@ -92,7 +92,10 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
         # The cheap aggregate view runs every tick; the expensive per-allocator
         # fragmentation breakdown is internally gated to ~once a minute.
         {ElectricTelemetry.SystemMetrics, :recon_alloc_measurement, [telemetry_opts]},
-        {ElectricTelemetry.SystemMetrics, :allocator_fragmentation_measurement, [telemetry_opts]}
+        {ElectricTelemetry.SystemMetrics, :allocator_fragmentation_measurement, [telemetry_opts]},
+        # cgroup (v1/v2) accounting metrics (cgroup.*) live in
+        # ElectricTelemetry.SystemMetrics.Cgroup; no-op when no cgroup is detected.
+        {ElectricTelemetry.SystemMetrics, :cgroup_measurement, [telemetry_opts]}
       ]
   end
 
@@ -130,6 +133,23 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("vm.alloc.unused", unit: :byte),
       last_value("vm.alloc.carrier_usage"),
       last_value("vm.alloc.fragmentation.unused", tags: [:allocator], unit: :byte),
+      # cgroup (v1/v2) accounting metrics (emitted by
+      # ElectricTelemetry.SystemMetrics.Cgroup).
+      last_value("cgroup.memory.current", unit: :byte),
+      last_value("cgroup.memory.anon", unit: :byte),
+      last_value("cgroup.memory.file", unit: :byte),
+      last_value("cgroup.memory.working_set", unit: :byte),
+      last_value("cgroup.memory.max", unit: :byte),
+      # PSI "full avg10" stall percentage (v2 only).
+      last_value("cgroup.memory.pressure.full.avg10"),
+      # cpu usage / throttled time already in microseconds (v1 ns values are
+      # converted in the reader); :unit is a label only, no conversion.
+      last_value("cgroup.cpu.usage_usec", unit: :microsecond),
+      last_value("cgroup.cpu.nr_throttled"),
+      last_value("cgroup.cpu.throttled_usec", unit: :microsecond),
+      last_value("cgroup.cpu.pressure.full.avg10"),
+      last_value("cgroup.io.rbytes", unit: :byte),
+      last_value("cgroup.io.wbytes", unit: :byte),
       sum("vm.monitor.long_message_queue.length", tags: [:process_type]),
       distribution("vm.monitor.long_schedule.timeout",
         tags: [:process_type],
