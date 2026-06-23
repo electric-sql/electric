@@ -77,11 +77,11 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       plan.positions
       |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
       |> Map.new(fn {_pos, info} ->
-        {info.subquery_ref, if(info.negated, do: :negated, else: :positive)}
+        {info.dependency_index, if(info.negated, do: :negated, else: :positive)}
       end)
 
-    for {subquery_ref, polarity} <- polarities do
-      :ets.insert(table, {{:polarity, shape_handle, subquery_ref}, polarity})
+    for {dep_index, polarity} <- polarities do
+      :ets.insert(table, {{:polarity, shape_handle, dep_index}, polarity})
     end
 
     :ets.insert(table, {{:fallback, shape_handle}, true})
@@ -187,7 +187,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
           shape_id,
           polarity,
           next_condition_id,
-          optimisation.subquery_ref
+          optimisation.dep_index
         )
 
         :ets.delete(table, {:node_shape, node_id, shape_id, branch_key})
@@ -240,14 +240,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Add a value to both the node-local routing index and the exact membership set.
   """
   @spec add_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
-  def add_value(table, shape_handle, subquery_ref, dep_index, value) do
+  def add_value(table, shape_handle, _subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
       :ets.insert(table, {{tag, node_id, value, shape_handle, next_condition_id}, true})
     end
 
-    :ets.insert(table, {{:membership, shape_handle, subquery_ref, value}, true})
+    :ets.insert(table, {{:membership, shape_handle, dep_index, value}, true})
     :ok
   end
 
@@ -255,14 +255,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   Remove a value from both the node-local routing index and the exact membership set.
   """
   @spec remove_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
-  def remove_value(table, shape_handle, subquery_ref, dep_index, value) do
+  def remove_value(table, shape_handle, _subquery_ref, dep_index, value) do
     for {node_id, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, shape_handle, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
       :ets.delete(table, {tag, node_id, value, shape_handle, next_condition_id})
     end
 
-    :ets.delete(table, {:membership, shape_handle, subquery_ref, value})
+    :ets.delete(table, {:membership, shape_handle, dep_index, value})
     :ok
   end
 
@@ -320,7 +320,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec member?(t(), term(), [String.t()], term()) :: boolean()
   def member?(table, shape_handle, subquery_ref, typed_value) do
-    :ets.member(table, {:membership, shape_handle, subquery_ref, typed_value})
+    :ets.member(table, {:membership, shape_handle, dep_index_for_ref(subquery_ref), typed_value})
   end
 
   @doc """
@@ -385,7 +385,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   # Delete this shape's node-local member rows for this node by enumerating the shape's
-  # own values (scoped to the node's subquery_ref) from its membership rows and
+  # own values (scoped to the node's dependency index) from its membership rows and
   # point-deleting each. O(V_node · log n); touches only this shape's rows.
   #
   # INVARIANT (the safety of this approach rests on it): a node-member row is always a
@@ -402,7 +402,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   # The "no orphan rows" test guards exactly this path. Reordering cleanup to remove
   # from the filter before stopping the consumer would reintroduce orphaned node-member
   # rows.
-  defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id, subquery_ref) do
+  defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id, dep_index) do
     tag =
       case polarity do
         :positive -> :node_positive_member
@@ -411,7 +411,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     values =
       :ets.select(table, [
-        {{{:membership, shape_id, subquery_ref, :"$1"}, :_}, [], [:"$1"]}
+        {{{:membership, shape_id, dep_index, :"$1"}, :_}, [], [:"$1"]}
       ])
 
     for value <- values do
@@ -503,7 +503,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp polarity_for_shape_ref(table, shape_handle, subquery_ref) do
-    case :ets.lookup(table, {:polarity, shape_handle, subquery_ref}) do
+    case :ets.lookup(table, {:polarity, shape_handle, dep_index_for_ref(subquery_ref)}) do
       [{_, polarity}] ->
         polarity
 
@@ -512,4 +512,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
               "missing polarity for shape #{inspect(shape_handle)} and ref #{inspect(subquery_ref)}"
     end
   end
+
+  # Membership and polarity rows are keyed by the dependency index (a small
+  # integer immediate) rather than the canonical subquery ref — a
+  # `["$sublink", "<dep_index>"]` list of two boxed binaries that was otherwise
+  # repeated in every per-value membership row. The ref encodes its dependency
+  # index in the last element, so the read paths that only have the ref recover
+  # it cheaply with no extra mapping table.
+  defp dep_index_for_ref([_prefix, dep_index]), do: String.to_integer(dep_index)
 end
