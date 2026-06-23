@@ -143,7 +143,7 @@ impl WalSet {
         Ok(())
     }
 
-    /// Spawn each shard's `run_committer` (one tokio task per shard).
+    /// Spawn each shard's committer (the tokio-task `run_committer`).
     pub fn spawn_committers(self: &Arc<Self>) {
         for shard in &self.shards {
             let shard = Arc::clone(shard);

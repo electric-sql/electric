@@ -62,6 +62,10 @@ telemetry = [
 # AWS/S3 transport, which works against any S3-compatible endpoint (AWS, R2,
 # Fly/Tigris, MinIO, Backblaze B2) via path-style + custom endpoint config.
 tier = ["dep:object_store"]
+# io_uring fsync executor for --durability strict (--strict-io-uring), Linux only.
+# Off by default; reuses the io-uring optional dep. Replaces the per-stream
+# spawn_blocking(fdatasync) with a shared io_uring ring.
+strict-uring = ["dep:io-uring"]
 
 [profile.release]
 lto = true
@@ -71,3 +75,9 @@ codegen-units = 1
 # process and killing every other in-flight request. For a network-facing
 # server the per-connection isolation is worth more than abort's small
 # binary-size / codegen win.
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# io_uring-backed fsync executor — opt-in via the `strict-uring` feature, OFF BY
+# DEFAULT and Linux-only. Pulled in (and compiled) only with `--features
+# strict-uring` on Linux; a default build or non-Linux build keeps its dependency set unchanged.
+io-uring = { version = "0.7", optional = true }
