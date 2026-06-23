@@ -164,17 +164,24 @@ control plane is not implemented — see above).
 
 ## Releasing
 
-Prebuilt binaries are published to GitHub Releases by the
-`release-server-rust` workflow when a `server-rust-v*` tag is pushed:
+Pushing a `server-rust-v*` tag runs the `release-server-rust` workflow, which
+publishes all three install channels from one tag:
 
 ```bash
-# bump version in Cargo.toml, then:
+# bump version in Cargo.toml (the tag must match it), then:
 git tag server-rust-v0.1.0
 git push origin server-rust-v0.1.0
 ```
 
-This builds `durable-streams-server` for linux and macOS (x86_64 + arm64)
-and attaches the tarballs plus SHA-256 checksums to the release.
+- **GitHub Releases** — `durable-streams-server` tarballs (+ SHA-256) for linux
+  and macOS (x86_64 + arm64).
+- **crates.io** — the `durable-streams` crate (`cargo install durable-streams`).
+- **npm** — `@durable-streams/server-rust` plus its four platform packages.
+
+Both registries authenticate via OIDC trusted publishing, so the workflow stores
+no registry tokens. A one-time manual bootstrap is required before the first
+tag-driven release — see
+[the bootstrap runbook](../../docs/superpowers/runbooks/server-rust-release-bootstrap.md).
 
 ---
 
