@@ -1,0 +1,32 @@
+[
+  {
+    "node": "linux-x64",
+    "pkg": "@durable-streams/server-rust-linux-x64",
+    "rustTarget": "x86_64-unknown-linux-gnu",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "glibc"
+  },
+  {
+    "node": "linux-arm64",
+    "pkg": "@durable-streams/server-rust-linux-arm64",
+    "rustTarget": "aarch64-unknown-linux-gnu",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "glibc"
+  },
+  {
+    "node": "darwin-x64",
+    "pkg": "@durable-streams/server-rust-darwin-x64",
+    "rustTarget": "x86_64-apple-darwin",
+    "os": "darwin",
+    "cpu": "x64"
+  },
+  {
+    "node": "darwin-arm64",
+    "pkg": "@durable-streams/server-rust-darwin-arm64",
+    "rustTarget": "aarch64-apple-darwin",
+    "os": "darwin",
+    "cpu": "arm64"
+  }
+]
