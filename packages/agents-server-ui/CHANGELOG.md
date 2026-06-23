@@ -1,5 +1,23 @@
 # @electric-ax/agents-server-ui
 
+## 0.6.2
+
+### Patch Changes
+
+- 9d063e4: Add desktop-configurable skill directories and common Claude/Codex skill locations so Markdown command files load recursively as slash-command skills without LLM metadata extraction.
+- 06a60fa: Fix reasoning section elapsed timers so each thinking block measures from when that block starts, rather than from the beginning of the run.
+- aa6ca85: Fix mobile chat timeline flashing when sending messages, resizing the composer (multiline/attachments) and queuing messages, and fix inconsistent auto-scroll as the composer grows. The timeline WebView embed now receives dynamic updates (bottom inset, inline queued messages, scroll) imperatively instead of via props that re-render and flash it. Also fix the composer occasionally not clearing after send when typing quickly.
+- ee0da19: Fix Electric Agents quickstart startup by authenticating the built-in pull-wake runner with the same principal it registers as, registering built-in agent types with the local runner as their default dispatch target, and aligning the CLI's default principal with the local quickstart user. Pin the CLI-launched agents-server Docker image to the matching released agents-server version, improve registration fetch errors so startup failures include the endpoint and underlying cause, avoid the CLI observe live-query Collection boundary, and clarify browser-only credentials settings copy.
+- Updated dependencies [9d063e4]
+- Updated dependencies [0418d90]
+- Updated dependencies [ac2391d]
+- Updated dependencies [8f4368d]
+- Updated dependencies [354b01b]
+- Updated dependencies [37b9922]
+- Updated dependencies [ee0da19]
+- Updated dependencies [c14a886]
+  - @electric-ax/agents-runtime@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes

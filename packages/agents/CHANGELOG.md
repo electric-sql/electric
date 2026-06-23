@@ -1,5 +1,31 @@
 # @electric-ax/agents
 
+## 0.6.2
+
+### Patch Changes
+
+- 9d063e4: Add desktop-configurable skill directories and common Claude/Codex skill locations so Markdown command files load recursively as slash-command skills without LLM metadata extraction.
+- 16c8339: Use Anthropic's adaptive thinking API for models that require it (Opus 4.6/4.7,
+  Sonnet 4.6). The builtin model catalog previously injected budget-based
+  `thinking: { type: "enabled", budget_tokens }` for every reasoning-capable
+  Anthropic model, which Opus 4.7 rejects with a 400 — it needs
+  `thinking: { type: "adaptive" }` + `output_config.effort`. Those models now emit
+  the adaptive shape (reasoningEffort mapped to the effort level); older models
+  keep budget-based thinking.
+- ac2391d: Capture OpenAI Codex reasoning summaries by default when built-in reasoning is enabled while preserving explicit reasoning summary settings from caller payloads.
+- 8f4368d: Delegate built-in reasoning configuration to pi-ai instead of rewriting provider request payloads in the model catalog. Built-in OpenAI, OpenAI Codex, and Anthropic reasoning models now pass `reasoning` through the runtime adapter, preserving existing `auto` defaults and Anthropic thinking budgets while letting pi-ai own provider-specific payload shapes.
+- 6dbb0bb: Require meaningful slugs when spawning workers and append a random suffix so worker URLs are easier to identify while remaining generally unique.
+- ee0da19: Fix Electric Agents quickstart startup by authenticating the built-in pull-wake runner with the same principal it registers as, registering built-in agent types with the local runner as their default dispatch target, and aligning the CLI's default principal with the local quickstart user. Pin the CLI-launched agents-server Docker image to the matching released agents-server version, improve registration fetch errors so startup failures include the endpoint and underlying cause, avoid the CLI observe live-query Collection boundary, and clarify browser-only credentials settings copy.
+- Updated dependencies [9d063e4]
+- Updated dependencies [0418d90]
+- Updated dependencies [ac2391d]
+- Updated dependencies [8f4368d]
+- Updated dependencies [354b01b]
+- Updated dependencies [37b9922]
+- Updated dependencies [ee0da19]
+- Updated dependencies [c14a886]
+  - @electric-ax/agents-runtime@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes

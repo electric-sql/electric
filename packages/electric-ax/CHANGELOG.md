@@ -1,5 +1,23 @@
 # electric-ax
 
+## 0.2.22
+
+### Patch Changes
+
+- ee0da19: Fix Electric Agents quickstart startup by authenticating the built-in pull-wake runner with the same principal it registers as, registering built-in agent types with the local runner as their default dispatch target, and aligning the CLI's default principal with the local quickstart user. Pin the CLI-launched agents-server Docker image to the matching released agents-server version, improve registration fetch errors so startup failures include the endpoint and underlying cause, avoid the CLI observe live-query Collection boundary, and clarify browser-only credentials settings copy.
+- Updated dependencies [9d063e4]
+- Updated dependencies [16c8339]
+- Updated dependencies [0418d90]
+- Updated dependencies [ac2391d]
+- Updated dependencies [8f4368d]
+- Updated dependencies [354b01b]
+- Updated dependencies [37b9922]
+- Updated dependencies [6dbb0bb]
+- Updated dependencies [ee0da19]
+- Updated dependencies [c14a886]
+  - @electric-ax/agents-runtime@0.6.2
+  - @electric-ax/agents@0.6.2
+
 ## 0.2.21
 
 ### Patch Changes
