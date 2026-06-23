@@ -70,6 +70,85 @@ defmodule ElectricTelemetry.DiskUsageTest do
     :ok = DiskUsage.update(ctx.usage)
   end
 
+  describe "per-directory grouping (top-N)" do
+    # Create a shape dir at depth 4 (<stack>/<p1>/<p2>/<shape_handle>) with the
+    # given total size spread over one file.
+    defp make_shape(storage_dir, handle, bytes) do
+      base = Path.join([storage_dir, "stack", "aa", "bb", handle])
+      File.mkdir_p!(base)
+      File.write!(Path.join(base, "1.data"), :binary.copy("0", bytes), [:raw, :binary])
+      bytes
+    end
+
+    @tag start_usage: false
+    test "emits only the top-N largest shapes", ctx do
+      # 5 shapes with distinct sizes, ask for top 3.
+      make_shape(ctx.tmp_dir, "shape-1", 100)
+      make_shape(ctx.tmp_dir, "shape-2", 500)
+      make_shape(ctx.tmp_dir, "shape-3", 300)
+      make_shape(ctx.tmp_dir, "shape-4", 50)
+      make_shape(ctx.tmp_dir, "shape-5", 400)
+
+      ctx = start_usage_grouped(ctx, group_depth: 4, top_n: 3)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, 1350, _} = DiskUsage.current(ctx.stack_id)
+
+      assert {:ok, top} = DiskUsage.current_dirs(ctx.stack_id)
+      # Sorted desc by size, only the 3 largest, smaller ones dropped.
+      assert top == [{"shape-2", 500}, {"shape-5", 400}, {"shape-3", 300}]
+      handles = Enum.map(top, &elem(&1, 0))
+      refute "shape-1" in handles
+      refute "shape-4" in handles
+    end
+
+    @tag start_usage: false
+    test "tag values are the shape_handle dir names", ctx do
+      make_shape(ctx.tmp_dir, "abcd-1234-handle", 10)
+
+      ctx = start_usage_grouped(ctx, group_depth: 4, top_n: 10)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, [{"abcd-1234-handle", 10}]} = DiskUsage.current_dirs(ctx.stack_id)
+    end
+
+    @tag start_usage: false
+    test "grouping disabled by default leaves current_dirs pending", ctx do
+      make_shape(ctx.tmp_dir, "shape-1", 10)
+      ctx = start_usage(ctx)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, 10, _} = DiskUsage.current(ctx.stack_id)
+      assert :pending = DiskUsage.current_dirs(ctx.stack_id)
+    end
+
+    @tag start_usage: false
+    test "total stays correct alongside grouping", ctx do
+      total =
+        make_shape(ctx.tmp_dir, "s1", 100) +
+          make_shape(ctx.tmp_dir, "s2", 250)
+
+      ctx = start_usage_grouped(ctx, group_depth: 4)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, ^total, _} = DiskUsage.current(ctx.stack_id)
+    end
+  end
+
+  defp start_usage_grouped(ctx, opts) do
+    {:ok, usage_pid} =
+      DiskUsage.start_link(
+        [
+          stack_id: ctx.stack_id,
+          storage_dir: ctx.tmp_dir,
+          manual_refresh: true,
+          update_period: 1_000
+        ] ++ opts
+      )
+
+    Map.put(ctx, :usage, usage_pid)
+  end
+
   defp stop_usage(ctx) do
     ref = Process.monitor(ctx.usage)
     Process.unlink(ctx.usage)

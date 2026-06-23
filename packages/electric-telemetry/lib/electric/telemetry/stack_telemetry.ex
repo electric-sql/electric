@@ -67,9 +67,20 @@ defmodule ElectricTelemetry.StackTelemetry do
     ]
   end
 
+  # The electric shape storage layout places a single shape's directory at
+  # `<storage_dir>/<stack_id>/<p1>/<p2>/<shape_handle>`, i.e. depth 4 below the
+  # storage root (see Electric.ShapeCache.PureFileStorage.shape_data_dir/3).
+  # Bucketing the disk walk at this depth yields per-shape subtotals keyed by
+  # shape handle, which we emit as `electric.storage.dir.bytes` for the top-N
+  # largest shapes.
+  @shape_dir_group_depth 4
+
   defp disk_usage_child_specs(%{stack_id: stack_id} = opts) do
     if storage_dir = Map.get(opts, :storage_dir) do
-      [{ElectricTelemetry.DiskUsage, stack_id: stack_id, storage_dir: storage_dir}]
+      [
+        {ElectricTelemetry.DiskUsage,
+         stack_id: stack_id, storage_dir: storage_dir, group_depth: @shape_dir_group_depth}
+      ]
     else
       []
     end
@@ -113,6 +124,7 @@ defmodule ElectricTelemetry.StackTelemetry do
       distribution("electric.storage.transaction_stored.replication_lag", unit: :millisecond),
       last_value("electric.storage.used.bytes", unit: :byte),
       distribution("electric.storage.used.measurement_duration", unit: :millisecond),
+      last_value("electric.storage.dir.bytes", unit: :byte, tags: [:stack_id, :shape]),
       counter("electric.postgres.replication.transaction_received.count"),
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte),
