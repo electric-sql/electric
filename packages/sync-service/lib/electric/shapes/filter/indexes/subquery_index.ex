@@ -33,7 +33,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   alias Electric.Shapes.Filter.WhereCondition
 
   @type t :: :ets.tid() | atom()
-  @type node_id :: {reference(), term()}
+  @type node_id :: {Filter.condition_id(), term()}
 
   defp table_name(stack_id) when is_stack_id(stack_id), do: :"subquery_index:#{stack_id}"
 
@@ -105,7 +105,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Register a shape on a concrete subquery filter node.
   """
-  @spec add_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :ok
+  @spec add_shape(Filter.t(), Filter.condition_id(), term(), map(), [atom()]) :: :ok
   def add_shape(
         %Filter{subquery_index: table} = filter,
         condition_id,
@@ -114,7 +114,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         branch_key
       ) do
     node_id = {condition_id, optimisation.field}
-    next_condition_id = make_ref()
+    next_condition_id = Filter.next_condition_id(filter)
 
     WhereCondition.init(filter, next_condition_id)
 
@@ -157,7 +157,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Remove a shape from a concrete subquery filter node.
   """
-  @spec remove_shape(Filter.t(), reference(), term(), map(), [atom()]) :: :deleted | :ok
+  @spec remove_shape(Filter.t(), Filter.condition_id(), term(), map(), [atom()]) :: :deleted | :ok
   def remove_shape(
         %Filter{subquery_index: table} = filter,
         condition_id,
@@ -269,7 +269,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Get affected shape handles for a specific subquery node.
   """
-  @spec affected_shapes(Filter.t(), reference(), term(), map()) :: MapSet.t()
+  @spec affected_shapes(Filter.t(), Filter.condition_id(), term(), map()) :: MapSet.t()
   def affected_shapes(%Filter{subquery_index: table} = filter, condition_id, field_key, record) do
     node_id = {condition_id, field_key}
 
@@ -305,7 +305,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @doc """
   Get all shape ids registered on a specific subquery node.
   """
-  @spec all_shape_ids(Filter.t(), reference(), term()) :: MapSet.t()
+  @spec all_shape_ids(Filter.t(), Filter.condition_id(), term()) :: MapSet.t()
   def all_shape_ids(%Filter{subquery_index: table} = filter, condition_id, field_key) do
     table
     |> all_node_shapes({condition_id, field_key})

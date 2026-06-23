@@ -33,7 +33,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     next_condition_id =
       case :ets.lookup(table, key) do
         [] ->
-          new_id = make_ref()
+          new_id = Filter.next_condition_id(filter)
           WhereCondition.init(filter, new_id)
           :ets.insert(table, {key, {type, new_id}})
           :ets.insert(table, {{:type, condition_id, field}, type})
