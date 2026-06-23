@@ -90,7 +90,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     node_condition_id =
       case node.condition_id do
         nil ->
-          new_id = make_ref()
+          new_id = Filter.next_condition_id(ctx.filter)
           WhereCondition.init(ctx.filter, new_id)
           :ets.insert(ctx.table, {node_key, %{node | condition_id: new_id}})
           new_id

@@ -33,22 +33,48 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
-    :subquery_index
+    :subquery_index,
+    :counters_table
   ]
 
   @type t :: %Filter{}
   @type shape_id :: any()
 
+  # Condition ids identify nodes in the where-condition tree (table conditions,
+  # equality/inclusion/subquery sub-conditions). They were `make_ref/0`s, but a
+  # boxed reference costs ~3 words on every ETS row that embeds one. They are
+  # only ever allocated by the single process that owns the filter (the
+  # EventRouter, via add_shape/remove_shape), so a filter-local integer counter
+  # gives the same uniqueness as a reference for ~0 bytes (small ints are
+  # immediates stored inline in the key tuple).
+  @type condition_id :: pos_integer()
+
+  @counter_key :condition_id
+
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
+    counters_table = :ets.new(:filter_counters, [:set, :private])
+    :ets.insert(counters_table, {@counter_key, 0})
+
     %Filter{
       shapes_table: :ets.new(:filter_shapes, [:set, :private]),
       tables_table: :ets.new(:filter_tables, [:set, :private]),
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
-      subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id]))
+      subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id])),
+      counters_table: counters_table
     }
+  end
+
+  @doc """
+  Allocate a fresh, filter-unique condition id.
+
+  Single-writer: only called from the filter-owning process while adding shapes.
+  """
+  @spec next_condition_id(Filter.t()) :: condition_id()
+  def next_condition_id(%Filter{counters_table: table}) do
+    :ets.update_counter(table, @counter_key, 1)
   end
 
   @spec has_shape?(t(), shape_id()) :: boolean()
@@ -104,7 +130,7 @@ defmodule Electric.Shapes.Filter do
   defp get_or_create_table_condition(filter, table_name) do
     case :ets.lookup(filter.tables_table, table_name) do
       [] ->
-        where_cond_id = make_ref()
+        where_cond_id = next_condition_id(filter)
         WhereCondition.init(filter, where_cond_id)
         :ets.insert(filter.tables_table, {table_name, where_cond_id})
         where_cond_id
