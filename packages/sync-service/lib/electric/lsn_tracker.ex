@@ -89,6 +89,14 @@ defmodule Electric.LsnTracker do
     ArgumentError -> 0
   end
 
+  @doc """
+  Subscribe the calling process to global LSN updates.
+
+  On success, if an LSN has already been broadcast, a `{:global_last_seen_lsn, lsn}`
+  message is sent to the calling process (`self()`) before returning. Callers are
+  expected to handle that message in their `handle_info/2` just like subsequent
+  broadcasts.
+  """
   @spec subscribe_to_global_lsn_updates(stack_ref(), term()) :: {:ok, pid()} | {:error, term()}
   def subscribe_to_global_lsn_updates(stack_ref, value \\ []) do
     with {:ok, _} <-
