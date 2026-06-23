@@ -4,6 +4,23 @@
 
 This is a Rust implementation of that protocol. It's a single self-contained binary with no database, broker, or other moving parts — just a process and a data directory. It stores each stream as the literal bytes it puts on the wire, so reads are byte ranges of a file.
 
+## Install
+
+Three ways to get the server (Linux/macOS, x64/arm64):
+
+```bash
+# 1. cargo (builds the binary `durable-streams-server`)
+cargo install durable-streams
+
+# 2. npm (downloads a prebuilt binary for your platform)
+npm install -g @durable-streams/server-rust
+
+# 3. prebuilt tarball — download from the GitHub Releases page
+#    (tag server-rust-vX.Y.Z), verify the .sha256, extract durable-streams-server
+```
+
+All three install the same `durable-streams-server` command.
+
 ## Quickstart
 
 ```bash
