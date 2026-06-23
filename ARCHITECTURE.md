@@ -8,6 +8,7 @@ durable cheaply and the read leave the kernel as few times as possible.
 - [The model](#the-model)
 - [High-level: write path and read path](#high-level-write-path-and-read-path)
 - [Write path in detail](#write-path-in-detail)
+- [Durability modes](#durability-modes)
 - [Read path in detail](#read-path-in-detail)
 - [Keeping I/O fast from ingestion to fan-out](#keeping-io-fast-from-ingestion-to-fan-out)
 - [Where the time goes](#where-the-time-goes)
@@ -94,15 +95,67 @@ Everything else is independent.
    the **resident tail cache**, then **publish the new tail** on the `watch`
    channel. Note the order: the cache is populated _before_ the wake, so a woken
    subscriber reliably hits it.
-5. **Durability** — the append awaits the `SyncCoalescer`: concurrent appenders
-   in flight share **one** barrier fsync (`F_BARRIERFSYNC` on macOS,
-   `fdatasync` on Linux). The response returns only after the fsync that covers
-   this append.
+5. **Durability** — _mode-selectable_ (`--durability`, default `strict`). In
+   `strict` the append awaits the `SyncCoalescer`: concurrent appenders in flight
+   share **one** barrier fsync (`fdatasync` on Linux, `F_FULLFSYNC` on macOS), and
+   the response returns only after the fsync that covers this append. `wal` instead
+   acks on a shared write-ahead-log commit, and `fast` acks on the page-cache
+   write — see [Durability modes](#durability-modes) below. Whatever the mode, this
+   is the _only_ step that changes; everything above and the entire read path are
+   identical.
 
 Visibility vs durability are deliberately decoupled: the bytes are in the page
-cache (and the tail is published) before the fsync resolves, so a live reader
-sees data with minimal latency, while the _appender_ still doesn't get its 2xx
-until the data is durable.
+cache (and the tail is published) before durability resolves, so a live reader
+sees data with minimal latency, while the _appender_ doesn't get its 2xx until the
+data is durable (in `fast`, "durable" is "in the page cache").
+
+## Durability modes
+
+`--durability {strict|wal|fast}` (default `strict`) is a single **latency-vs-
+durability knob on one shared architecture**. Every mode keeps the same per-stream
+wire-byte file, the same page-cache write, the same pre-durability tail publish,
+and the same read/fan-out path. They differ **only in when an append is
+acknowledged relative to durability** — step 5 above.
+
+| mode                   | append acks after…                                      | mechanism                                                                                                                                                        | a crash loses                            |
+| ---------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **`strict`** (default) | the **per-stream file** is fsync'd                      | per-stream group-commit barrier fsync (`SyncCoalescer`) — concurrent appenders to a stream fold into one `fdatasync`                                             | nothing acked                            |
+| **`wal`**              | the append is committed to a **shared write-ahead log** | the record is staged into one of N sharded WAL segments; a per-shard group-commit committer `fdatasync`s the segment and advances a durable watermark before ack | nothing acked (recovered by WAL replay)  |
+| **`fast`**             | the bytes are in the **page cache**                     | no ack-path fsync; durability is deferred to the OS background flush                                                                                             | the appends written since the last flush |
+
+How each fits the architecture:
+
+- **`strict`** is the model the rest of this document describes: one fsync **per
+  stream per commit**, coalesced across that stream's concurrent appenders. Its
+  parallelism comes from **having many streams** — each its own file, so the device
+  can flush them concurrently. It shines where fsyncs parallelize cheaply (NVMe) and
+  stream cardinality is high.
+
+- **`wal`** decouples the durability fsync from the per-stream files. Every append
+  is _also_ appended to a **sharded write-ahead log** (FNV-1a stream→shard routing,
+  N shards = cores by default), and the ack waits on the WAL `fdatasync`, not the
+  stream file's. Because one committer batches **many streams' appends into a single
+  fat WAL fsync** (group commit), `wal` minimizes fsync _operations_ — the win on
+  slow/serializing storage where each fsync is expensive. The per-stream files still
+  receive the bytes (they remain the read surface, served by `sendfile` unchanged)
+  and are fsync'd off the hot path at a periodic **checkpoint**, after which the
+  bounded WAL is recycled. Recovery replays the WAL from its oldest live segment and
+  reconciles each stream's durable tail (torn-tail repair). The contrast in one
+  line: **`strict` = one fsync _per stream_; `wal` = one fsync _per shard_,
+  batched** — trading fsync-parallelism (strict: many files) for fsync-count (wal:
+  few fat commits). Full design: [`durable-wal.md`](../../docs/durable-wal.md).
+
+- **`fast`** removes the ack-path fsync entirely: an append acks the moment its
+  bytes are in the page cache and the tail is published. Same visibility, same
+  reads — only the durability guarantee changes (a crash can lose appends since the
+  last OS flush). It's the latency floor for workloads that tolerate a bounded loss
+  window or provide durability elsewhere. See
+  [`relaxed-durability.md`](../../docs/relaxed-durability.md).
+
+The invariant across all three: **visibility is never gated on durability**. Bytes
+land in the page cache and the tail is published before any fsync, so live readers
+see an append at memory latency regardless of mode — only the _appender's
+acknowledgement_ moves with the knob.
 
 ## Read path in detail
 
