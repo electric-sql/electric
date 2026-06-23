@@ -86,7 +86,14 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           :get_system_memory_usage
         ],
         &{__MODULE__, &1, [telemetry_opts]}
-      )
+      ) ++
+      [
+        # BEAM allocator metrics (vm.alloc.*) live in ElectricTelemetry.SystemMetrics.
+        # The cheap aggregate view runs every tick; the expensive per-allocator
+        # fragmentation breakdown is internally gated to ~once a minute.
+        {ElectricTelemetry.SystemMetrics, :recon_alloc_measurement, [telemetry_opts]},
+        {ElectricTelemetry.SystemMetrics, :allocator_fragmentation_measurement, [telemetry_opts]}
+      ]
   end
 
   def metrics(telemetry_opts) do
@@ -117,6 +124,12 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.system", unit: :byte),
       last_value("vm.memory.total", unit: :byte),
+      # BEAM allocator metrics (emitted by ElectricTelemetry.SystemMetrics).
+      last_value("vm.alloc.allocated", unit: :byte),
+      last_value("vm.alloc.used", unit: :byte),
+      last_value("vm.alloc.unused", unit: :byte),
+      last_value("vm.alloc.carrier_usage"),
+      last_value("vm.alloc.fragmentation.unused", tags: [:allocator], unit: :byte),
       sum("vm.monitor.long_message_queue.length", tags: [:process_type]),
       distribution("vm.monitor.long_schedule.timeout",
         tags: [:process_type],
