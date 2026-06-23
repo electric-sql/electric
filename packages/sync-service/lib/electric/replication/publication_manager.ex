@@ -14,6 +14,7 @@ defmodule Electric.Replication.PublicationManager do
 
   defdelegate name(opts), to: __MODULE__.RelationTracker
   defdelegate add_shape(stack_id, shape_handle, shape), to: __MODULE__.RelationTracker
+  defdelegate register_shapes(stack_id, shapes), to: __MODULE__.RelationTracker
   defdelegate remove_shape(stack_id, shape_handle), to: __MODULE__.RelationTracker
   defdelegate wait_for_restore(stack_id, opts \\ []), to: __MODULE__.RelationTracker
 end

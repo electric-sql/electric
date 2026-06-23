@@ -743,7 +743,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
            negative_cache_ttl_ms: 50}
         )
 
-      %{opts: [stack_id: ctx.stack_id, server: server]}
+      %{opts: [stack_id: ctx.stack_id, server: server], pool: ctx.db_conn}
     end
 
     test "re-attempts the DB after the negative TTL expires", %{opts: opts, db_conn: pool} do
@@ -781,6 +781,110 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       _ = EtsInspector.list_relations_with_stale_cache(opts)
 
       assert [] = :ets.lookup(table, neg_key)
+    end
+  end
+
+  describe "batched cold-cache lookups" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_basic_tables]
+
+    setup ctx do
+      start_supervised!({Task.Supervisor, name: EtsInspector.task_supervisor_name(ctx.stack_id)})
+
+      server =
+        start_supervised!(
+          {EtsInspector,
+           stack_id: ctx.stack_id,
+           pool: ctx.db_conn,
+           persistent_kv: ctx.persistent_kv,
+           fetch_batch_window_ms: 50}
+        )
+
+      %{opts: [stack_id: ctx.stack_id, server: server]}
+    end
+
+    test "starts one fill worker for a burst of distinct relations", %{opts: opts} do
+      test_pid = self()
+      Repatch.allow(test_pid, opts[:server])
+
+      Repatch.patch(Task.Supervisor, :async_nolink, [mode: :shared], fn supervisor, fun ->
+        task = Repatch.real(Task.Supervisor.async_nolink(supervisor, fun))
+        Repatch.allow(test_pid, task.pid)
+        send(test_pid, :fill_worker_started)
+        task
+      end)
+
+      tasks =
+        for suffix <- 1..3 do
+          Task.async(fn ->
+            EtsInspector.load_relation_oid({"public", "missing_#{suffix}"}, opts)
+          end)
+        end
+
+      assert_receive :fill_worker_started, 200
+      refute_receive :fill_worker_started, 100
+
+      Enum.each(tasks, &Task.shutdown(&1, :brutal_kill))
+    end
+
+    test "loads a relation burst in one catalog transaction", %{opts: opts} do
+      test_pid = self()
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn _pool, fun, _db_opts ->
+        send(test_pid, :db_transaction)
+        {:ok, fun.(:batch_connection)}
+      end)
+
+      Repatch.patch(
+        Electric.Postgres.Inspector.DirectInspector,
+        :normalize_and_load_relations_info,
+        [mode: :shared],
+        fn relations, :batch_connection ->
+          send(test_pid, {:relations_loaded, relations})
+
+          {:ok,
+           Enum.map(relations, fn {"public", table} = relation ->
+             oid = %{"alpha" => 100, "beta" => 101, "gamma" => 102} |> Map.fetch!(table)
+             %{relation: relation, relation_id: oid, kind: :ordinary_table}
+           end)}
+        end
+      )
+
+      Repatch.patch(
+        Electric.Postgres.Inspector.DirectInspector,
+        :load_column_info_by_oids,
+        [mode: :shared],
+        fn oids, :batch_connection ->
+          send(test_pid, {:columns_loaded, oids})
+          {:ok, Map.new(oids, &{&1, [%{relation_id: &1, name: "id"}]})}
+        end
+      )
+
+      allow_fill_workers(opts[:server])
+      relations = [{"public", "alpha"}, {"public", "beta"}, {"public", "gamma"}]
+
+      results =
+        relations
+        |> Enum.map(fn relation ->
+          Task.async(fn -> EtsInspector.load_relation_oid(relation, opts) end)
+        end)
+        |> Task.await_many(1_000)
+
+      assert Enum.sort(results) ==
+               Enum.sort([
+                 {:ok, {100, {"public", "alpha"}}},
+                 {:ok, {101, {"public", "beta"}}},
+                 {:ok, {102, {"public", "gamma"}}}
+               ])
+
+      assert_receive :db_transaction
+      refute_receive :db_transaction
+      assert_receive {:relations_loaded, loaded_relations}
+      assert Enum.sort(loaded_relations) == Enum.sort(relations)
+      assert_receive {:columns_loaded, loaded_oids}
+      assert Enum.sort(loaded_oids) == [100, 101, 102]
     end
   end
 

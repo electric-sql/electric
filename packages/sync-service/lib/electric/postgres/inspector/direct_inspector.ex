@@ -15,7 +15,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   @spec load_relation_oid(Electric.relation(), conn :: Postgrex.conn()) ::
           {:ok, Electric.oid_relation()} | :table_not_found | {:error, String.t()}
   def load_relation_oid({schema, table}, conn) do
-    query = load_relation_query(@oid_from_schema_table_name_subquery)
+    query = load_relation_query("pc.oid = #{@oid_from_schema_table_name_subquery}")
 
     case do_load_relation(conn, query, [schema, table]) do
       {:ok, []} ->
@@ -39,7 +39,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
           | :table_not_found
           | {:error, String.t() | :connection_not_available}
   def normalize_and_load_relation_info({schema, table}, conn) do
-    query = load_relation_query(@oid_from_schema_table_name_subquery)
+    query = load_relation_query("pc.oid = #{@oid_from_schema_table_name_subquery}")
 
     case do_load_relation(conn, query, [schema, table]) do
       {:ok, []} ->
@@ -53,13 +53,35 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     end
   end
 
+  @doc """
+  Normalizes and loads multiple relations in one catalog query.
+
+  Missing relations are omitted from the returned list so the caller can map
+  them back to `:table_not_found` without issuing another query.
+  """
+  @spec normalize_and_load_relations_info([Electric.relation()], Postgrex.conn()) ::
+          {:ok, [Inspector.relation_info()]} | {:error, String.t() | :connection_not_available}
+  def normalize_and_load_relations_info([], _conn), do: {:ok, []}
+
+  def normalize_and_load_relations_info(relations, conn) when is_list(relations) do
+    {schemas, tables} = Enum.unzip(relations)
+
+    query =
+      load_relation_query(
+        "(pn.nspname, pc.relname) IN " <>
+          "(SELECT * FROM unnest($1::text[], $2::text[]))"
+      )
+
+    do_load_relation(conn, query, [schemas, tables])
+  end
+
   @impl Electric.Postgres.Inspector
   @spec load_relation_info(Electric.relation_id(), conn :: Postgrex.conn()) ::
           {:ok, Inspector.relation_info()}
           | :table_not_found
           | {:error, String.t() | :connection_not_available}
   def load_relation_info(oid, conn) when is_relation_id(oid) do
-    query = load_relation_query("$1::oid")
+    query = load_relation_query("pc.oid = $1::oid")
 
     case do_load_relation(conn, query, [oid]) do
       {:ok, []} ->
@@ -74,7 +96,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   end
 
   def load_relations_by_oids(oids, conn) when is_list(oids) do
-    query = load_relation_query("ANY ($1::oid[])")
+    query = load_relation_query("pc.oid = ANY ($1::oid[])")
     do_load_relation(conn, query, [oids])
   end
 
@@ -95,11 +117,28 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, relations}
 
       {:error, err} ->
-        {:error, Exception.message(err)}
+        {:error, normalize_query_error(err)}
     end
   end
 
-  defp load_relation_query(match) do
+  @doc false
+  # Convert an in-band query error into the inspector error contract.
+  # Connection-class errors (e.g. "ssl recv: closed") are returned by
+  # Postgrex as `{:error, %DBConnection.ConnectionError{}}` rather than
+  # raised, so without this they would bypass the `:connection_not_available`
+  # mapping that callers rely on for retries.
+  @spec normalize_query_error(Exception.t()) :: String.t() | :connection_not_available
+  def normalize_query_error(%DBConnection.ConnectionError{} = err) do
+    if Electric.DbConnectionError.from_error(err).type != :unknown do
+      :connection_not_available
+    else
+      Exception.message(err)
+    end
+  end
+
+  def normalize_query_error(err), do: Exception.message(err)
+
+  defp load_relation_query(condition) do
     # partitions can live in other namespaces from the parent/root table, so we
     # need to keep track of them
     [
@@ -123,8 +162,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         WHERE
           pc.relkind IN ('r', 'p') AND
       """,
-      "pc.oid = ",
-      match
+      condition
     ]
   end
 
@@ -187,7 +225,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
         {:ok, rows}
 
       {:error, err} ->
-        {:error, err}
+        {:error, normalize_query_error(err)}
     end
   end
 
@@ -201,6 +239,19 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     case do_query_column_info(conn, query, [oids]) do
       {:ok, rows} -> Enum.group_by(rows, & &1.relation_id)
       {:error, reason} -> raise reason
+    end
+  end
+
+  def load_column_info_by_oids(oids, conn) when is_list(oids) do
+    query = """
+    #{@column_info_query_base}
+    WHERE pg_class.oid = ANY ($1::oid[])
+    ORDER BY pg_class.oid, attnum
+    """
+
+    case do_query_column_info(conn, query, [oids]) do
+      {:ok, rows} -> {:ok, Enum.group_by(rows, & &1.relation_id)}
+      {:error, reason} -> {:error, normalize_query_error(reason)}
     end
   end
 
