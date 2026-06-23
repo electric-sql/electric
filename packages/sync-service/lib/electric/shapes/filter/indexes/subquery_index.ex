@@ -135,7 +135,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       branch_key
     )
 
-    ensure_node_meta(table, node_id, optimisation.testexpr)
+    node_int = ensure_node_meta(table, node_id, optimisation.testexpr)
 
     :ets.insert(
       table,
@@ -153,10 +153,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
        {optimisation.dep_index, optimisation.polarity, next_condition_id}}
     )
 
+    # Carry the node int in the value so the per-value write paths
+    # (add_value/remove_value) get it without an extra node_meta lookup.
     :ets.insert(
       table,
       {{:shape_dep_node, sid, optimisation.dep_index, node_id, branch_key},
-       {optimisation.polarity, next_condition_id}}
+       {optimisation.polarity, next_condition_id, node_int}}
     )
 
     :ets.insert(table, {{:node_fallback, node_id, sid, next_condition_id}, true})
@@ -193,7 +195,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
         delete_node_members(
           table,
-          node_id,
+          node_int_for(table, node_id),
           sid,
           polarity,
           next_condition_id,
@@ -254,10 +256,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def add_value(table, shape_handle, _subquery_ref, dep_index, value) do
     sid = intern_handle(table, shape_handle)
 
-    for {node_id, polarity, next_condition_id, _branch_key} <-
+    for {node_int, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, sid, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.insert(table, {{tag, node_id, value, sid, next_condition_id}, true})
+      :ets.insert(table, {{tag, node_int, value, sid, next_condition_id}, true})
     end
 
     :ets.insert(table, {{:membership, sid, dep_index, value}, true})
@@ -271,10 +273,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   def remove_value(table, shape_handle, _subquery_ref, dep_index, value) do
     sid = handle_id(table, shape_handle)
 
-    for {node_id, polarity, next_condition_id, _branch_key} <-
+    for {node_int, polarity, next_condition_id, _branch_key} <-
           nodes_for_shape_dependency(table, sid, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.delete(table, {tag, node_id, value, sid, next_condition_id})
+      :ets.delete(table, {tag, node_int, value, sid, next_condition_id})
     end
 
     :ets.delete(table, {:membership, sid, dep_index, value})
@@ -290,13 +292,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     candidates =
       case evaluate_node_lhs(table, node_id, record) do
-        {:ok, typed_value} ->
-          positive = members_for(table, :node_positive_member, node_id, typed_value)
+        {:ok, typed_value, node_int} ->
+          positive = members_for(table, :node_positive_member, node_int, typed_value)
 
           negated =
             MapSet.difference(
               negated_shapes_for(table, node_id),
-              members_for(table, :node_negated_member, node_id, typed_value)
+              members_for(table, :node_negated_member, node_int, typed_value)
             )
 
           fallback = fallback_for(table, node_id)
@@ -383,13 +385,28 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     end)
   end
 
+  # Each node (`{condition_id, field}`) is interned to a small integer used to key
+  # the per-value node-member rows, instead of repeating the `{condition_id,
+  # field}` tuple (with its boxed field binary) in every one of them. The mapping
+  # lives in the node_meta row — already read on the routing path — so resolving
+  # a node to its int adds no extra lookup. Nodes are only ever created here, by
+  # the single filter-owning process, so a plain lookup-or-create is race-free.
   defp ensure_node_meta(table, node_id, testexpr) do
     case :ets.lookup(table, {:node_meta, node_id}) do
-      [] ->
-        :ets.insert(table, {{:node_meta, node_id}, %{testexpr: testexpr}})
+      [{_, %{node_int: node_int}}] ->
+        node_int
 
-      _ ->
-        :ok
+      [] ->
+        node_int = :erlang.unique_integer([:positive, :monotonic])
+        :ets.insert(table, {{:node_meta, node_id}, %{testexpr: testexpr, node_int: node_int}})
+        node_int
+    end
+  end
+
+  defp node_int_for(table, node_id) do
+    case :ets.lookup(table, {:node_meta, node_id}) do
+      [{_, %{node_int: node_int}}] -> node_int
+      [] -> :undefined
     end
   end
 
@@ -418,7 +435,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   # The "no orphan rows" test guards exactly this path. Reordering cleanup to remove
   # from the filter before stopping the consumer would reintroduce orphaned node-member
   # rows.
-  defp delete_node_members(table, node_id, shape_id, polarity, next_condition_id, dep_index) do
+  defp delete_node_members(table, node_int, shape_id, polarity, next_condition_id, dep_index) do
     tag =
       case polarity do
         :positive -> :node_positive_member
@@ -431,7 +448,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       ])
 
     for value <- values do
-      :ets.delete(table, {tag, node_id, value, shape_id, next_condition_id})
+      :ets.delete(table, {tag, node_int, value, shape_id, next_condition_id})
     end
 
     :ok
@@ -472,10 +489,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     ])
   end
 
+  # Returns `{node_int, polarity, next_condition_id, branch_key}` — the node int
+  # (pulled from the value) keys the per-value node-member rows, replacing the
+  # `{condition_id, field}` tuple that was otherwise repeated in each of them.
   defp nodes_for_shape_dependency(table, shape_handle, dep_index) do
     :ets.select(table, [
-      {{{:shape_dep_node, shape_handle, dep_index, :"$1", :"$2"}, {:"$3", :"$4"}}, [],
-       [{{:"$1", :"$3", :"$4", :"$2"}}]}
+      {{{:shape_dep_node, shape_handle, dep_index, :_, :"$2"}, {:"$3", :"$4", :"$5"}}, [],
+       [{{:"$5", :"$3", :"$4", :"$2"}}]}
     ])
   end
 
@@ -495,13 +515,13 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
   defp evaluate_node_lhs(table, node_id, record) do
     case :ets.lookup(table, {:node_meta, node_id}) do
-      [{_, %{testexpr: testexpr}}] ->
+      [{_, %{testexpr: testexpr, node_int: node_int}}] ->
         expr = Expr.wrap_parser_part(testexpr)
 
         case Runner.record_to_ref_values(expr.used_refs, record) do
           {:ok, ref_values} ->
             case Runner.execute(expr, ref_values) do
-              {:ok, value} -> {:ok, value}
+              {:ok, value} -> {:ok, value, node_int}
               _ -> :error
             end
 
