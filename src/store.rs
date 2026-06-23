@@ -66,10 +66,10 @@ pub struct Shared {
     /// the sidecar. NOT what readers observe — see `closed_durable`.
     pub closed: bool,
     /// Reader-observable EOF: set only AFTER the closure is durable (under `strict`,
-    /// the data fsync + meta fsync; under `relaxed`, the meta fsync — the data fsync
+    /// the data fsync + meta fsync; under `fast`, the meta fsync — the data fsync
     /// is skipped). `tail()` reports this so a reader never observes EOF for a
     /// closure a crash could roll back (PROTOCOL.md §4.1). On recovery it equals the
-    /// persisted `closed` (durable by definition). Caveat (relaxed): the *closedness*
+    /// persisted `closed` (durable by definition). Caveat (fast): the *closedness*
     /// never rolls back, but the closed *position* can shrink on an OS/power crash
     /// (the un-synced tail is lost; recovered `tail` = on-disk size). The full
     /// strict-only position-monotonicity guarantee holds only under `strict`.
@@ -125,7 +125,7 @@ pub struct SyncCoalescer {
 
 impl SyncCoalescer {
     /// Test-only: the current durable watermark (bytes proven synced). Lets a test
-    /// assert that `strict` advanced it and `relaxed` did not (fsync was skipped).
+    /// assert that `strict` advanced it and `fast` did not (fsync was skipped).
     #[cfg(test)]
     pub fn synced(&self) -> u64 {
         self.inner.lock().unwrap().synced
@@ -312,7 +312,7 @@ pub struct StreamState {
     /// readers (SSE / long-poll) and immediate catch-up reads are served from
     /// memory — one read+encode shared across all subscribers — instead of a
     /// per-subscriber file read. `(start, bytes)` covers `[start, start+len)`.
-    /// Only populated for chunks up to `TAIL_CHUNK_MAX` (large appends fall back
+    /// Only populated for chunks up to the tail-cache cap (large appends fall back
     /// to file reads / sendfile). See set_last_chunk / tail_chunk_slice.
     /// `RwLock` (not `Mutex`) so concurrent readers fanning out over the same
     /// just-appended tail share it without serializing on a lock.
@@ -342,19 +342,40 @@ pub struct PendingCompaction {
     pub tail: u64,
 }
 
-/// Upper bound on the resident tail chunk (bytes). Larger appends are served
-/// from the file (streamed / sendfile) rather than held in memory — this keeps
-/// the cache to the small live-tail appends it is meant to de-duplicate and
-/// avoids large in-memory copies on engines that must own the write buffer.
-pub const TAIL_CHUNK_MAX: usize = 256 * 1024;
+/// Default resident tail-chunk cap (bytes). macOS has **no `sendfile`** — reads
+/// fall back to positioned `pread`, so the in-memory tail cache is the read
+/// fast-path and is **ON by default** there (64 KiB). Linux serves reads
+/// zero-copy via `sendfile`, so the cache is **OFF by default** (`0`); enable /
+/// tune with `--tail-cache-bytes`.
+#[cfg(target_os = "macos")]
+pub const DEFAULT_TAIL_CACHE_BYTES: usize = 64 * 1024;
+#[cfg(not(target_os = "macos"))]
+pub const DEFAULT_TAIL_CACHE_BYTES: usize = 0;
+
+/// Resident tail-chunk cap in bytes (process-global; set once at startup from
+/// `--tail-cache-bytes`). `0` disables the cache — every read resolves to the
+/// file (`sendfile` / `pread`). Appends larger than the cap are not cached.
+static TAIL_CACHE_BYTES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(DEFAULT_TAIL_CACHE_BYTES);
+
+/// Set the resident tail-cache cap (bytes). `0` disables the cache.
+pub fn set_tail_cache_bytes(n: usize) {
+    TAIL_CACHE_BYTES.store(n, Ordering::Relaxed);
+}
+/// Current resident tail-cache cap (bytes). `0` = disabled.
+pub fn tail_cache_bytes() -> usize {
+    TAIL_CACHE_BYTES.load(Ordering::Relaxed)
+}
 
 impl StreamState {
     /// Record the just-appended wire chunk as the resident tail. `start` is the
-    /// logical offset where `bytes` begins. Chunks larger than `TAIL_CHUNK_MAX`
-    /// are not cached (the entry is cleared so a stale chunk is never served).
+    /// logical offset where `bytes` begins. Chunks larger than the tail-cache cap
+    /// (or any append when the cache is disabled) are not cached (the entry is
+    /// cleared so a stale chunk is never served).
     pub fn set_last_chunk(&self, start: u64, bytes: bytes::Bytes) {
+        let cap = tail_cache_bytes();
         let mut g = self.last_chunk.write().unwrap();
-        *g = if bytes.len() <= TAIL_CHUNK_MAX {
+        *g = if cap > 0 && bytes.len() <= cap {
             Some((start, bytes))
         } else {
             None
@@ -365,7 +386,8 @@ impl StreamState {
     /// tail chunk fully covers that range; otherwise None (caller reads the
     /// file). Cheap: `Bytes::slice` is a refcount bump, no copy.
     pub fn tail_chunk_slice(&self, want_start: u64, want_end: u64) -> Option<bytes::Bytes> {
-        if want_end <= want_start {
+        // Cache disabled (cap 0) → straight to the file path, no lock taken.
+        if want_end <= want_start || tail_cache_bytes() == 0 {
             return None;
         }
         let g = self.last_chunk.read().unwrap();
@@ -581,10 +603,10 @@ impl Store {
         };
         // A `pending_compaction` intent means a compaction crashed mid-flight. The
         // temp file (`compact.tmp`) holds the fsynced full residual `[cut, tail)`
-        // (step 1's `sync_all` is NOT gated by relaxed), persisted durably BEFORE
+        // (step 1's `sync_all` is NOT gated by fast), persisted durably BEFORE
         // the intent (`tier.rs`). So when the intent is durable, an intact temp is
         // the source of truth — finish the swap by promoting it. We must NOT trust
-        // `p.tail - old_file_size` against the OLD live file: under `relaxed` the
+        // `p.tail - old_file_size` against the OLD live file: under `fast` the
         // old file's tail was never fsynced, so its on-disk size can be short,
         // which would both over-report `tail` AND skew `file_base` (C3).
         let tmp_path = data_path.with_extension("compact.tmp");
@@ -1585,7 +1607,7 @@ mod tier_tests {
         recover_with_pending_intent("pend-after", true).await;
     }
 
-    /// C3 regression: under `relaxed`, a crash *after* the compaction intent is
+    /// C3 regression: under `fast`, a crash *after* the compaction intent is
     /// persisted but *before* the rename leaves the OLD live file in place with an
     /// un-fsynced (and thus possibly short) tail, while the fsynced `compact.tmp`
     /// holds the full residual `[cut, tail)`. Recovery must prefer the durable temp
@@ -1594,7 +1616,7 @@ mod tier_tests {
     /// maps `[cut, tail)` exactly and the full logical range reads byte-identical.
     #[tokio::test]
     async fn recovery_pending_intent_prefers_fsynced_temp_when_old_file_short() {
-        let dir = tmp_dir("pend-relaxed-short");
+        let dir = tmp_dir("pend-fast-short");
         let total = 300 * 1024usize;
         let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
         let (sealed, tail, file_path) = {
@@ -1612,7 +1634,7 @@ mod tier_tests {
             let sealed = st.tier.manifest.lock().unwrap().sealed_offset;
             let tail = st.shared.read().unwrap().tail;
             // compact step 1: write the FULL residual [sealed, tail) to compact.tmp
-            // and fsync it (the temp fsync is NOT gated by relaxed).
+            // and fsync it (the temp fsync is NOT gated by fast).
             let residual = std::fs::read(&st.file_path).unwrap()[sealed as usize..].to_vec();
             let tmp = st.file_path.with_extension("compact.tmp");
             {
@@ -1633,7 +1655,7 @@ mod tier_tests {
                 .unwrap();
             (sealed, tail, st.file_path.clone())
         };
-        // Crash BEFORE the rename, under relaxed: the OLD live file is still in
+        // Crash BEFORE the rename, under fast: the OLD live file is still in
         // place but lost its un-fsynced suffix — simulate by truncating it short
         // (drop the last 16 KiB of the un-synced tail). The temp holds the truth.
         {
@@ -1658,7 +1680,7 @@ mod tier_tests {
         let live_size = std::fs::metadata(&st.file_path).unwrap().len();
         assert_eq!(live_size, tail - sealed, "live file is the full residual");
         let got = read_logical(&st, 0, total as u64).await;
-        assert_eq!(got, payload, "full read exact after relaxed crash-before-rename");
+        assert_eq!(got, payload, "full read exact after fast crash-before-rename");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

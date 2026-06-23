@@ -86,6 +86,11 @@ fn main() {
             "--long-poll-timeout-ms" => {
                 handlers::set_long_poll_timeout(parse_val(args.next(), "--long-poll-timeout-ms"));
             }
+            // Resident tail-cache cap (bytes); 0 disables it (reads → sendfile/pread).
+            // Default is platform-dependent (off on Linux, 64 KiB on macOS).
+            "--tail-cache-bytes" => {
+                store::set_tail_cache_bytes(parse_val(args.next(), "--tail-cache-bytes"));
+            }
             "--splice-appends" => {
                 engine_raw::set_splice_appends(true);
             }

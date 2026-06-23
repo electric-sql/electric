@@ -67,13 +67,13 @@ impl Default for DurabilityMode {
     }
 }
 
-/// Parse the `--durability` flag value into a [`DurabilityMode`]. `relaxed` is the
-/// legacy spelling of `fast` (kept as an alias so existing deploys don't break).
-/// Returns `None` for an unknown value — the caller maps that to a usage error.
+/// Parse the `--durability` flag value into a [`DurabilityMode`].
+/// Accepts `strict` | `wal` | `fast`; returns `None` for an unknown value — the
+/// caller maps that to a usage error.
 pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
     match s {
         "strict" => Some(DurabilityMode::Strict),
-        "fast" | "relaxed" => Some(DurabilityMode::Fast),
+        "fast" => Some(DurabilityMode::Fast),
         "wal" => Some(DurabilityMode::Wal),
         _ => None,
     }
@@ -1051,13 +1051,13 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             // closure is fsynced, and the stream would recover OPEN — a
             // monotonicity violation (PROTOCOL.md §4.1). The reader
             // notification is deferred until after write_meta_sync completes.
-            // NOTE (relaxed): this guarantees the *closedness* never rolls back
-            // (the close-meta stays durable in both modes), but under `relaxed`
+            // NOTE (fast): this guarantees the *closedness* never rolls back
+            // (the close-meta stays durable in both modes), but under `fast`
             // the closed *position* can: the data fdatasync below is skipped, so an
             // OS/power crash can lose the un-synced tail and recover a shorter
             // closed stream (tail = on-disk size < the acked tail). A reader that
             // saw EOF at the longer tail then faces a shorter closed stream. This
-            // is within relaxed's stated contract (lose the un-sealed hot tail on an
+            // is within fast's stated contract (lose the un-sealed hot tail on an
             // OS/power crash; a closed stream is just hot tail ending in a close).
             // The strong PROTOCOL.md §4.1 position-monotonicity guarantee is
             // strict-only.
@@ -1089,7 +1089,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     // Closure ordering: data fdatasync (above, strict-only) → durable meta commit →
     // expose the closure to readers (closed_durable) and wake waiters. Readers never
     // observe EOF for a closure that is not yet durable (PROTOCOL.md §4.1). Under
-    // `strict` the recovered closed tail also never moves backward; under `relaxed`
+    // `strict` the recovered closed tail also never moves backward; under `fast`
     // the data fdatasync is skipped, so the *closedness* is still durable but its
     // *position* can shrink on an OS/power crash (see the close-req note above).
     // Producer/access updates are debounced (documented crash window; see store::Meta).
@@ -2304,15 +2304,12 @@ mod durability_tests {
         // Default mode is Strict (an unset --durability flag).
         assert_eq!(DurabilityMode::default(), DurabilityMode::Strict, "default must be strict");
 
-        // --durability parsing: strict|wal|fast (+ the `relaxed` legacy alias).
+        // --durability parsing: strict|wal|fast. `relaxed` (the old name for
+        // `fast`) is no longer accepted.
         assert_eq!(parse_durability("strict"), Some(DurabilityMode::Strict));
         assert_eq!(parse_durability("wal"), Some(DurabilityMode::Wal));
         assert_eq!(parse_durability("fast"), Some(DurabilityMode::Fast));
-        assert_eq!(
-            parse_durability("relaxed"),
-            Some(DurabilityMode::Fast),
-            "`relaxed` is the legacy alias of `fast`"
-        );
+        assert_eq!(parse_durability("relaxed"), None, "`relaxed` was renamed to `fast`");
         assert_eq!(parse_durability("bogus"), None, "unknown value → usage error");
 
         // --wal-shards parses to an Option<usize> (the `requested_n` passed to
@@ -2334,7 +2331,7 @@ mod durability_tests {
     }
 
     #[tokio::test]
-    async fn maybe_sync_on_ack_strict_syncs_relaxed_skips() {
+    async fn maybe_sync_on_ack_strict_syncs_fast_skips() {
         use crate::store::{CreateResult, Store, StreamConfig};
         use crate::tier::TierConfig;
 
@@ -2374,7 +2371,7 @@ mod durability_tests {
             .unwrap();
         assert_eq!(st.sync.synced(), target, "strict must advance the durable watermark");
 
-        // Append 5 more; RELAXED must skip the fsync → watermark unchanged.
+        // Append 5 more; FAST must skip the fsync → watermark unchanged.
         let mut ap = st.appender.lock().await;
         write_wire(&st, &mut ap, &bytes::Bytes::from_static(b"abcde")).unwrap();
         let target2 = ap.written;
@@ -2383,7 +2380,7 @@ mod durability_tests {
         maybe_sync_on_ack(DurabilityMode::Fast, &store, &st, &bytes::Bytes::new(), file2, target2, None)
             .await
             .unwrap();
-        assert_eq!(st.sync.synced(), target, "relaxed must skip fsync (watermark unchanged)");
+        assert_eq!(st.sync.synced(), target, "fast must skip fsync (watermark unchanged)");
         assert!(target2 > target, "the bytes were still written (tail advanced)");
 
         let _ = std::fs::remove_dir_all(&dir);
