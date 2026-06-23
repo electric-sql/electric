@@ -84,10 +84,7 @@ defmodule Electric.LsnTracker do
   """
   @spec get_last_broadcast_lsn(stack_ref()) :: non_neg_integer()
   def get_last_broadcast_lsn(stack_ref) do
-    case :ets.lookup(table(stack_ref), :last_broadcast_lsn) do
-      [{:last_broadcast_lsn, lsn}] -> lsn
-      [] -> 0
-    end
+    :ets.lookup_element(table(stack_ref), :last_broadcast_lsn, 2)
   rescue
     ArgumentError -> 0
   end
