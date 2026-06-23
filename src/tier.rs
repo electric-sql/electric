@@ -774,7 +774,7 @@ pub enum ResolvedSlice {
 /// for a `Body::FileRange`; otherwise (any `Remote` slice) hand the slices back
 /// so the caller streams them. This is the single fast-path gate: with tiering
 /// off `resolve_range` yields exactly one live-file slice, so the default build's
-/// behaviour is byte-for-byte the old `collect_segments` / `FileRange` path.
+/// behaviour is byte-for-byte the old `FileRange` path.
 pub fn into_local_segments(slices: Vec<ResolvedSlice>) -> Result<Vec<Segment>, Vec<ResolvedSlice>> {
     if slices.iter().all(|s| matches!(s, ResolvedSlice::Local(_))) {
         Ok(slices

@@ -1,9 +1,9 @@
-// Engine-agnostic HTTP request/response types.
+// HTTP request/response types shared between handlers and the raw HTTP engine.
 //
-// Handlers speak these types only; each HTTP engine (hyper, raw) adapts them
-// to its transport. The key piece is Body::FileRange: handlers describe reads
-// as file segments + optional framing bytes, and the engine decides how to
-// serve them (buffered copy, or sendfile on engines/platforms that can).
+// Handlers speak these types only; the engine adapts them to its transport.
+// The key piece is Body::FileRange: handlers describe reads as file segments +
+// optional framing bytes, and the engine decides how to serve them (buffered
+// copy, or sendfile where the platform can).
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -38,8 +38,7 @@ impl StreamBody {
 }
 
 /// Maximum accepted request body size; larger bodies get `413 Payload Too
-/// Large`. Shared by both HTTP engines so the limit is consistent regardless
-/// of `--http-engine`.
+/// Large`.
 pub const MAX_BODY_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB safety cap
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

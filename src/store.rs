@@ -953,18 +953,15 @@ impl Segment {
     }
 }
 
-/// Read all `segments` plus framing (`prefix`/`suffix`) into one contiguous
-/// buffer. Returns empty bytes if any positioned read fails (e.g. the file was
-/// removed mid-read). Shared by the buffered read paths (hyper engine, SSE
-/// batches, small inline reads).
-pub fn materialize_segments(segments: &[Segment], prefix: &[u8], suffix: &[u8]) -> bytes::Bytes {
+/// Read all `segments` into one contiguous buffer. Returns empty bytes if any
+/// positioned read fails (e.g. the file was removed mid-read). Shared by the
+/// buffered read paths (SSE batches, small inline reads).
+pub fn materialize_segments(segments: &[Segment]) -> bytes::Bytes {
     use bytes::BytesMut;
     use std::os::unix::fs::FileExt;
-    let data_len: usize = segments.iter().map(|s| s.len as usize).sum();
-    let total = prefix.len() + data_len + suffix.len();
+    let total: usize = segments.iter().map(|s| s.len as usize).sum();
     let mut buf = BytesMut::zeroed(total);
-    buf[..prefix.len()].copy_from_slice(prefix);
-    let mut at = prefix.len();
+    let mut at = 0;
     for seg in segments {
         let n = seg.len as usize;
         if seg.file.read_exact_at(&mut buf[at..at + n], seg.file_start).is_err() {
@@ -972,7 +969,6 @@ pub fn materialize_segments(segments: &[Segment], prefix: &[u8], suffix: &[u8]) 
         }
         at += n;
     }
-    buf[at..].copy_from_slice(suffix);
     buf.freeze()
 }
 
@@ -1303,7 +1299,7 @@ mod tier_tests {
             match sl {
                 ResolvedSlice::Local(seg) => {
                     let b = tokio::task::spawn_blocking(move || {
-                        materialize_segments(&[seg], b"", b"")
+                        materialize_segments(&[seg])
                     })
                     .await
                     .unwrap();

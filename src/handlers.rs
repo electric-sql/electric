@@ -40,7 +40,7 @@ fn long_poll_timeout_dur() -> Duration {
 }
 
 /// Durability mode for the append/close hot path. Set once at startup from
-/// `--durability`; mirrors the `set_splice_appends` / `set_read_offload` flag pattern.
+/// `--durability`.
 ///
 /// - `Strict` (default): ack only after the covering `fdatasync`
 ///   (`SyncCoalescer::sync_to`).
@@ -1568,7 +1568,7 @@ fn stream_resolved_body(
                             len: n,
                         };
                         let bytes = tokio::task::spawn_blocking(move || {
-                            materialize_segments(&[win], b"", b"")
+                            materialize_segments(&[win])
                         })
                         .await
                         .unwrap_or_default();
@@ -1631,7 +1631,7 @@ async fn materialize_resolved(
             ResolvedSlice::Local(seg) => {
                 let want = seg.len;
                 let bytes = tokio::task::spawn_blocking(move || {
-                    crate::store::materialize_segments(&[seg], b"", b"")
+                    crate::store::materialize_segments(&[seg])
                 })
                 .await
                 .unwrap_or_default();
@@ -2063,7 +2063,7 @@ async fn read_range_bytes(
     let out = match crate::store::into_local_segments(slices) {
         // Local-only fast path (always the case with tiering off): one blocking
         // read across all local segments.
-        Ok(segs) => tokio::task::spawn_blocking(move || materialize_segments(&segs, b"", b""))
+        Ok(segs) => tokio::task::spawn_blocking(move || materialize_segments(&segs))
             .await
             .unwrap_or_default(),
         Err(slices) => materialize_resolved(st, slices, b"", b"").await?,

@@ -1,9 +1,7 @@
-// Shared HTTP/1.1 wire logic — the pure, I/O-free pieces both the `raw` and
-// `uring` engines need: request-head parsing, response-head serialization, and
-// chunked-frame writing. Each engine keeps only its own byte source/sink
-// (borrowed tokio buffers vs tokio-uring owned buffers) and its file-read
-// strategy; everything here is a plain function over slices/Vecs so the two
-// engines can't drift on protocol details.
+// HTTP/1.1 wire logic — the pure, I/O-free pieces the `raw` engine needs:
+// request-head parsing, response-head serialization, and chunked-frame writing.
+// The engine keeps only its own byte source/sink and file-read strategy;
+// everything here is a plain function over slices/Vecs.
 
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt};
