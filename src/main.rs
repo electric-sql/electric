@@ -7,6 +7,8 @@ mod store;
 mod telemetry;
 mod tier;
 mod wal;
+#[cfg(all(target_os = "linux", feature = "strict-uring"))]
+mod uring_fsync;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -77,6 +79,10 @@ fn main() {
     // Only consulted under `--durability wal`; useful for forcing rolls in tests
     // and benches without writing a full 128 MiB segment.
     let mut wal_segment_bytes: Option<u64> = None;
+    // `--strict-io-uring` opts into the io_uring fsync executor for the strict
+    // per-stream fdatasync (Linux + `strict-uring` feature only; otherwise falls
+    // back to spawn_blocking with a warning). Only consulted under `--durability strict`.
+    let mut strict_io_uring = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -164,6 +170,9 @@ fn main() {
                     std::process::exit(2);
                 }
                 wal_segment_bytes = Some(n);
+            }
+            "--strict-io-uring" => {
+                strict_io_uring = true;
             }
             other => {
                 eprintln!("unknown argument: {other}");
@@ -255,6 +264,29 @@ fn main() {
             // distribution + durability gauges. No-op unless built with
             // `--features telemetry`; off the hot commit/append path.
             wal::telemetry::spawn_emitter(Arc::clone(&walset));
+        }
+
+        if strict_io_uring {
+            #[cfg(all(target_os = "linux", feature = "strict-uring"))]
+            {
+                if handlers::durability() == handlers::DurabilityMode::Strict && uring_fsync::probe() {
+                    match uring_fsync::start() {
+                        Ok(pool) => {
+                            uring_fsync::install(pool);
+                            eprintln!("strict: io_uring fsync executor active");
+                        }
+                        Err(e) => eprintln!("strict: io_uring fsync executor failed to start ({e}) — using spawn_blocking"),
+                    }
+                } else if handlers::durability() != handlers::DurabilityMode::Strict {
+                    eprintln!("strict: --strict-io-uring ignored (only applies to --durability strict)");
+                } else {
+                    eprintln!("strict: io_uring unavailable (probe failed) — using spawn_blocking");
+                }
+            }
+            #[cfg(not(all(target_os = "linux", feature = "strict-uring")))]
+            {
+                eprintln!("strict: --strict-io-uring requested but this build has no io_uring support — using spawn_blocking");
+            }
         }
 
         let addr: SocketAddr = (host, port).into();

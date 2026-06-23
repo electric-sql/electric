@@ -31,6 +31,8 @@ features. Builds on Linux and macOS, x64 and arm64.
 # build (run from packages/server-rust)
 cargo build --release        # → ./target/release/durable-streams-server
 cargo test  --release        # unit + integration tests (protocol conformance: see Conformance below)
+# optional Linux-only feature: io_uring strict fsync (enables the --strict-io-uring flag)
+cargo build --release --features strict-uring
 
 # run
 ./target/release/durable-streams-server --port 4438 --data-dir ./data
@@ -71,11 +73,12 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 
 **Durability** — selects the append ack-path; all three share the same reads/visibility. See [ARCHITECTURE.md › Durability modes](ARCHITECTURE.md#durability-modes).
 
-| Flag                  | Default   | Description                                                                                          |
-| --------------------- | --------- | ---------------------------------------------------------------------------------------------------- |
-| `--durability`        | `strict`  | `strict` \| `wal` \| `fast` — see _Choosing a configuration_ below                                   |
-| `--wal-shards`        | CPU cores | (`wal` only) shard / group-commit-committer count; persisted on first run, a later run must match it |
-| `--wal-segment-bytes` | `128 MiB` | (`wal` only) per-shard WAL segment size; lower it only to force segment rolls in tests/benches       |
+| Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--durability`        | `strict`  | `strict` \| `wal` \| `fast` — see _Choosing a configuration_ below                                                                                                                                                                                                                                                                                    |
+| `--wal-shards`        | CPU cores | (`wal` only) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                                                  |
+| `--wal-segment-bytes` | `128 MiB` | (`wal` only) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                                                        |
+| `--strict-io-uring`   | off       | (`strict` only; Linux + the `strict-uring` build feature) replace per-stream `spawn_blocking` `fdatasync` with one shared io_uring ring batching many streams' fsyncs into a single `io_uring_enter` — a CPU-per-append lever; falls back to `spawn_blocking` if io_uring is unavailable. Build with `cargo build --release --features strict-uring`. |
 
 **Read path** — performance knobs; none change protocol behaviour. Leave at defaults unless a benchmark says otherwise.
 

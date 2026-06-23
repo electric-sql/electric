@@ -344,8 +344,11 @@ impl Shard {
             // its exact `write_pos` so it is EXACTLY packed — no zero tail — and
             // fsync so the size+data are durable) and OPEN a fresh full-size segment
             // at the next lsn BEFORE reserving. The seal's synchronous fsync makes
-            // every record already in the old segment durable at roll time, so the
-            // committer never has to fsync a segment it no longer holds.
+            // the truncated size crash-durable, but because phase-2 `write_at` runs
+            // off-lock a record reserved in the old segment can land its bytes AFTER
+            // the seal fsync — so the seal fsync does NOT cover it. Durability for
+            // those records is carried by the `sealed_pending` re-fsync the committer
+            // performs (see `sealed_pending` field docs and `collect_fsync_targets`).
             if g.write_pos + total > self.segment_size {
                 // Seal the current active segment to its packed size + fsync (so the
                 // truncated size is itself crash-durable → recovery walks the exact
@@ -380,30 +383,20 @@ impl Shard {
             (lsn, off, seg)
         };
 
-        // --- Phase 2: encode + write off-lock. ---
+        // --- Phase 2: encode and write the framed record inline (off-lock). ---
         let mut buf = Vec::with_capacity(total as usize);
         encode_into(
             &mut buf,
             &Record { lsn, kind, stream_id, stream_offset, payload },
         );
-        // Test-only fault injection: simulate a transient `write_at` failure for
-        // exactly this stage (the lsn stays a permanent gap, just like a real
-        // partial/failed write).
+
+        // Test-only fault injection: simulate a write_at failure.
         #[cfg(test)]
-        if self
-            .fail_next_write
-            .swap(false, std::sync::atomic::Ordering::SeqCst)
-        {
+        if self.fail_next_write.swap(false, std::sync::atomic::Ordering::SeqCst) {
             return Err(io::Error::other("injected WAL segment write_at failure"));
         }
 
-        // A transient write error must NOT panic the process: propagate it so the
-        // caller fails the ack. The reserved lsn was never marked written, so it
-        // remains a permanent gap blocking the contiguous-written watermark (the
-        // committer can never advance `durable_lsn` past it) — fail-loud, don't-ack.
         seg.write_at(off, &buf)?;
-
-        // --- Mark written + wake the committer. ---
         {
             let mut g = self.inner.lock().unwrap();
             g.mark_written(lsn);
@@ -793,13 +786,10 @@ impl Shard {
     /// Await until this shard's `durable_lsn >= lsn`.
     pub async fn wait_durable(&self, lsn: u64) {
         let mut rx = self.durable_tx.subscribe();
-        // Fast path: already durable.
         if *rx.borrow_and_update() >= lsn {
             return;
         }
         loop {
-            // `changed()` errors only if the sender is dropped, which never
-            // happens while the shard is alive.
             if rx.changed().await.is_err() {
                 return;
             }
@@ -807,6 +797,44 @@ impl Shard {
                 return;
             }
         }
+    }
+
+    /// Current contiguous-written watermark (`written_high`). Snapshot this
+    /// BEFORE submitting an fsync; publish exactly it afterwards.
+    pub fn snapshot_watermark(&self) -> u64 {
+        self.inner.lock().unwrap().written_high
+    }
+
+    /// The segments an fsync batch must cover: the active segment plus every
+    /// pending-sealed segment that may still hold an un-durable record.
+    pub fn collect_fsync_targets(&self) -> (Arc<FileSegment>, Vec<Arc<FileSegment>>) {
+        let g = self.inner.lock().unwrap();
+        (
+            Arc::clone(&g.active),
+            g.sealed_pending.iter().map(|(_, s)| Arc::clone(s)).collect(),
+        )
+    }
+
+    /// Publish `watermark` as the new `durable_lsn` (no-op if not an advance):
+    /// record the batch-size stat and retire fully-durable sealed segments. This
+    /// is the committer's Ok-branch; callers MUST pass a watermark snapshotted
+    /// BEFORE the covering fsync (never re-snapshot afterwards).
+    pub fn publish_durable(&self, watermark: u64) {
+        let durable = *self.durable_tx.borrow();
+        if watermark <= durable {
+            return;
+        }
+        self.stats.record_batch(watermark - durable);
+        // Use send_replace (unconditional write) so the watermark is stored even
+        // when no receivers exist yet — `durable_tx` sits at 0 receivers between
+        // appends because the constructor drops `_durable_rx` and a waiter only
+        // subscribes inside `wait_durable` AFTER `reserve_and_stage` returns.
+        // `send()` silently no-ops when receiver_count == 0, which would drop the
+        // durable watermark; a waiter that subscribes afterwards reads a stale
+        // value and waits forever for an already-durable record.
+        self.durable_tx.send_replace(watermark);
+        let mut g = self.inner.lock().unwrap();
+        g.sealed_pending.retain(|(end_lsn, _)| *end_lsn > watermark);
     }
 
     /// The shard's group-commit committer: wait for staged work, `fdatasync` the
@@ -827,33 +855,11 @@ impl Shard {
             // Register interest BEFORE reading state (lost-wakeup safety).
             let notified = self.notify.notified();
 
-            let watermark = self.inner.lock().unwrap().written_high;
+            let watermark = self.snapshot_watermark();
             let durable = *self.durable_tx.borrow();
 
             if watermark > durable {
-                // There is newly-written, not-yet-durable data. fdatasync the
-                // active segment AND every pending sealed segment that may still
-                // hold an un-durable record (a record written into a sealed segment
-                // off-lock AFTER the roll's own seal-fsync), then publish the
-                // watermark. Fsyncing the sealed segments here is what closes the
-                // roll's no-window invariant (see `sealed_pending` docs).
-                let (seg, sealed): (Arc<FileSegment>, Vec<Arc<FileSegment>>) = {
-                    let g = self.inner.lock().unwrap();
-                    (
-                        Arc::clone(&g.active),
-                        g.sealed_pending.iter().map(|(_, s)| Arc::clone(s)).collect(),
-                    )
-                };
-                // Run the (potentially blocking) fdatasyncs off the async runtime so
-                // a slow disk can't stall this tokio worker — letting many shards'
-                // committers fsync concurrently on the blocking pool instead of being
-                // capped at the worker count. `sealed`/`seg` were cloned under the
-                // lock above and move into the closure. Sealed segments first (older
-                // bytes), then the active segment: all must be durable before
-                // durable_lsn advances past records in them. The watermark snapshot
-                // above stays BEFORE this fsync and is published as-is; we do not
-                // re-read it after. A failed fsync OR a panicked task yields Err,
-                // taking the same no-advance/no-publish path as an inline failure.
+                let (seg, sealed) = self.collect_fsync_targets();
                 let fsync_res: io::Result<()> = tokio::task::spawn_blocking(move || {
                     for s in &sealed {
                         s.fdatasync()?;
@@ -862,48 +868,13 @@ impl Shard {
                     Ok(())
                 })
                 .await
-                .unwrap_or_else(|e| {
-                    Err(io::Error::other(format!(
-                        "committer fsync task panicked: {e}"
-                    )))
-                });
+                .unwrap_or_else(|e| Err(io::Error::other(format!("committer fsync task panicked: {e}"))));
                 match fsync_res {
                     Ok(()) => {
-                        // Publish the watermark we snapshotted BEFORE the
-                        // fdatasync, exactly as-is — do NOT re-snapshot. Every
-                        // record up to that watermark had its bytes written
-                        // (`mark_written`) before we read `written_high`, and the
-                        // fdatasync flushed all of the segment's dirty pages, so all
-                        // of them are now durable. Records that became written
-                        // *during* the fsync are deliberately EXCLUDED from this
-                        // publish (the fsync may not have covered their pages) and
-                        // are caught by the next iteration's notify. Re-snapshotting
-                        // here would over-advance `durable_lsn` past records this
-                        // fsync did not necessarily flush — a data-loss bug.
-                        //
-                        // BATCH SIZE (spec §11): the records THIS fdatasync made
-                        // durable = how far `durable_lsn` advances now =
-                        // `watermark - durable`. Recorded once per commit (not per
-                        // append) — a few relaxed atomics, off no critical lock.
-                        self.stats.record_batch(watermark - durable);
-                        let _ = self.durable_tx.send(watermark);
-                        // Drop sealed segments now fully durable (every record in
-                        // them is ≤ watermark, and we just fsync'd them). Any entry
-                        // with `end_lsn <= watermark` had all its records written +
-                        // marked before the watermark snapshot, so it was present in
-                        // the `sealed` list we fsync'd above — safe to release.
-                        {
-                            let mut g = self.inner.lock().unwrap();
-                            g.sealed_pending.retain(|(end_lsn, _)| *end_lsn > watermark);
-                        }
-                        // Loop again immediately (do not await) in case the
-                        // watermark advanced further while we were fsyncing.
+                        self.publish_durable(watermark);
                         continue;
                     }
                     Err(e) => {
-                        // fsync failed: do NOT advance durable_lsn, do NOT ack.
-                        // Wait for the next notify and retry; the records stay
-                        // un-durable until a later fsync succeeds.
                         eprintln!("WAL committer fdatasync failed: {e}");
                         notified.await;
                         continue;
