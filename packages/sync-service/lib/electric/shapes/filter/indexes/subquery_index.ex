@@ -73,6 +73,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec register_shape(t(), term(), DnfPlan.t()) :: :ok
   def register_shape(table, shape_handle, %DnfPlan{} = plan) do
+    sid = intern_handle(table, shape_handle)
+
     polarities =
       plan.positions
       |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
@@ -81,10 +83,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
       end)
 
     for {dep_index, polarity} <- polarities do
-      :ets.insert(table, {{:polarity, shape_handle, dep_index}, polarity})
+      :ets.insert(table, {{:polarity, sid, dep_index}, polarity})
     end
 
-    :ets.insert(table, {{:fallback, shape_handle}, true})
+    :ets.insert(table, {{:fallback, sid}, true})
 
     :ok
   end
@@ -94,11 +96,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec unregister_shape(t(), term()) :: :ok
   def unregister_shape(table, shape_handle) do
-    delete_by_key_prefix(table, {:membership, shape_handle, :_, :_})
-    delete_by_key_prefix(table, {:polarity, shape_handle, :_})
-    delete_by_key_prefix(table, {:shape_node, shape_handle, :_, :_})
-    delete_by_key_prefix(table, {:shape_dep_node, shape_handle, :_, :_, :_})
-    :ets.delete(table, {:fallback, shape_handle})
+    sid = handle_id(table, shape_handle)
+
+    delete_by_key_prefix(table, {:membership, sid, :_, :_})
+    delete_by_key_prefix(table, {:polarity, sid, :_})
+    delete_by_key_prefix(table, {:shape_node, sid, :_, :_})
+    delete_by_key_prefix(table, {:shape_dep_node, sid, :_, :_, :_})
+    :ets.delete(table, {:fallback, sid})
+    :ets.delete(table, {:handle_id, shape_handle})
     :ok
   end
 
@@ -116,6 +121,10 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
     node_id = {condition_id, optimisation.field}
     next_condition_id = Filter.next_condition_id(filter)
 
+    # The interned id keys this shape's index rows; the real handle still flows
+    # into WhereCondition (its `other_shapes` are returned verbatim by routing).
+    sid = intern_handle(table, shape_id)
+
     WhereCondition.init(filter, next_condition_id)
 
     WhereCondition.add_shape(
@@ -130,27 +139,27 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     :ets.insert(
       table,
-      {{:node_shape, node_id, shape_id, branch_key},
+      {{:node_shape, node_id, sid, branch_key},
        {optimisation.dep_index, optimisation.polarity, next_condition_id}}
     )
 
     if optimisation.polarity == :negated do
-      :ets.insert(table, {{:node_negated_shape, node_id, shape_id, next_condition_id}, true})
+      :ets.insert(table, {{:node_negated_shape, node_id, sid, next_condition_id}, true})
     end
 
     :ets.insert(
       table,
-      {{:shape_node, shape_id, node_id, branch_key},
+      {{:shape_node, sid, node_id, branch_key},
        {optimisation.dep_index, optimisation.polarity, next_condition_id}}
     )
 
     :ets.insert(
       table,
-      {{:shape_dep_node, shape_id, optimisation.dep_index, node_id, branch_key},
+      {{:shape_dep_node, sid, optimisation.dep_index, node_id, branch_key},
        {optimisation.polarity, next_condition_id}}
     )
 
-    :ets.insert(table, {{:node_fallback, node_id, shape_id, next_condition_id}, true})
+    :ets.insert(table, {{:node_fallback, node_id, sid, next_condition_id}, true})
     :ok
   end
 
@@ -166,8 +175,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         branch_key
       ) do
     node_id = {condition_id, optimisation.field}
+    sid = handle_id(table, shape_id)
 
-    case node_shape_entry_for_shape(table, shape_id, node_id, branch_key) do
+    case node_shape_entry_for_shape(table, sid, node_id, branch_key) do
       nil ->
         :deleted
 
@@ -184,21 +194,21 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
         delete_node_members(
           table,
           node_id,
-          shape_id,
+          sid,
           polarity,
           next_condition_id,
           optimisation.dep_index
         )
 
-        :ets.delete(table, {:node_shape, node_id, shape_id, branch_key})
+        :ets.delete(table, {:node_shape, node_id, sid, branch_key})
 
         if polarity == :negated do
-          :ets.delete(table, {:node_negated_shape, node_id, shape_id, next_condition_id})
+          :ets.delete(table, {:node_negated_shape, node_id, sid, next_condition_id})
         end
 
-        :ets.delete(table, {:node_fallback, node_id, shape_id, next_condition_id})
-        :ets.delete(table, {:shape_node, shape_id, node_id, branch_key})
-        :ets.delete(table, {:shape_dep_node, shape_id, dep_index, node_id, branch_key})
+        :ets.delete(table, {:node_fallback, node_id, sid, next_condition_id})
+        :ets.delete(table, {:shape_node, sid, node_id, branch_key})
+        :ets.delete(table, {:shape_dep_node, sid, dep_index, node_id, branch_key})
 
         if node_empty?(table, node_id) do
           :ets.delete(table, {:node_meta, node_id})
@@ -226,11 +236,12 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec mark_ready(t(), term()) :: :ok
   def mark_ready(table, shape_handle) do
-    :ets.delete(table, {:fallback, shape_handle})
+    sid = handle_id(table, shape_handle)
+    :ets.delete(table, {:fallback, sid})
 
     for {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} <-
-          nodes_for_shape(table, shape_handle) do
-      delete_by_key_prefix(table, {:node_fallback, node_id, shape_handle, :_})
+          nodes_for_shape(table, sid) do
+      delete_by_key_prefix(table, {:node_fallback, node_id, sid, :_})
     end
 
     :ok
@@ -241,13 +252,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec add_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
   def add_value(table, shape_handle, _subquery_ref, dep_index, value) do
+    sid = intern_handle(table, shape_handle)
+
     for {node_id, polarity, next_condition_id, _branch_key} <-
-          nodes_for_shape_dependency(table, shape_handle, dep_index) do
+          nodes_for_shape_dependency(table, sid, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.insert(table, {{tag, node_id, value, shape_handle, next_condition_id}, true})
+      :ets.insert(table, {{tag, node_id, value, sid, next_condition_id}, true})
     end
 
-    :ets.insert(table, {{:membership, shape_handle, dep_index, value}, true})
+    :ets.insert(table, {{:membership, sid, dep_index, value}, true})
     :ok
   end
 
@@ -256,13 +269,15 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec remove_value(t(), term(), [String.t()], non_neg_integer(), term()) :: :ok
   def remove_value(table, shape_handle, _subquery_ref, dep_index, value) do
+    sid = handle_id(table, shape_handle)
+
     for {node_id, polarity, next_condition_id, _branch_key} <-
-          nodes_for_shape_dependency(table, shape_handle, dep_index) do
+          nodes_for_shape_dependency(table, sid, dep_index) do
       tag = if polarity == :positive, do: :node_positive_member, else: :node_negated_member
-      :ets.delete(table, {tag, node_id, value, shape_handle, next_condition_id})
+      :ets.delete(table, {tag, node_id, value, sid, next_condition_id})
     end
 
-    :ets.delete(table, {:membership, shape_handle, dep_index, value})
+    :ets.delete(table, {:membership, sid, dep_index, value})
     :ok
   end
 
@@ -320,7 +335,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec member?(t(), term(), [String.t()], term()) :: boolean()
   def member?(table, shape_handle, subquery_ref, typed_value) do
-    :ets.member(table, {:membership, shape_handle, dep_index_for_ref(subquery_ref), typed_value})
+    sid = handle_id(table, shape_handle)
+    :ets.member(table, {:membership, sid, dep_index_for_ref(subquery_ref), typed_value})
   end
 
   @doc """
@@ -344,7 +360,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec fallback?(t(), term()) :: boolean()
   def fallback?(table, shape_handle) do
-    :ets.member(table, {:fallback, shape_handle})
+    :ets.member(table, {:fallback, handle_id(table, shape_handle)})
   end
 
   @doc """
@@ -352,7 +368,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   """
   @spec has_positions?(t(), term()) :: boolean()
   def has_positions?(table, shape_handle) do
-    nodes_for_shape(table, shape_handle) != []
+    nodes_for_shape(table, handle_id(table, shape_handle)) != []
   end
 
   @doc """
@@ -361,7 +377,7 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   @spec positions_for_shape(t(), term()) :: [node_id()]
   def positions_for_shape(table, shape_handle) do
     table
-    |> nodes_for_shape(shape_handle)
+    |> nodes_for_shape(handle_id(table, shape_handle))
     |> Enum.map(fn {node_id, _dep_index, _polarity, _next_condition_id, _branch_key} ->
       node_id
     end)
@@ -503,7 +519,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   end
 
   defp polarity_for_shape_ref(table, shape_handle, subquery_ref) do
-    case :ets.lookup(table, {:polarity, shape_handle, dep_index_for_ref(subquery_ref)}) do
+    sid = handle_id(table, shape_handle)
+
+    case :ets.lookup(table, {:polarity, sid, dep_index_for_ref(subquery_ref)}) do
       [{_, polarity}] ->
         polarity
 
@@ -520,4 +538,50 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
   # index in the last element, so the read paths that only have the ref recover
   # it cheaply with no extra mapping table.
   defp dep_index_for_ref([_prefix, dep_index]), do: String.to_integer(dep_index)
+
+  # Shape handles are ~25-byte binaries (built by Shape.generate_id as
+  # "<hash>-<microseconds>") that occupy 64 bytes in each ETS row that stores one,
+  # and were copied into every index row that mentions a shape — and the per-value
+  # membership and node-member rows mention one each. We intern each handle to a
+  # small integer (an immediate, stored inline in the key tuple for ~0 bytes) and
+  # store the handle string itself just once, in a `{:handle_id, handle}` row.
+  #
+  # Forward-only: the interned id is only ever an identity/dedup key inside the
+  # index. Routing reads return shape ids from `WhereCondition`, not from these
+  # rows (the node-row shape id is discarded), and every handle-keyed lookup
+  # takes the handle as input — so we never need to map an id back to a handle.
+  #
+  # Ids come from `:erlang.unique_integer/1` rather than a stored counter so
+  # there is no per-table bookkeeping row to persist (cleanup restores the table
+  # exactly) and interning works from the table alone. `insert_new` makes it
+  # idempotent and race-safe: a shape's consumer and the filter owner may both
+  # intern the same handle, and whichever loses the insert adopts the winner's id
+  # (a discarded unique_integer is harmless — ids need only be unique).
+  defp intern_handle(table, handle) do
+    case :ets.lookup(table, {:handle_id, handle}) do
+      [{_, id}] ->
+        id
+
+      [] ->
+        id = :erlang.unique_integer([:positive, :monotonic])
+
+        if :ets.insert_new(table, {{:handle_id, handle}, id}) do
+          id
+        else
+          [{_, existing}] = :ets.lookup(table, {:handle_id, handle})
+          existing
+        end
+    end
+  end
+
+  # Lookup-only counterpart for read/cleanup paths. Returns `:undefined` when the
+  # handle was never interned; since writes always intern a real positive integer
+  # first, `:undefined` can never match a stored row, so reads for an unknown
+  # handle correctly miss (and never collide with another unknown handle's data).
+  defp handle_id(table, handle) do
+    case :ets.lookup(table, {:handle_id, handle}) do
+      [{_, id}] -> id
+      [] -> :undefined
+    end
+  end
 end
