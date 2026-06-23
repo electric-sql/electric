@@ -97,9 +97,6 @@ fn main() {
             "--tail-cache-bytes" => {
                 store::set_tail_cache_bytes(parse_val(args.next(), "--tail-cache-bytes"));
             }
-            "--splice-appends" => {
-                engine_raw::set_splice_appends(true);
-            }
             "--read-offload" => {
                 let v = val(args.next(), "--read-offload");
                 match engine_raw::ReadOffload::parse(&v) {

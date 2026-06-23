@@ -14,7 +14,7 @@
 // zero-copy page-cache → socket transfer, but a fault parks a pool thread
 // instead. ReadOffload picks where each read runs; see set_read_offload.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
@@ -70,21 +70,6 @@ fn read_offload() -> ReadOffload {
         x if x == ReadOffload::Always as u8 => ReadOffload::Always,
         _ => ReadOffload::Tail,
     }
-}
-
-/// Zero-copy binary-append fast path toggle (off by default → behaviour
-/// identical to the read+write path). Set once at startup via --splice-appends;
-/// only takes effect on Linux for binary (non-JSON) streams.
-static SPLICE_APPENDS: AtomicBool = AtomicBool::new(false);
-
-/// Enable/disable the splice(2) binary-append fast path (process-global).
-pub fn set_splice_appends(on: bool) {
-    SPLICE_APPENDS.store(on, Ordering::Relaxed);
-}
-
-#[cfg(target_os = "linux")]
-fn splice_appends() -> bool {
-    SPLICE_APPENDS.load(Ordering::Relaxed)
 }
 
 /// Bound concurrent connections so a flood can't exhaust fds/memory. (A per-
@@ -204,32 +189,6 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
         }
         if head.expect_continue {
             stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
-        }
-
-        // ---- binary-append splice fast path (Linux, opt-in) ----
-        // Eligible: POST with a fixed content-length body, not chunked, no
-        // Expect: 100-continue (already handled above is fine, but we keep it
-        // simple and skip those), and the splice toggle on. The handler decides
-        // whether the *stream* qualifies (binary, exists, not a dup) and either
-        // commits via splice, falls back, or rejects.
-        #[cfg(target_os = "linux")]
-        if splice_appends()
-            && head.method == crate::api::Method::Post
-            && !head.chunked
-            && !head.expect_continue
-        {
-            if let Some(clen) = head.content_length {
-                match try_splice_append(&store, &mut stream, &mut buf, &head, clen).await? {
-                    SpliceOutcome::Done { keep_alive } => {
-                        if !keep_alive {
-                            return Ok(());
-                        }
-                        continue;
-                    }
-                    SpliceOutcome::Reject => return Ok(()),
-                    SpliceOutcome::Fallback => { /* body untouched; fall through */ }
-                }
-            }
         }
 
         // ---- read request body ----
@@ -507,219 +466,6 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(e) => return Err(e),
         }
-    }
-    Ok(())
-}
-
-// ---------------- binary-append splice fast path (Linux) ----------------
-
-#[cfg(target_os = "linux")]
-enum SpliceOutcome {
-    /// Append committed via splice; `keep_alive` carries the connection decision.
-    Done { keep_alive: bool },
-    /// A response was written but the body was NOT consumed (producer dup,
-    /// closed, etc.) — the connection must close.
-    Reject,
-    /// Stream not splice-eligible; the caller reads the body normally.
-    Fallback,
-}
-
-/// Attempt the zero-copy binary append. Hands the handler a callback that, under
-/// the appender lock, writes any over-read (prebuffered) body bytes then splices
-/// the rest of the body from the socket into the file — exactly `clen` body
-/// bytes total. On Fallback nothing is read from the socket body, so the normal
-/// path stays valid.
-#[cfg(target_os = "linux")]
-async fn try_splice_append(
-    store: &Arc<Store>,
-    stream: &mut TcpStream,
-    buf: &mut BytesMut,
-    head: &http1::ReqHead,
-    clen: usize,
-) -> std::io::Result<SpliceOutcome> {
-    use crate::handlers::{self, BeginResult, BinaryAppendReq};
-
-    let req = BinaryAppendReq {
-        content_length: clen as u64,
-        headers: head.headers.clone(),
-    };
-
-    // The over-read: head parsing may have pulled body bytes into `buf`. Take up
-    // to `clen` of them; the rest comes off the socket via splice. We move them
-    // out of `buf` here (advance) so the buffer is clean for the next request.
-    let prebuffered_len = buf.len().min(clen);
-    let prebuffered = buf.split_to(prebuffered_len).freeze();
-
-    // The splice callback borrows the socket only as `&TcpStream` (shared — it
-    // needs readiness + the raw fd, never a mutable op), which keeps the
-    // connection future `Send` (a `&mut` / raw pointer would not be). `stream`
-    // is otherwise untouched while the splice runs (awaited to completion below)
-    // and reused only to write the response. `prebuffered` is cloned (a refcount
-    // bump) for the closure so the Fallback branch — where the closure never
-    // runs — can restore the original bytes to `buf`.
-    let sock = &*stream;
-    let pre_for_splice = prebuffered.clone();
-    let result = handlers::try_binary_append_splice(
-        store.clone(),
-        head.path.clone(),
-        req,
-        (),
-        move |file_path, offset| async move {
-            splice_body_to_file(sock, pre_for_splice, clen, file_path, offset).await
-        },
-    )
-    .await;
-
-    match result {
-        BeginResult::Done(resp) => {
-            let keep_alive = head.keep_alive;
-            write_response(stream, resp, false, keep_alive).await?;
-            Ok(SpliceOutcome::Done { keep_alive })
-        }
-        BeginResult::Reject(resp) => {
-            // Body not consumed → close the connection (framing is unknown).
-            write_response(stream, resp, false, false).await?;
-            Ok(SpliceOutcome::Reject)
-        }
-        BeginResult::Fallback(()) => {
-            // Put the prebuffered body bytes back at the front of `buf` so the
-            // normal read path sees the full body again.
-            if !prebuffered.is_empty() {
-                let mut restored = BytesMut::with_capacity(prebuffered.len() + buf.len());
-                restored.extend_from_slice(&prebuffered);
-                restored.extend_from_slice(buf);
-                *buf = restored;
-            }
-            Ok(SpliceOutcome::Fallback)
-        }
-    }
-}
-
-/// Write `prebuffered` body bytes to the file at `offset`, then move the
-/// remaining `clen - prebuffered.len()` body bytes from socket → pipe → file at
-/// the following offset with splice(2). Opens a FRESH O_WRONLY (non-append) fd
-/// to `file_path`: splice(2) refuses an O_APPEND target (EINVAL), and the
-/// positioned write needs a real offset, so the shared O_APPEND data fd can't be
-/// used. The explicit offset is safe — the caller holds the per-stream appender
-/// lock.
-///
-/// The socket leg is driven *inline* on the async worker via tokio readiness
-/// (`stream.readable().await` + `try_io`): the worker parks (yields to other
-/// tasks) whenever the socket has no data, so a slow/large upload never
-/// monopolizes it — and no per-request blocking-pool handoff / fd dup. The
-/// file-write leg is a fast page-cache copy done synchronously between socket
-/// reads. Consumes exactly `clen` body bytes from the socket, so keep-alive /
-/// pipelining stay correctly framed.
-#[cfg(target_os = "linux")]
-async fn splice_body_to_file(
-    stream: &TcpStream,
-    prebuffered: Bytes,
-    clen: usize,
-    file_path: std::path::PathBuf,
-    offset: u64,
-) -> std::io::Result<()> {
-    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-    use std::os::unix::fs::FileExt;
-
-    // Fresh non-append fd for splice (explicit-offset writes).
-    let out = std::fs::OpenOptions::new().write(true).open(&file_path)?;
-    let file_fd = out.as_raw_fd();
-    let mut file_off = offset;
-
-    // The over-read prefix is already in userspace — positioned write, no splice.
-    if !prebuffered.is_empty() {
-        out.write_all_at(&prebuffered, file_off)?;
-        file_off += prebuffered.len() as u64;
-    }
-    let mut remaining = clen - prebuffered.len();
-    if remaining == 0 {
-        return Ok(());
-    }
-
-    // Kernel pipe pair: splice cannot go fd→fd directly, only via a pipe buffer.
-    let mut fds = [0i32; 2];
-    let r = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
-    if r != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let pipe_r = unsafe { OwnedFd::from_raw_fd(fds[0]) };
-    let pipe_w = unsafe { OwnedFd::from_raw_fd(fds[1]) };
-    let pipe_r = pipe_r.as_raw_fd();
-    let pipe_w = pipe_w.as_raw_fd();
-    let sock_fd = stream.as_raw_fd();
-
-    const CHUNK: usize = 1 << 20; // 1 MiB per splice request
-    while remaining > 0 {
-        let want = remaining.min(CHUNK);
-        // Leg 1: socket → pipe, on the async worker via readiness. A WouldBlock
-        // parks this task on the socket (worker stays free) instead of spinning.
-        let in_pipe = loop {
-            stream.readable().await?;
-            let res = stream.try_io(tokio::io::Interest::READABLE, || {
-                let n = unsafe {
-                    libc::splice(
-                        sock_fd,
-                        std::ptr::null_mut(),
-                        pipe_w,
-                        std::ptr::null_mut(),
-                        want,
-                        libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE,
-                    )
-                };
-                if n < 0 {
-                    Err(std::io::Error::last_os_error())
-                } else {
-                    Ok(n as usize)
-                }
-            });
-            match res {
-                Ok(0) => {
-                    // Peer closed before sending the full content-length body.
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "client closed before full body",
-                    ));
-                }
-                Ok(n) => break n,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
-                Err(e) => return Err(e),
-            }
-        };
-
-        // Leg 2: pipe → file at the explicit offset (page-cache copy; fast).
-        // Drain the whole pipe chunk before refilling.
-        let mut left = in_pipe;
-        while left > 0 {
-            let mut off_out = file_off as libc::loff_t;
-            let n = unsafe {
-                libc::splice(
-                    pipe_r,
-                    std::ptr::null_mut(),
-                    file_fd,
-                    &mut off_out,
-                    left,
-                    libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE,
-                )
-            };
-            if n < 0 {
-                let err = std::io::Error::last_os_error();
-                match err.raw_os_error() {
-                    Some(libc::EINTR) | Some(libc::EAGAIN) => continue,
-                    _ => return Err(err),
-                }
-            }
-            if n == 0 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::WriteZero,
-                    "splice to file made no progress",
-                ));
-            }
-            let n = n as usize;
-            file_off += n as u64;
-            left -= n;
-        }
-        remaining -= in_pipe;
     }
     Ok(())
 }
