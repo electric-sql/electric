@@ -196,15 +196,6 @@ impl SyncCoalescer {
                     coalescer: self,
                     armed: true,
                 };
-                #[cfg(all(target_os = "linux", feature = "strict-uring"))]
-                let fsync_res: std::io::Result<()> = match crate::uring_fsync::handle() {
-                    Some(pool) => pool.fsync(f).await,
-                    None => match tokio::task::spawn_blocking(move || barrier_fsync(&f)).await {
-                        Ok(inner) => inner,
-                        Err(e) => Err(std::io::Error::other(e)),
-                    },
-                };
-                #[cfg(not(all(target_os = "linux", feature = "strict-uring")))]
                 let fsync_res: std::io::Result<()> =
                     match tokio::task::spawn_blocking(move || barrier_fsync(&f)).await {
                         Ok(inner) => inner,
