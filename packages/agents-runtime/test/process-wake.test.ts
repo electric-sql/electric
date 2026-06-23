@@ -560,6 +560,34 @@ describe(`processWake`, () => {
     expect(body.epoch).toBe(1)
   })
 
+  it(`notifies the runner when done leaves another wake pending`, async () => {
+    defineEntity(`test-agent`, {
+      handler: () => {},
+    })
+    const onDoneNextWake = vi.fn()
+    fetchMock.mockImplementation((url, opts) => {
+      const body = opts?.body ? JSON.parse(String(opts.body)) : {}
+      if (String(url).includes(`/_electric/wakes/wake-abc`) && body.done) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, next_wake: true }), {
+            status: 200,
+            headers: { 'content-type': `application/json` },
+          })
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': `application/json` },
+        })
+      )
+    })
+
+    await processWake(makeNotification(), { ...BASE_CONFIG, onDoneNextWake })
+
+    expect(onDoneNextWake).toHaveBeenCalledWith(`/streams/entity:agent-1`)
+  })
+
   it(`acks the local consumed offset on done even when the stream tail is ahead`, async () => {
     defineEntity(`test-agent`, {
       handler: () => {},
@@ -983,6 +1011,80 @@ describe(`processWake`, () => {
     expect(mockProducerAppend).toHaveBeenCalledWith(
       expect.stringContaining(`"outcome":"aborted"`)
     )
+  })
+
+  it(`does not ack queued inbox that arrived before SIGINT aborts an active run`, async () => {
+    const wakePayloads: Array<unknown> = []
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let signalAbortedResolve: (() => void) | null = null
+    const signalAborted = new Promise<void>((resolve) => {
+      signalAbortedResolve = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx, wake) => {
+        wakePayloads.push(wake.payload)
+        handlerStartedResolve?.()
+        if (ctx.signal.aborted) {
+          signalAbortedResolve?.()
+          return
+        }
+        await new Promise<void>((resolve) => {
+          ctx.signal.addEventListener(
+            `abort`,
+            () => {
+              signalAbortedResolve?.()
+              resolve()
+            },
+            { once: true }
+          )
+        })
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `inbox`,
+          `m-before-sigint`,
+          `insert`,
+          { payload: `should run in a later wake` },
+          { offset: `10_500` }
+        ),
+        ev(
+          `signal`,
+          `sigint-handler`,
+          `insert`,
+          { signal: `SIGINT`, status: `unhandled` },
+          { offset: `10_600` }
+        ),
+      ],
+      offset: `10_600`,
+    })
+
+    await signalAborted
+    await wakePromise
+
+    expect(wakePayloads).toEqual([undefined])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_100` },
+    ])
   })
 
   it(`does not continue fresh inbox work after SIGINT aborts an active run`, async () => {
