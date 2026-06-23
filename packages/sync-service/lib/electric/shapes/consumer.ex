@@ -155,32 +155,6 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  def handle_continue({:init_consumer, config}, state) do
-    %{
-      stack_id: stack_id,
-      shape_handle: shape_handle
-    } = state
-
-    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
-
-    state = State.initialize_shape(state, shape, config)
-
-    stack_storage = ShapeCache.Storage.for_stack(stack_id)
-    storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)
-
-    # TODO: Remove. Only needed for InMemoryStorage
-    case ShapeCache.Storage.start_link(storage) do
-      {:ok, _pid} -> :ok
-      :ignore -> :ok
-    end
-
-    writer = ShapeCache.Storage.init_writer!(storage, shape)
-
-    state = State.initialize(state, storage, writer)
-
-    finish_initialization(state, config.action, config.otel_ctx)
-  end
-
   def handle_continue(:stop_and_clean, state) do
     stop_and_clean(state)
   end
