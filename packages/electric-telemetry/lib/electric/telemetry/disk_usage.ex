@@ -4,6 +4,7 @@ defmodule ElectricTelemetry.DiskUsage do
   alias ElectricTelemetry.DiskUsage.Disk
 
   @default_update_period 60_000
+  @default_top_n 10
 
   def start_link(args) do
     {:ok, stack_id} = Keyword.fetch(args, :stack_id)
@@ -21,6 +22,22 @@ defmodule ElectricTelemetry.DiskUsage do
       [] -> :pending
       [{:usage_bytes, _bytes, nil, _duration}] -> :pending
       [{:usage_bytes, bytes, %DateTime{}, duration}] -> {:ok, bytes, duration}
+    end
+  rescue
+    ArgumentError -> :pending
+  end
+
+  @doc """
+  Returns the top-N largest per-directory subtotals as a list of
+  `{dir_name, bytes}` tuples sorted descending by size, or `:pending` if no
+  measurement with grouping enabled has completed yet.
+  """
+  def current_dirs(stack_id) do
+    table = name(stack_id)
+
+    case :ets.lookup(table, :top_dirs) do
+      [{:top_dirs, dirs}] -> {:ok, dirs}
+      [] -> :pending
     end
   rescue
     ArgumentError -> :pending
@@ -47,9 +64,12 @@ defmodule ElectricTelemetry.DiskUsage do
         storage_dir: storage_dir,
         manual_refresh: Keyword.get(args, :manual_refresh, false),
         update_period: update_period,
+        group_depth: Keyword.get(args, :group_depth),
+        top_n: Keyword.get(args, :top_n, @default_top_n),
         usage_bytes: usage_bytes,
         updated_at: updated_at,
         measurement_duration: 0,
+        top_dirs: nil,
         timer: nil
       }
       |> ets_write()
@@ -77,21 +97,45 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   defp read_disk_usage(state) do
-    {duration, bytes} =
+    exclude = [usage_cache_file(state.storage_dir)]
+
+    {duration, {bytes, top_dirs}} =
       :timer.tc(
         fn ->
-          Disk.recursive_usage(state.storage_dir, [usage_cache_file(state.storage_dir)])
+          case state.group_depth do
+            nil ->
+              {Disk.recursive_usage(state.storage_dir, exclude), nil}
+
+            depth when is_integer(depth) ->
+              {total, buckets} =
+                Disk.recursive_usage_grouped(state.storage_dir, exclude, depth)
+
+              {total, top_n(buckets, state.top_n)}
+          end
         end,
         :millisecond
       )
 
     updated_at = DateTime.utc_now()
 
-    %{state | usage_bytes: bytes, updated_at: updated_at, measurement_duration: duration}
+    %{
+      state
+      | usage_bytes: bytes,
+        updated_at: updated_at,
+        measurement_duration: duration,
+        top_dirs: top_dirs
+    }
     |> ets_write()
     |> save_usage!()
     |> cancel_timer()
     |> schedule_update()
+  end
+
+  # Returns the `n` largest `{name, bytes}` buckets, sorted descending by size.
+  defp top_n(buckets, n) do
+    buckets
+    |> Enum.sort_by(fn {_name, bytes} -> bytes end, :desc)
+    |> Enum.take(n)
   end
 
   defp ets_write(state) do
@@ -103,6 +147,12 @@ defmodule ElectricTelemetry.DiskUsage do
     } = state
 
     :ets.insert(table, {:usage_bytes, usage_bytes, updated_at, duration})
+
+    case Map.get(state, :top_dirs) do
+      nil -> :ok
+      dirs -> :ets.insert(table, {:top_dirs, dirs})
+    end
+
     state
   end
 
