@@ -23,9 +23,14 @@ All three install the same `durable-streams-server` command.
 
 ## Quickstart
 
+**Build prerequisites:** a Rust toolchain — stable, **≥ 1.75** (the MSRV; edition
+2021). Just `cargo`/`rustc` + a C linker; no system libraries and no default cargo
+features. Builds on Linux and macOS, x64 and arm64.
+
 ```bash
-# build (from this directory)
-cargo build --release
+# build (run from packages/server-rust)
+cargo build --release        # → ./target/release/durable-streams-server
+cargo test  --release        # unit + integration tests (protocol conformance: see Conformance below)
 
 # run
 ./target/release/durable-streams-server --port 4438 --data-dir ./data
@@ -52,17 +57,62 @@ curl -N "$BASE?offset=0&live=sse"        # Server-Sent Events stream
 
 ## Flags
 
-| Flag                     | Default                        | Description                                                                                                                                                                                                                                                                    |
-| ------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--host`                 | `127.0.0.1`                    | listen address                                                                                                                                                                                                                                                                 |
-| `--port`                 | `4438`                         | listen port                                                                                                                                                                                                                                                                    |
-| `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory (persists across restarts)                                                                                                                                                                                                                                   |
-| `--durability`           | `strict`                       | durability mode: `strict` (per-stream group-commit fsync before ack), `wal` (shared sharded write-ahead log — fewer, fatter fsyncs; best on slow storage), `fast` (ack on the page-cache write, no ack-path fsync). See [ARCHITECTURE.md](ARCHITECTURE.md#durability-modes).   |
-| `--wal-shards`           | CPU cores                      | (`--durability wal` only) number of WAL shards / group-commit committers. More shards add fsync parallelism but thin the batches — the default (= cores) is usually optimal.                                                                                                   |
-| `--long-poll-timeout-ms` | `30000`                        | how long a long-poll request blocks before a 204                                                                                                                                                                                                                               |
-| `--read-offload`         | `tail`                         | Linux: where reads run sendfile — `inline` (always on the async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (always on the blocking pool). `tail` keeps a cold backfill's disk fault off the async workers while serving the live tail inline. |
-| `--splice-appends`       | off                            | raw engine, Linux: zero-copy `splice(2)` for **binary** appends (socket → file, no userspace copy). Off by default; JSON/chunked/non-Linux fall back. A CPU lever (same append rate at ~½–⅓ the server CPU), not a throughput lever — appends are fsync-bound.                 |
-| `--tier`                 | `off`                          | cold-storage tier: `off`, `local` (sealed segments to a local dir), or `s3` (S3-compatible object storage). See [Tiered storage](#tiered-storage-cold-offload). Off by default — behaviour is byte-identical to a single-file server.                                          |
+`durable-streams-server [flags]` — every flag is optional. The defaults give a
+durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR`.
+
+**Network & storage**
+
+| Flag                     | Default                        | Description                                                     |
+| ------------------------ | ------------------------------ | --------------------------------------------------------------- |
+| `--host`                 | `127.0.0.1`                    | listen address (use `0.0.0.0` to accept remote connections)     |
+| `--port`                 | `4437`                         | listen port (the protocol default, PROTOCOL.md §13.1)           |
+| `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory; persists across restarts                     |
+| `--long-poll-timeout-ms` | `30000`                        | how long a `live=long-poll` request blocks before returning 204 |
+
+**Durability** — selects the append ack-path; all three share the same reads/visibility. See [ARCHITECTURE.md › Durability modes](ARCHITECTURE.md#durability-modes).
+
+| Flag                  | Default   | Description                                                                                          |
+| --------------------- | --------- | ---------------------------------------------------------------------------------------------------- |
+| `--durability`        | `strict`  | `strict` \| `wal` \| `fast` — see _Choosing a configuration_ below                                   |
+| `--wal-shards`        | CPU cores | (`wal` only) shard / group-commit-committer count; persisted on first run, a later run must match it |
+| `--wal-segment-bytes` | `128 MiB` | (`wal` only) per-shard WAL segment size; lower it only to force segment rolls in tests/benches       |
+
+**Read path** — performance knobs; none change protocol behaviour. Leave at defaults unless a benchmark says otherwise.
+
+| Flag                 | Default                       | Description                                                                                                                                                                                                       |
+| -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--tail-cache-bytes` | `0` (Linux) / `65536` (macOS) | resident tail-cache cap in bytes; `0` disables it (every read resolves to the file via `sendfile`/`pread`). Off by default on Linux (`sendfile` is already fast), on by default on macOS (no `sendfile`).         |
+| `--read-offload`     | `tail`                        | Linux: where `sendfile` reads run — `inline` (async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (blocking pool). `tail` keeps a cold backfill's disk fault off the async workers. |
+| `--splice-appends`   | off                           | Linux: zero-copy `splice(2)` for **binary** appends (socket → file). A CPU lever (~½–⅓ the append CPU), not a throughput lever; JSON/chunked/non-Linux fall back.                                                 |
+
+**Cold-storage tier** — off by default; see [Tiered storage](#tiered-storage-cold-offload). With `--tier off` the server is byte-identical to a single-file deployment.
+
+| Flag                                          | Default    | Description                                                                              |
+| --------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
+| `--tier`                                      | `off`      | `off` \| `local` (sealed segments to a local dir) \| `s3` (S3-compatible object storage) |
+| `--tier-local-dir`                            | —          | (`tier=local`) directory for sealed segments                                             |
+| `--tier-endpoint`                             | —          | (`tier=s3`) S3 endpoint URL                                                              |
+| `--tier-region`                               | —          | (`tier=s3`) region                                                                       |
+| `--tier-bucket`                               | —          | (`tier=s3`) bucket name                                                                  |
+| `--tier-key-prefix`                           | —          | object-key prefix for sealed segments                                                    |
+| `--tier-segment-bytes`                        | `8 MiB`    | sealed-segment size (fixed-size, CDN-friendly)                                           |
+| `--tier-compact-bytes`                        | internal   | small-segment compaction threshold                                                       |
+| `--tier-path-style` / `--tier-virtual-hosted` | path-style | S3 addressing style                                                                      |
+| `--tier-allow-http`                           | off        | allow plain HTTP to the S3 endpoint (e.g. a local MinIO)                                 |
+
+S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID` /
+`DS_S3_SECRET_ACCESS_KEY` (or the standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
+
+### Choosing a configuration
+
+| Your situation                                               | Use                                                                                                                                                                    |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Durable, on NVMe / many streams** (the default)            | `--durability strict` — one coalesced fsync per stream per commit; parallelism comes from having many stream files.                                                    |
+| **Slow / cloud disk (e.g. EBS), or fsync latency dominates** | `--durability wal` — batches many streams into one fat fsync per shard, minimizing fsync _operations_.                                                                 |
+| **Lowest write latency; durability provided elsewhere**      | `--durability fast` — acks on the page-cache write, no ack-path fsync. A crash loses the un-flushed tail, so pair it with the object tier and/or external replication. |
+| **Bounded local disk with long history**                     | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy.                                                            |
+| **Cutting append CPU on a Linux binary-append workload**     | add `--splice-appends`.                                                                                                                                                |
+| **High fan-out p99 across many streams on Linux**            | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                                                                            |
 
 ## What it implements
 
