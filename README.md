@@ -120,7 +120,7 @@ S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID`
 
 Core protocol: create / append / read (catch-up, long-poll, SSE), HEAD, DELETE, JSON mode, idempotent producers (`Producer-Id` / `Producer-Epoch` / `Stream-Seq`), close, TTL / expiry, cursors, ETags / 304, security headers, and stream forks.
 
-Durable: an append returns only after its record is durable in the sharded write-ahead log (WAL). The WAL acks on a group-commit `fdatasync` and recovers cleanly on restart (no torn records). State survives restarts — on boot the store rebuilds every stream from its data file plus a `.meta` sidecar, re-links fork chains, and replays the WAL to reconcile any un-checkpointed tail. (Crash window per [PROTOCOL.md](../../PROTOCOL.md): producer dedup state may lag the data file, so producers should bump their epoch on restart.)
+Durable: an append returns only after its record is durable in the sharded write-ahead log (WAL). The WAL acks on a group-commit `fdatasync` and recovers cleanly on restart (no torn records; the default path verifies a per-record payload checksum on recovery). State survives restarts — on boot the store rebuilds every stream from its data file plus a `.meta` sidecar, re-links fork chains, and replays the WAL to reconcile any un-checkpointed tail. (Crash window per [PROTOCOL.md](../../PROTOCOL.md): producer dedup state may lag the data file, so producers should bump their epoch on restart.)
 
 **Not implemented: subscriptions / the `__ds` control plane.** Webhook and pull-wake subscriptions (the protocol's `__ds` routes, Ed25519-signed delivery, JWKS) are not part of this server. Clients consume streams directly via long-poll / SSE; if you need push delivery, run it as a separate component on top.
 

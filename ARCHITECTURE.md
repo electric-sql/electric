@@ -321,8 +321,11 @@ sizes, a planned follow-up for very large cold ranges.
 
   1. The body is `splice`'d from the socket into the stream's per-stream data file
      at the append offset (socket→file relay via an anonymous pipe).
-  2. The WAL header (33 bytes, header-only CRC) is written at the reserved WAL
-     segment offset.
+  2. The WAL header (38 bytes, header CRC + `flags=0` / `payload_crc=0`) is written
+     at the reserved WAL segment offset. The `PAYLOAD_CHECKSUMMED` flag is NOT set:
+     the splice path deliberately never reads the payload into userspace, so it cannot
+     checksum it. This means the zero-copy path retains the Bug #1 torn-payload
+     residual — it relies on header-only completeness for torn-tail detection.
   3. The just-written hot file bytes are `splice`'d file→WAL segment at the payload
      offset (file→WAL relay via an anonymous pipe).
   4. The committer `fdatasync`s the segment, advances `durable_lsn`, and the ack
@@ -335,6 +338,11 @@ sizes, a planned follow-up for very large cold ranges.
   `reconcile_tail` truncates the per-stream file back to the durable frontier. The
   half-append is gone and is never acked. This invariant is positive-tested by
   `zero_copy_torn_tail_recovered_by_replay` (Linux-gated, runs in Docker).
+
+  By contrast, the **buffered (default) path** always sets `PAYLOAD_CHECKSUMMED` and
+  stores the payload `crc32c` in the header, so a crash leaving a valid header over a
+  `fallocate`-zeroed payload is caught by the CRC mismatch (Bug #1 closed for the
+  default path).
 
   The resident tail cache is forced off under `--zero-copy` (the page-cache relay's
   write is in-kernel via `splice`, not through any in-process buffer). Reads are
