@@ -17,6 +17,26 @@ import {
 import { getCronStreamPath } from './cron-utils'
 import { runtimeLog } from './log'
 import { sliceChars } from './token-budget'
+import {
+  selectLatestContextUsage,
+  truncateOversizedToolResults,
+  withContextBudgetNotice,
+  CONTEXT_USAGE_HARD_CEILING,
+  type ContextUsageStep,
+} from './token-accountant'
+import {
+  COMPACTION_CHECKPOINT_ID,
+  COMPACTION_CHECKPOINT_KIND,
+  COMPACTION_CHECKPOINT_NAME,
+  type CompactionStatus,
+} from './compaction'
+import { createMidTurnCompactor } from './compaction-midturn'
+import {
+  summarizeAgentMessages,
+  summarizeMessages,
+} from './compaction-summarize'
+import { CONTEXT_USAGE_BACKGROUND_START } from './token-accountant'
+
 import { createContextTools } from './tools/context-tools'
 import { CACHE_TIERS } from './types'
 import { composeToolsWithProviders } from './tool-providers'
@@ -69,6 +89,12 @@ function agentModelProvider(config: AgentConfig): string {
   return typeof config.model === `string`
     ? (config.provider ?? `anthropic`)
     : config.model.provider
+}
+
+/** Parse a 0..1 ratio from an env string, falling back when invalid. */
+function ratioFromEnv(raw: string | undefined, fallback: number): number {
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 && value <= 1 ? value : fallback
 }
 
 const MAX_HYDRATED_IMAGE_ATTACHMENTS = 4
@@ -146,6 +172,19 @@ export interface HandlerContextConfig<TState extends StateProxy = StateProxy> {
 export interface HandlerContextResult<TState extends StateProxy = StateProxy> {
   ctx: HandlerContext<TState>
   getSleepRequested: () => boolean
+  /**
+   * Background (turn-end) compaction, driven by process-wake. Returns a handle
+   * whose promise resolves to the summary, or null when compaction isn't
+   * warranted (low usage / no agent / already compacted).
+   */
+  maybeStartBackgroundCompaction: () => {
+    watermark: number
+    promise: Promise<string>
+  } | null
+  /** Persist a completed background compaction checkpoint at its watermark. */
+  writeBackgroundCheckpoint: (watermark: number, summary: string) => void
+  /** Mark an in-flight background compaction (identified by its watermark) failed. */
+  failBackgroundCheckpoint: (watermark: number) => void
 }
 
 type DebugHandlerContext<TState extends StateProxy = StateProxy> =
@@ -773,36 +812,101 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
         const composedTools = (await composeToolsWithProviders(
           activeAgentConfig.tools
         )) as Array<AgentTool>
+
+        // Drives the remaining-budget notice injected below. Synthesized fresh
+        // from the latest step, never persisted — a self-superseding context row
+        // would leave misleading load_context_history tombstones.
+        const budgetUsage = selectLatestContextUsage(
+          config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
+        )
+
+        // Mid-turn compaction: runs before every model step (the adapter's
+        // transformContext) so one tool-heavy turn can't exhaust the window
+        // before it ends. Overridable via ELECTRIC_AGENTS_COMPACT_CEILING.
+        const compactCeiling = ratioFromEnv(
+          process.env.ELECTRIC_AGENTS_COMPACT_CEILING,
+          CONTEXT_USAGE_HARD_CEILING
+        )
+        const compactProvider = agentModelProvider(activeAgentConfig)
+        // Watermark for the mid-turn summary, snapshotted when the `running` row
+        // is written (before the slow summarize await) so an event materializing
+        // during the summarize can't bump the head past what the summary covered.
+        let midTurnWatermark: number | undefined
+        const onCompactContext = createMidTurnCompactor({
+          ceiling: compactCeiling,
+          writeCheckpoint: (status, content) => {
+            const attrs: Record<string, string | number> = {
+              kind: COMPACTION_CHECKPOINT_KIND,
+              status,
+            }
+            if (status === `running`) {
+              const head = runtimeTimelineMessages(config.db).reduce(
+                (max, message) => Math.max(max, message.at),
+                Number.NEGATIVE_INFINITY
+              )
+              midTurnWatermark = Number.isFinite(head) ? head : undefined
+            }
+            // Stamp `complete` with that head: reconstruction folds items <=
+            // head (what the summary covered) and keeps everything after. Without
+            // it the watermark falls back to the row's own (later) position and
+            // drops the most recent messages next turn.
+            if (status === `complete` && midTurnWatermark !== undefined) {
+              attrs.watermark = midTurnWatermark
+            }
+            contextApi.insertContext(COMPACTION_CHECKPOINT_ID, {
+              name: COMPACTION_CHECKPOINT_NAME,
+              attrs,
+              content,
+            })
+          },
+          summarize: async (agentMessages) => {
+            const apiKey = await activeAgentConfig.getApiKey?.(compactProvider)
+            return summarizeAgentMessages({
+              model: activeAgentConfig.model,
+              provider: compactProvider,
+              messages: agentMessages,
+              ...(apiKey ? { apiKey } : {}),
+              ...(activeAgentConfig.summarizeComplete
+                ? { complete: activeAgentConfig.summarizeComplete }
+                : {}),
+            })
+          },
+        })
+
+        // Cap any single oversized tool result (one huge output can fill the
+        // window on its own), then surface the budget notice.
+        const outgoingMessages = withContextBudgetNotice(
+          truncateOversizedToolResults(messages),
+          budgetUsage
+        )
+
         const adapterFactory = createPiAgentAdapter({
           systemPrompt: activeAgentConfig.systemPrompt,
           model: activeAgentConfig.model,
-
           provider: activeAgentConfig.provider,
-
           tools: [...composedTools, ...extraTools] as Array<never>,
-
           streamFn: activeAgentConfig.streamFn,
-
           getApiKey: activeAgentConfig.getApiKey,
-
           reasoning: activeAgentConfig.reasoning,
           thinkingBudgets: activeAgentConfig.thinkingBudgets,
-
           onPayload: activeAgentConfig.onPayload,
-
           onStepEnd: activeAgentConfig.onStepEnd,
           modelTimeoutMs: activeAgentConfig.modelTimeoutMs,
           modelMaxRetries: activeAgentConfig.modelMaxRetries,
+          onCompactContext,
+          ...(budgetUsage
+            ? { initialContextTokens: budgetUsage.usedTokens }
+            : {}),
         })
         const handle = adapterFactory({
           entityUrl: config.entityUrl,
           epoch: config.epoch,
-          messages,
+          messages: outgoingMessages,
           outboundIdSeed: await loadOutboundIdSeed(config.db),
           writeEvent: config.writeEvent,
         })
 
-        const latestMessageRole = messages.at(-1)?.role
+        const latestMessageRole = outgoingMessages.at(-1)?.role
         const runInput =
           input !== undefined ||
           config.hydratedWebhookSourceWake != null ||
@@ -815,14 +919,14 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
           logPrefix,
           `agent.run starting provider=${agentModelProvider(activeAgentConfig)} ` +
             `model=${agentModelId(activeAgentConfig.model)} ` +
-            `messages=${messages.length} latestRole=${latestMessageRole ?? `none`} ` +
+            `messages=${outgoingMessages.length} latestRole=${latestMessageRole ?? `none`} ` +
             `wakeType=${config.wakeEvent.type} wakeOffset=${config.wakeOffset} ` +
             `triggerMessageLen=${messageText.length} ` +
             `runInputLen=${runInput?.length ?? 0} ` +
             `tools=${composedTools.length + extraTools.length}`
         )
-        if (messages.length > 0) {
-          const tail = messages.slice(-3)
+        if (outgoingMessages.length > 0) {
+          const tail = outgoingMessages.slice(-3)
           runtimeLog.info(
             logPrefix,
             `agent.run last messages: ${tail
@@ -1148,8 +1252,118 @@ export function createHandlerContext<TState extends StateProxy = StateProxy>(
     },
   }
 
+  // ── Background compaction (turn-end, non-blocking) ──────────────────────
+  // Driven by process-wake: after a turn, maybeStartBackgroundCompaction kicks
+  // off a detached summarization if usage is high; when it resolves, the NEXT
+  // turn writes the checkpoint via writeBackgroundCheckpoint (so all event
+  // writes stay inside a handler invocation). The checkpoint stores the
+  // snapshot watermark so reconstruction places the summary before any messages
+  // that arrived while it ran (see timeline-context).
+  const writeCompactionCheckpoint = (
+    status: CompactionStatus,
+    content: string,
+    extraAttrs: Record<string, string | number | boolean> = {},
+    id: string = COMPACTION_CHECKPOINT_ID
+  ): void => {
+    contextApi.insertContext(id, {
+      name: COMPACTION_CHECKPOINT_NAME,
+      attrs: { kind: COMPACTION_CHECKPOINT_KIND, status, ...extraAttrs },
+      content,
+    })
+  }
+
+  // Watermark-unique id per background generation, so a new `running` row can't
+  // supersede the previous `complete` one (supersession keys on id alone).
+  // running→complete→failed of one generation share the id.
+  const backgroundCheckpointId = (watermark: number): string =>
+    `${COMPACTION_CHECKPOINT_ID}-bg-${watermark}`
+
+  const latestCompleteCheckpointWatermark = (): number => {
+    let watermark = Number.NEGATIVE_INFINITY
+    for (const row of config.db.collections.contextInserted.toArray) {
+      const r = row as {
+        name?: string
+        attrs?: { kind?: string; status?: string; watermark?: unknown }
+      }
+      if (
+        r.name !== COMPACTION_CHECKPOINT_NAME ||
+        r.attrs?.kind !== COMPACTION_CHECKPOINT_KIND ||
+        r.attrs?.status !== `complete`
+      ) {
+        continue
+      }
+      const w =
+        typeof r.attrs.watermark === `number`
+          ? r.attrs.watermark
+          : Number(r.attrs.watermark)
+      if (Number.isFinite(w) && w > watermark) watermark = w
+    }
+    return watermark
+  }
+
+  const maybeStartBackgroundCompaction = (): {
+    watermark: number
+    promise: Promise<string>
+  } | null => {
+    const cfg = agentConfig
+    if (!cfg) return null
+    const usage = selectLatestContextUsage(
+      config.db.collections.steps.toArray as ReadonlyArray<ContextUsageStep>
+    )
+    if (!usage) return null
+    const ceiling = ratioFromEnv(
+      process.env.ELECTRIC_AGENTS_COMPACT_BG_CEILING,
+      CONTEXT_USAGE_BACKGROUND_START
+    )
+    if (usage.ratio < ceiling) return null
+    const timestamped = runtimeTimelineMessages(config.db)
+    if (timestamped.length === 0) return null
+    const head = timestamped.reduce(
+      (max, message) => Math.max(max, message.at),
+      Number.NEGATIVE_INFINITY
+    )
+    // Already summarized up to/past the head — nothing new to compact.
+    if (latestCompleteCheckpointWatermark() >= head) return null
+
+    const messages = timelineToMessages(config.db)
+    const provider = agentModelProvider(cfg)
+    // Background-flavored `running` checkpoint for the UI (subtle indicator).
+    writeCompactionCheckpoint(
+      `running`,
+      ``,
+      { background: true, watermark: head },
+      backgroundCheckpointId(head)
+    )
+    const promise = (async () => {
+      const apiKey = await cfg.getApiKey?.(provider)
+      return summarizeMessages({
+        model: cfg.model,
+        provider,
+        messages,
+        ...(apiKey ? { apiKey } : {}),
+        ...(cfg.summarizeComplete ? { complete: cfg.summarizeComplete } : {}),
+      })
+    })()
+    return { watermark: head, promise }
+  }
+
   return {
     ctx,
     getSleepRequested: () => sleepRequested,
+    maybeStartBackgroundCompaction,
+    writeBackgroundCheckpoint: (watermark: number, summary: string) =>
+      writeCompactionCheckpoint(
+        `complete`,
+        summary,
+        { background: true, watermark },
+        backgroundCheckpointId(watermark)
+      ),
+    failBackgroundCheckpoint: (watermark: number) =>
+      writeCompactionCheckpoint(
+        `failed`,
+        ``,
+        { background: true },
+        backgroundCheckpointId(watermark)
+      ),
   }
 }

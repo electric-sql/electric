@@ -1,0 +1,44 @@
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.25rem;
+  color: var(--warning-text, #b26a00);
+  user-select: none;
+}
+
+/* Background compaction is non-blocking — render it muted/subtle so it doesn't
+   read as "you're blocked" like the sync (amber) indicator. */
+.background {
+  color: var(--text-muted, rgba(0, 0, 0, 0.55));
+  opacity: 0.8;
+}
+
+.label {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: inherit;
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.8;
+  animation: compaction-spin 0.7s linear infinite;
+}
+
+@keyframes compaction-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

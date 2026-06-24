@@ -320,6 +320,44 @@ describe(`createOutboundBridge`, () => {
     expect(value.output_tokens).toBe(567)
   })
 
+  it(`onStepEnd surfaces context usage and window for the gauge`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onStepStart({ modelId: `gpt-4` })
+    bridge.onStepEnd({
+      finishReason: `stop`,
+      tokenInput: 1234,
+      tokenOutput: 567,
+      // Cache-inclusive prompt size — larger than `tokenInput`, which
+      // excludes cache reads.
+      tokenContext: 90_000,
+      contextWindow: 128_000,
+    })
+
+    const value = writes[writes.length - 1]!.value as Record<string, unknown>
+    expect(value.context_input_tokens).toBe(90_000)
+    expect(value.context_window).toBe(128_000)
+  })
+
+  it(`onStepEnd omits context columns when not reported`, () => {
+    const writes: Array<ChangeEvent> = []
+    const bridge = createOutboundBridge([], (e) => {
+      writes.push(e)
+    })
+
+    bridge.onRunStart()
+    bridge.onStepStart({ modelId: `gpt-4` })
+    bridge.onStepEnd({ finishReason: `stop`, tokenInput: 42 })
+
+    const value = writes[writes.length - 1]!.value as Record<string, unknown>
+    expect(`context_input_tokens` in value).toBe(false)
+    expect(`context_window` in value).toBe(false)
+  })
+
   it(`onStepEnd omits token columns when a side is undefined`, () => {
     const writes: Array<ChangeEvent> = []
     const bridge = createOutboundBridge([], (e) => {

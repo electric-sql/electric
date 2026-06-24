@@ -9,6 +9,10 @@ import {
 import { coalesce, eq } from '@durable-streams/state/db'
 import { connectEntityStream } from '../lib/entity-connection'
 import { createCommentsTimelineSource } from '../lib/comments'
+import {
+  createCompactionTimelineSource,
+  isCompletedCompactionRow,
+} from '../lib/compaction'
 import type { TimelineRow } from '../lib/comments'
 import type {
   EntityStreamDBWithActions,
@@ -122,9 +126,12 @@ export function useEntityTimeline(
     (q) => {
       if (!db) return undefined
       return createEntityTimelineQuery(db, {
-        ...(includeComments && {
-          customSources: { comment: createCommentsTimelineSource(db) },
-        }),
+        customSources: {
+          compaction: createCompactionTimelineSource(db),
+          ...(includeComments && {
+            comment: createCommentsTimelineSource(db),
+          }),
+        },
       })(q)
     },
     [db, includeComments]
@@ -155,7 +162,16 @@ export function useEntityTimeline(
         : undefined,
     [db]
   )
-  const typedTimelineRows = timelineRows as Array<TimelineRow>
+  // Only a *completed* compaction checkpoint renders as a timeline marker;
+  // `running`/`failed` checkpoints are surfaced by the live composer indicator
+  // instead, not as message-history entries.
+  const typedTimelineRows = useMemo(
+    () =>
+      (timelineRows as Array<TimelineRow>).filter(
+        (row) => !row.compaction || isCompletedCompactionRow(row)
+      ),
+    [timelineRows]
+  )
 
   const pendingInbox = useMemo(
     () =>

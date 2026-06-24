@@ -156,6 +156,12 @@ export interface OutboundBridge {
     // persisted to the step row — forwarded to hooks for budget accounting.
     tokenInputUncached?: number
     tokenOutput?: number
+    // Cache-inclusive prompt size (`input + cacheRead + cacheWrite`),
+    // persisted to the step as `context_input_tokens` for the context-usage
+    // gauge. Distinct from `tokenInput`, which excludes cache reads.
+    tokenContext?: number
+    // Model context window for this step, persisted as `context_window`.
+    contextWindow?: number
     durationMs?: number
   }) => void
   onTextStart: () => void
@@ -323,6 +329,8 @@ export function createOutboundBridge(
       tokenInput?: number
       tokenInputUncached?: number
       tokenOutput?: number
+      tokenContext?: number
+      contextWindow?: number
       durationMs?: number
     }) {
       if (!currentStepKey) return
@@ -342,6 +350,12 @@ export function createOutboundBridge(
             }),
             ...(opts?.tokenOutput !== undefined && {
               output_tokens: opts.tokenOutput,
+            }),
+            ...(opts?.tokenContext !== undefined && {
+              context_input_tokens: opts.tokenContext,
+            }),
+            ...(opts?.contextWindow !== undefined && {
+              context_window: opts.contextWindow,
             }),
           } as never,
         }) as ChangeEvent

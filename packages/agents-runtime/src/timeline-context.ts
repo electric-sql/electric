@@ -22,6 +22,10 @@ import type {
   TimestampedMessage,
 } from './types'
 import { COMPOSER_INPUT_MESSAGE_TYPE } from './composer-input'
+import {
+  isCompactionCheckpointAttrs,
+  isCompleteCompactionCheckpointAttrs,
+} from './compaction'
 
 function asString(value: unknown, fallback = ``): string {
   if (typeof value === `string`) {
@@ -468,8 +472,42 @@ export function timelineMessages(
   const attachmentsByInboxKey = attachmentsBySubjectInboxKey(db)
   const messages: Array<TimestampedMessage> = []
 
+  // A completed compaction checkpoint summarizes everything up to its watermark.
+  // Items below the watermark are dropped; the summary is rendered AT the
+  // watermark — so it precedes any messages that arrived during a *background*
+  // compaction (physically written before the checkpoint row, but logically
+  // after the watermark). The watermark is the checkpoint's stored
+  // `attrs.watermark` (captured when background compaction snapshotted the
+  // head), falling back to the row's own order for synchronous compaction. Only
+  // `complete` checkpoints count, so a `running`/crashed one never hides history.
+  const activeCheckpoint = latestCompleteCompactionCheckpoint(items)
+  const compactionWatermark = activeCheckpoint
+    ? compactionWatermarkOf(activeCheckpoint)
+    : Number.NEGATIVE_INFINITY
+  let summaryEmitted = false
+  const emitSummary = (): void => {
+    if (!activeCheckpoint || summaryEmitted) return
+    for (const message of projection(activeCheckpoint) ?? []) {
+      messages.push({ ...message, at: compactionWatermark })
+    }
+    summaryEmitted = true
+  }
+
   for (const item of items) {
     if (item.at < since) {
+      continue
+    }
+    if (item.at <= compactionWatermark) {
+      continue // folded into the summary
+    }
+    // Place the summary at the watermark boundary, before the first kept item.
+    emitSummary()
+    // All compaction checkpoint rows are UI-only here (the active summary is
+    // emitted above); skip them from the model context.
+    if (
+      item.kind === `context_inserted` &&
+      isCompactionCheckpointAttrs(item.attrs)
+    ) {
       continue
     }
 
@@ -480,8 +518,50 @@ export function timelineMessages(
       })
     }
   }
+  // A checkpoint with no kept items after it (e.g. a `since` filter past the
+  // head) still surfaces its summary.
+  emitSummary()
 
   return messages
+}
+
+/**
+ * The newest live *completed* compaction checkpoint item, or null. `running`/
+ * `failed` checkpoints are ignored so an in-flight or crashed compaction never
+ * hides history.
+ */
+function latestCompleteCompactionCheckpoint(
+  items: ReadonlyArray<TimelineItem>
+): Extract<TimelineItem, { kind: `context_inserted` }> | null {
+  let latest: Extract<TimelineItem, { kind: `context_inserted` }> | null = null
+  for (const item of items) {
+    if (
+      item.kind === `context_inserted` &&
+      !item.superseded &&
+      isCompleteCompactionCheckpointAttrs(item.attrs) &&
+      (latest === null || item.at > latest.at)
+    ) {
+      latest = item
+    }
+  }
+  return latest
+}
+
+/**
+ * Logical watermark for a compaction checkpoint: the stored `attrs.watermark`
+ * (set by background compaction at snapshot time) if valid, else the row's own
+ * order (synchronous compaction writes at the point it summarizes).
+ */
+function compactionWatermarkOf(
+  checkpoint: Extract<TimelineItem, { kind: `context_inserted` }>
+): number {
+  const stored = checkpoint.attrs?.watermark
+  if (typeof stored === `number` && Number.isFinite(stored)) return stored
+  if (typeof stored === `string` && stored.length > 0) {
+    const parsed = Number(stored)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return checkpoint.at
 }
 
 export function timelineToMessages(db: EntityStreamDB): Array<LLMMessage> {
