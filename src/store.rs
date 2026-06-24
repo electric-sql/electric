@@ -213,7 +213,13 @@ impl StreamState {
     /// move the logical tail underneath it.
     #[cfg(target_os = "linux")]
     pub fn open_splice_fd(&self) -> std::io::Result<std::fs::File> {
-        std::fs::OpenOptions::new().write(true).open(&self.file_path)
+        // O_RDWR (not O_WRONLY): this same fd is the positioned-WRITE target for the
+        // socket→file splice AND the READ source for the file→WAL relay splice, so it
+        // must be readable. (Not O_APPEND — splice rejects O_APPEND targets.)
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.file_path)
     }
 
     /// Record the just-appended wire chunk as the resident tail. `start` is the

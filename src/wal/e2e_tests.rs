@@ -861,11 +861,12 @@ mod zero_copy_torn_tail {
         // (a) Write the payload bytes directly to the per-stream file, as the
         //     socket→file splice would have (step 3 done).
         // (b) Arm `fail_next_wal_splice`, then call `reserve_for_splice`: the
-        //     shard writes the WAL header (33 bytes), then the fault fires and
-        //     returns Err before the payload splice runs. `mark_staged` is never
-        //     called, so the lsn is a permanent gap — the WAL decoder sees a
-        //     header-only torn record and stops, leaving the durable frontier
-        //     at the end of the two acked records.
+        //     fault fires BEFORE the WAL header write and returns Err, so the lsn
+        //     is reserved (the range is consumed) but NO WAL bytes are written —
+        //     the segment stays all-zeros (fallocated) at that offset. `mark_staged`
+        //     is never called, so the lsn is a permanent gap — the WAL decoder reads
+        //     the all-zero header as Incomplete and stops, leaving the durable
+        //     frontier at the end of the two acked records.
         let torn_payload = b"zero-copy-torn-never-durable|";
 
         let st = h.store.get("zc").unwrap_or_else(|| panic!("stream zc not found"));
