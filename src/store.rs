@@ -203,6 +203,19 @@ pub fn tail_cache_bytes() -> usize {
 }
 
 impl StreamState {
+    /// Open a fresh `O_WRONLY` fd on the data file for positioned splice writes.
+    ///
+    /// The shared `Appender.file` is opened `O_APPEND`, which `splice(2)` rejects
+    /// as a target (it ignores the supplied offset). The zero-copy append path
+    /// therefore opens its own non-`O_APPEND` write fd and positions every write
+    /// explicitly (`pwrite` for the buffered prefix, `splice` with an offset for
+    /// the socket relay). Called under the appender lock, so no other writer can
+    /// move the logical tail underneath it.
+    #[cfg(target_os = "linux")]
+    pub fn open_splice_fd(&self) -> std::io::Result<std::fs::File> {
+        std::fs::OpenOptions::new().write(true).open(&self.file_path)
+    }
+
     /// Record the just-appended wire chunk as the resident tail. `start` is the
     /// logical offset where `bytes` begins. Chunks larger than the tail-cache cap
     /// (or any append when the cache is disabled) are not cached (the entry is

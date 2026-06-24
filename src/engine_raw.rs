@@ -211,6 +211,76 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
             stream.write_all(b"HTTP/1.1 100 Continue\r\n\r\n").await?;
         }
 
+        let keep_alive = head.keep_alive;
+        let is_head = head.is_head;
+
+        // ---- zero-copy binary-append intercept (Linux only) ----
+        //
+        // Eligible: --zero-copy on, POST, a known content-length (not chunked),
+        // and the route is a binary append. We DON'T `read_sized` here; instead
+        // the body is relayed socket→file→WAL via splice(2). The handler returns
+        // `Fallback` for any edge case (producer dup/gap, closed, close request,
+        // JSON, content-type mismatch, …), in which case we read the body
+        // buffered below and run the normal handler — byte-for-byte unchanged.
+        #[cfg(target_os = "linux")]
+        if zero_copy()
+            && matches!(head.method, crate::api::Method::Post)
+            && !head.chunked
+            && head.content_length.is_some_and(|n| n > 0)
+        {
+            use std::os::fd::AsRawFd;
+            let content_len = head.content_length.unwrap();
+            // The bytes the head parser over-read are the body prefix. Take up to
+            // `content_len` of them (a tiny pipelined next-request tail must not be
+            // counted as body); the rest of the body is still on the socket.
+            let take = buf.len().min(content_len);
+            let prefix = buf.split_to(take).freeze();
+            let socket_fd = stream.as_raw_fd();
+            let remaining = content_len - prefix.len();
+            // splice_rest moves the remaining socket bytes into (file_fd, off).
+            // The socket fd is `Copy` (i32), so capturing it does not borrow the
+            // tokio `TcpStream` the handler is unaware of.
+            let splice_rest = move |file_fd: std::os::fd::RawFd, off: i64| -> std::io::Result<()> {
+                if remaining == 0 {
+                    return Ok(());
+                }
+                let mut o = off;
+                zerocopy::splice_all(socket_fd, None, file_fd, Some(&mut o), remaining)
+            };
+            let req = Req {
+                method: head.method,
+                path: head.path.clone(),
+                query: head.query.clone(),
+                headers: head.headers.clone(),
+                body: Bytes::new(),
+            };
+            match handlers::handle_binary_append_zero_copy(
+                store.clone(),
+                &req,
+                &prefix,
+                content_len,
+                splice_rest,
+            )
+            .await
+            {
+                handlers::ZeroCopyOutcome::Done(resp) => {
+                    write_response(&mut stream, resp, is_head, keep_alive).await?;
+                    if !keep_alive {
+                        return Ok(());
+                    }
+                    continue;
+                }
+                handlers::ZeroCopyOutcome::Fallback => {
+                    // Put the prefix back at the front of the buffer so the
+                    // buffered read below sees the full body again.
+                    let mut rebuilt = BytesMut::with_capacity(prefix.len() + buf.len());
+                    rebuilt.extend_from_slice(&prefix);
+                    rebuilt.extend_from_slice(&buf);
+                    buf = rebuilt;
+                }
+            }
+        }
+
         // ---- read request body ----
         let body = if head.chunked {
             match http1::decode_chunked(&mut stream, &mut buf).await? {
@@ -233,8 +303,6 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
             }
         };
 
-        let keep_alive = head.keep_alive;
-        let is_head = head.is_head;
         let req = Req {
             method: head.method,
             path: head.path,
@@ -491,10 +559,8 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
 }
 
 /// Zero-copy file-to-file / file-to-socket relay via `splice(2)`.
-// consumed by the zero-copy append path (wired in a later task)
 #[cfg(target_os = "linux")]
-#[allow(dead_code)]
-mod zerocopy {
+pub(crate) mod zerocopy {
     use std::io;
     use std::os::fd::RawFd;
 
@@ -502,7 +568,6 @@ mod zerocopy {
     ///
     /// `*_off = None` uses the fd's own file offset (sockets); `Some(off)` is a
     /// positioned transfer (regular files) and is advanced as bytes move.
-    #[allow(dead_code)]
     pub fn splice_all(
         src: RawFd,
         mut src_off: Option<&mut i64>,

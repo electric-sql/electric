@@ -424,7 +424,9 @@ impl Shard {
     ///
     /// Returns `InvalidInput` if the framed record size exceeds `segment_size`, or
     /// the underlying header `write_at` fails.
-    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
+    // Only the Linux zero-copy append path (and the host splice test) call this;
+    // on a non-Linux release build it is legitimately unused.
+    #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
     pub fn reserve_for_splice(
         &self,
         kind: RecordKind,
@@ -432,6 +434,17 @@ impl Shard {
         stream_offset: u64,
         payload_len: usize,
     ) -> io::Result<(u64, Arc<FileSegment>, u64)> {
+        // Test-only ordering seam (CQ-1): fires before any lsn is reserved, exactly
+        // as in `reserve_and_stage`. The splice path registers the stream dirty
+        // before calling this (register-before-stage), so a test can assert the
+        // invariant holds on the splice path too.
+        #[cfg(test)]
+        {
+            if let Some(cb) = self.on_stage.lock().unwrap().as_ref() {
+                cb(stream_id);
+            }
+        }
+
         let total = (super::codec::HEADER_LEN + payload_len) as u64;
 
         // A single record can never exceed a whole segment (mirrors reserve_and_stage).
@@ -485,7 +498,7 @@ impl Shard {
     /// Advance the contiguous-written watermark for a previously reserved splice lsn
     /// and notify the committer. Must be called AFTER the payload has been spliced
     /// into the segment at the offset returned by [`reserve_for_splice`].
-    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
+    #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
     pub fn mark_staged(&self, lsn: u64) {
         {
             let mut g = self.inner.lock().unwrap();

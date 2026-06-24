@@ -1000,6 +1000,234 @@ fn closed_conflict(tail: u64) -> Resp {
         .body(full("stream is closed"))
 }
 
+// ---------- POST (append) — zero-copy splice path (Linux) ----------
+
+/// Result of the zero-copy append entry. `Fallback` means the engine must fall
+/// back to the buffered append path (read the whole body, run `handle`): the
+/// request is anything but the simple happy-path append (a producer dup/gap/
+/// stale-epoch, a `Stream-Seq` regression, a closed stream, a close request, a
+/// missing/mismatched content-type, …). Every such edge case is handled
+/// byte-for-byte by the existing buffered handler — the splice path deliberately
+/// covers only the accept-and-write case so its critical section is a tight
+/// mirror of `write_wire` + `maybe_sync_on_ack`.
+#[cfg(target_os = "linux")]
+pub enum ZeroCopyOutcome {
+    Done(Resp),
+    Fallback,
+}
+
+/// Zero-copy binary append: stage the WAL header, relay the request body
+/// socket→file→WAL via `splice(2)` while holding the appender lock, then ack —
+/// the durability/offset/producer semantics are identical to the buffered
+/// append, only the byte movement differs (no userspace `Bytes`).
+///
+/// The caller (engine) has already confirmed: `--zero-copy` on, `POST`, a known
+/// `content_length` (not chunked), and a binary (non-JSON) target stream.
+/// `prefix` is the leading body bytes the HTTP parser over-read; `splice_rest`
+/// moves the remaining `content_len - prefix.len()` bytes from the socket to the
+/// given `(file_fd, offset)` (the engine owns the socket fd + pipe machinery).
+///
+/// Returns `Fallback` for anything that is not a plain accept (see
+/// `ZeroCopyOutcome`); the engine then reads the body buffered and runs the
+/// normal handler. No stream state is mutated before the accept decision, so the
+/// fallback re-validates from scratch and is fully idempotent.
+#[cfg(target_os = "linux")]
+pub async fn handle_binary_append_zero_copy(
+    store: Arc<Store>,
+    req: &Req,
+    prefix: &[u8],
+    content_len: usize,
+    splice_rest: impl FnOnce(std::os::fd::RawFd, i64) -> std::io::Result<()>,
+) -> ZeroCopyOutcome {
+    use std::os::fd::AsRawFd;
+
+    let path = req.path.clone();
+    // Route. A missing/soft-deleted/JSON stream, or one whose content-type does
+    // not match, is an edge case → buffered fallback.
+    let st = match store.get(&path) {
+        Some(s) => s,
+        None => return ZeroCopyOutcome::Fallback,
+    };
+    if st.is_json || st.shared.read().unwrap().soft_deleted {
+        return ZeroCopyOutcome::Fallback;
+    }
+    // A close request, an empty body, or producer headers that don't parse are
+    // all handled by the buffered path. Likewise any explicit close.
+    if header_is_true(req, H_CLOSED) || content_len == 0 {
+        return ZeroCopyOutcome::Fallback;
+    }
+    let producer = match parse_producer_headers(req) {
+        Ok(p) => p,
+        Err(_) => return ZeroCopyOutcome::Fallback,
+    };
+    let seq_header = header_str(req, H_SEQ).map(|s| s.to_string());
+    // Content-type must be present and match (binary stream): a missing or
+    // mismatched type is a 4xx the buffered path renders.
+    match header_str(req, "content-type") {
+        None => return ZeroCopyOutcome::Fallback,
+        Some(ct) => {
+            if media_type(ct) != media_type(&st.config.content_type) {
+                return ZeroCopyOutcome::Fallback;
+            }
+        }
+    }
+
+    // Serialize per stream — same lock the buffered path holds across the byte
+    // write + WAL stage. Held across BOTH the socket→file splice AND the
+    // file→WAL splice; never released between them (file-before-WAL ordering is
+    // a crash-safety invariant).
+    let lock_t0 = crate::telemetry::Timer::start();
+    let mut ap = st.appender.lock().await;
+    crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
+
+    // Re-check closed / producer / seq under the lock. ANY non-accept outcome →
+    // fall back (the lock is released on drop, no state mutated).
+    {
+        let s = st.shared.read().unwrap();
+        if s.closed {
+            return ZeroCopyOutcome::Fallback;
+        }
+    }
+    if let Some(p) = &producer {
+        let outcome = {
+            let s = st.shared.read().unwrap();
+            validate_producer(&s, p)
+        };
+        if !matches!(outcome, ProducerOutcome::Accept) {
+            return ZeroCopyOutcome::Fallback;
+        }
+    }
+    if let Some(seq) = &seq_header {
+        let s = st.shared.read().unwrap();
+        if let Some(last) = &s.last_seq_header {
+            if seq.as_str() <= last.as_str() {
+                return ZeroCopyOutcome::Fallback;
+            }
+        }
+    }
+
+    // ---- accepted: drive the splice relay ----
+    // File offset O where this append lands in the stream's own data file.
+    let file_off = ap.written;
+    // Logical pre-append stream offset for the WAL record (read file_base under
+    // the lock, exactly like `wal_stream_offset`).
+    let stream_offset = st.shared.read().unwrap().file_base + file_off;
+
+    // Open a fresh non-O_APPEND fd for positioned writes (splice rejects O_APPEND).
+    let splice_file = match st.open_splice_fd() {
+        Ok(f) => f,
+        Err(_) => return ZeroCopyOutcome::Fallback,
+    };
+    let file_fd = splice_file.as_raw_fd();
+
+    // Step 3a: write the already-buffered prefix at O (positioned).
+    if !prefix.is_empty() {
+        use std::os::unix::fs::FileExt;
+        if splice_file.write_all_at(prefix, file_off).is_err() {
+            return ZeroCopyOutcome::Done(text_response(500, "write failed"));
+        }
+    }
+    // Step 3b: relay the rest socket→file at O+prefix.len().
+    let rest_off = (file_off + prefix.len() as u64) as i64;
+    if splice_rest(file_fd, rest_off).is_err() {
+        return ZeroCopyOutcome::Done(text_response(500, "write failed"));
+    }
+    // Make the page-cache bytes visible to the file→WAL splice below: the prefix
+    // pwrite + the socket splice both wrote through `splice_file`, which shares
+    // the inode's page cache with the WAL relay's read, so no flush is needed —
+    // splice reads from the page cache the writes just populated.
+
+    // Publish the new logical tail BEFORE the WAL stage's wait. `ap.written` and
+    // `s.tail` advance under the lock exactly as in `write_wire`. The tail cache
+    // is OFF under --zero-copy, so we do NOT call set_last_chunk.
+    ap.written += content_len as u64;
+    let (tail, closed) = {
+        let mut s = st.shared.write().unwrap();
+        let tail = s.file_base + ap.written;
+        s.tail = tail;
+        s.last_access = SystemTime::now();
+        (tail, s.closed_durable)
+    };
+    st.tail_tx.send_replace(Tail { bytes: tail, closed });
+
+    // ---- WAL: reserve header → splice file→WAL → mark staged → wait durable ----
+    let wal = store.wal.get().expect("WAL must be attached before serving");
+    let shard = wal.shard_for(st.id);
+    // CQ-1: register-before-stage. `reserve_for_splice` does not register the
+    // dirty stream itself, so do it here (mirrors `maybe_sync_on_ack`).
+    shard.register_dirty(st.id, Arc::clone(&st));
+    let (lsn, seg, payload_off) = match shard.reserve_for_splice(
+        crate::wal::codec::RecordKind::Append,
+        st.id,
+        stream_offset,
+        content_len,
+    ) {
+        Ok(r) => r,
+        Err(_) => {
+            // Header reserve failed: the bytes are in the stream file but no WAL
+            // record covers them. Release the lock and 500 (not durable).
+            drop(ap);
+            return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
+        }
+    };
+    // Step 4: relay the just-written hot file bytes [O, O+content_len) → the WAL
+    // segment after the header. `splice_payload_fd` is the segment's write fd.
+    {
+        use crate::wal::segment::SegmentWriter;
+        let mut src_off = file_off as i64;
+        let mut dst_off = payload_off as i64;
+        if crate::engine_raw::zerocopy::splice_all(
+            file_fd,
+            Some(&mut src_off),
+            seg.splice_payload_fd(),
+            Some(&mut dst_off),
+            content_len,
+        )
+        .is_err()
+        {
+            drop(ap);
+            return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
+        }
+    }
+    // Step 5: advance the contiguous-written watermark + notify the committer.
+    shard.mark_staged(lsn);
+    // Commit the producer/seq dedup state under the appender lock — same as the
+    // buffered path, so a concurrent same-producer request can't double-accept in
+    // the window between staging and the durability wait.
+    {
+        let mut s = st.shared.write().unwrap();
+        if let Some(p) = &producer {
+            s.producers.insert(
+                p.id.clone(),
+                ProducerState { epoch: p.epoch, last_seq: p.seq },
+            );
+        }
+        if let Some(seq) = &seq_header {
+            s.last_seq_header = Some(seq.clone());
+        }
+    }
+    drop(ap); // critical section ends — both byte writes + WAL stage are done.
+
+    // Step 6: wait for the WAL record to be durable, then ack.
+    shard.wait_durable(lsn).await;
+
+    st.schedule_meta_flush();
+    maybe_seal_bg(&store, &st);
+
+    let t = st.tail();
+    let status = if producer.is_some() { 200 } else { 204 };
+    let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(t.bytes));
+    if let Some(p) = &producer {
+        b = b
+            .h(H_PRODUCER_EPOCH, p.epoch.to_string())
+            .h(H_PRODUCER_SEQ, p.seq.to_string());
+    }
+    if t.closed {
+        b = b.hs(H_CLOSED, "true");
+    }
+    ZeroCopyOutcome::Done(b.body(empty()))
+}
+
 // ---------- reading bodies from the data file ----------
 
 /// Describe payload range [start, end) as a response body. No I/O happens
