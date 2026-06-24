@@ -20,6 +20,10 @@ immediately — no `fdatasync`, no WAL. This means:
   WAL (a `wal/` subtree with records past the last checkpoint) risks data
   divergence: the WAL records would not be replayed and the per-stream files
   would be incomplete.
+- **`memory → wal` (the reverse) is safe.** Reopening a memory-written data dir
+  with `--durability wal` simply runs WAL recovery over an absent or empty WAL
+  and leaves the per-stream files intact — no data loss, and subsequent appends
+  are immediately WAL-durable.
 - **Replication is the intended (not-yet-built) durability source.** The design
   intent for `memory` mode is that durability comes from a replication layer
   (synchronous replica writes before ack). That layer is not yet implemented;

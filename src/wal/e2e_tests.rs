@@ -129,7 +129,8 @@ async fn create_stream(store: &Arc<Store>, path: &str, content_type: &str) {
 }
 
 /// Append one record over the REAL HTTP path; assert a 2xx ack (which, in WAL
-/// mode, means the record's lsn is durable — its prefix is on disk + fdatasync'd).
+/// mode, means the record's lsn is durable — its prefix is on disk + fdatasync'd;
+/// in `memory` mode it means the page-cache write completed — no WAL, no fsync).
 async fn append_acked(store: &Arc<Store>, path: &str, content_type: &str, body: &[u8]) {
     let resp = handlers::handle(Arc::clone(store), post_req(path, content_type, body)).await;
     assert!(
