@@ -346,35 +346,11 @@ sizes, a planned follow-up for very large cold ranges.
   alongside fsync/lock-wait/append/read latency histograms and the tail-cache hit
   ratio. This is how you watch the levers above in production.
 
-- **`--zero-copy` (Linux only, off by default)** — page-cache relay for binary appends.
-  When enabled, an eligible binary `POST` (non-JSON, known `Content-Length`, not a
-  producer dup/gap/close) relays the body socket→file→WAL entirely in the kernel:
-  1. The body is `splice`'d from the socket into the stream's per-stream data file
-     at the append offset (socket→file relay via an anonymous pipe).
-  2. The WAL header (38 bytes, header CRC + `flags=0` / `payload_crc=0`) is written
-     at the reserved WAL segment offset. The `PAYLOAD_CHECKSUMMED` flag is NOT set:
-     the splice path deliberately never reads the payload into userspace, so it cannot
-     checksum it. This means the zero-copy path retains the Bug #1 torn-payload
-     residual — it relies on header-only completeness for torn-tail detection.
-  3. The just-written hot file bytes are `splice`'d file→WAL segment at the payload
-     offset (file→WAL relay via an anonymous pipe).
-  4. The committer `fdatasync`s the segment, advances `durable_lsn`, and the ack
-     returns.
-
-  **Crash safety (torn-tail invariant):** the per-stream file is always written
-  BEFORE the WAL payload (step 1 before step 3). A crash between these two steps
-  leaves the file with more bytes than the WAL's durable frontier — a torn record.
-  Recovery detects this: the WAL decoder stops at the header-only torn record, and
-  `reconcile_tail` truncates the per-stream file back to the durable frontier. The
-  half-append is gone and is never acked. This invariant is positive-tested by
-  `zero_copy_torn_tail_recovered_by_replay` (Linux-gated, runs in Docker).
-
-  By contrast, the **buffered (default) path** always sets `PAYLOAD_CHECKSUMMED` and
-  stores the payload `crc32c` in the header, so a crash leaving a valid header over a
-  `fallocate`-zeroed payload is caught by the CRC mismatch (Bug #1 closed for the
-  default path).
-
-  The resident tail cache is forced off under `--zero-copy` (the page-cache relay's
-  write is in-kernel via `splice`, not through any in-process buffer). Reads are
-  served via `sendfile(2)` as normal. Any non-eligible append falls back to the
-  buffered path transparently.
+- **Payload CRC (Bug #1 closed)** — every WAL record is written by the buffered
+  `wal` path, which always sets `PAYLOAD_CHECKSUMMED` and stores the payload
+  `crc32c` in the 38-byte header. A crash leaving a valid header over a
+  `fallocate`-zeroed (never-fully-written) payload is therefore caught by the CRC
+  mismatch on recovery (the record decodes as `Torn`, not as a zero-padded
+  `Record`). There is no longer any unchecksummed WAL writer — the old
+  `--zero-copy` durable splice relay that opted out of the payload CRC has been
+  removed, so Bug #1 is fully closed.

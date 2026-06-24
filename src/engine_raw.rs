@@ -60,8 +60,9 @@ impl ReadOffload {
 
 static READ_OFFLOAD: AtomicU8 = AtomicU8::new(ReadOffload::Tail as u8);
 
-/// Process-global `--zero-copy` toggle. When on (Linux only), eligible binary
-/// appends are served via the splice page-cache relay and the tail cache is off.
+/// Process-global zero-copy-append toggle, set by `--durability memory` (Linux
+/// only). When on, eligible binary appends are served via the socket→file splice
+/// intercept and the tail cache is off.
 #[cfg(target_os = "linux")]
 static ZERO_COPY: AtomicBool = AtomicBool::new(false);
 
@@ -214,14 +215,15 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
         let keep_alive = head.keep_alive;
         let is_head = head.is_head;
 
-        // ---- zero-copy binary-append intercept (Linux only) ----
+        // ---- zero-copy binary-append intercept (Linux only, --durability memory) ----
         //
-        // Eligible: --zero-copy on, POST, a known content-length (not chunked),
-        // and the route is a binary append. We DON'T `read_sized` here; instead
-        // the body is relayed socket→file→WAL via splice(2). The handler returns
-        // `Fallback` for any edge case (producer dup/gap, closed, close request,
-        // JSON, content-type mismatch, …), in which case we read the body
-        // buffered below and run the normal handler — byte-for-byte unchanged.
+        // Eligible: zero-copy on (set by --durability memory), POST, a known
+        // content-length (not chunked), and the route is a binary append. We DON'T
+        // `read_sized` here; instead the body is relayed socket→file via splice(2).
+        // The handler returns `Fallback` for any edge case (producer dup/gap,
+        // closed, close request, JSON, content-type mismatch, …), in which case we
+        // read the body buffered below and run the normal handler — byte-for-byte
+        // unchanged.
         #[cfg(target_os = "linux")]
         if zero_copy()
             && matches!(head.method, crate::api::Method::Post)
@@ -689,157 +691,6 @@ pub(crate) mod zerocopy {
         res
     }
 
-    /// Move exactly `len` bytes from `src` to `dst` through an anonymous pipe, in-kernel.
-    ///
-    /// `*_off = None` uses the fd's own file offset (sockets); `Some(off)` is a
-    /// positioned transfer (regular files) and is advanced as bytes move.
-    pub fn splice_all(
-        src: RawFd,
-        mut src_off: Option<&mut i64>,
-        dst: RawFd,
-        mut dst_off: Option<&mut i64>,
-        mut len: usize,
-    ) -> io::Result<()> {
-        let mut fds = [0i32; 2];
-        // SAFETY: fds is a 2-element array; pipe2 fills both on success.
-        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let (pr, pw) = (fds[0], fds[1]);
-        let res = (|| {
-            while len > 0 {
-                // src → pipe
-                let in_off = src_off.as_deref_mut().map_or(std::ptr::null_mut(), |p| p as *mut i64);
-                // SAFETY: in_off is either null (use fd offset) or a valid &mut i64 cast
-                // to *mut i64. pw is the write end of a valid pipe. splice does not alias
-                // any Rust references and is called with valid fds only.
-                let n = unsafe {
-                    libc::splice(
-                        src,
-                        in_off,
-                        pw,
-                        std::ptr::null_mut(),
-                        len,
-                        (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
-                    )
-                };
-                if n < 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                if n == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "splice src EOF"));
-                }
-                // pipe → dst (drain exactly n bytes)
-                let mut moved = 0usize;
-                while moved < n as usize {
-                    let out_off = dst_off
-                        .as_deref_mut()
-                        .map_or(std::ptr::null_mut(), |p| p as *mut i64);
-                    // SAFETY: out_off is either null (use fd offset) or a valid &mut i64
-                    // cast to *mut i64. pr is the read end of the same pipe. We drain
-                    // exactly the bytes placed in the pipe by the src splice above.
-                    let m = unsafe {
-                        libc::splice(
-                            pr,
-                            std::ptr::null_mut(),
-                            dst,
-                            out_off,
-                            (n as usize) - moved,
-                            (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
-                        )
-                    };
-                    if m < 0 {
-                        return Err(io::Error::last_os_error());
-                    } else if m == 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            "splice pipe drain returned 0",
-                        ));
-                    }
-                    moved += m as usize;
-                }
-                len -= n as usize;
-            }
-            Ok(())
-        })();
-        // SAFETY: close both pipe ends regardless of outcome; the fds are valid
-        // (pipe2 succeeded) and not used elsewhere after this point.
-        unsafe {
-            libc::close(pr);
-            libc::close(pw);
-        }
-        res
-    }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod zerocopy_tests {
-    use super::zerocopy::splice_all;
-    use std::io::{Read, Seek, SeekFrom, Write};
-    use std::os::fd::AsRawFd;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    /// Per-test nonce: combined with the process id this makes file names unique
-    /// under `cargo test` parallelism so concurrent runs never race on the same
-    /// path.
-    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    fn unique_test_paths(stem: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-        let nonce = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let pid = std::process::id();
-        let dir = std::env::temp_dir();
-        let src = dir.join(format!("{stem}_src_{pid}_{nonce}"));
-        let dst = dir.join(format!("{stem}_dst_{pid}_{nonce}"));
-        (src, dst)
-    }
-
-    #[test]
-    fn splice_all_file_to_file_copies_exact_bytes() {
-        // Use temp_dir() files — no tempfile dev-dep needed.
-        // File names embed the process id and a per-test counter so concurrent
-        // `cargo test` runs cannot race on the same paths.
-        let (src_path, dst_path) = unique_test_paths("splice_all");
-
-        let mut src = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&src_path)
-            .unwrap();
-        let dst = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&dst_path)
-            .unwrap();
-
-        // > 64 KiB to exercise the loop past one pipe capacity.
-        let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
-        src.write_all(&data).unwrap();
-
-        let mut soff = 0i64;
-        let mut doff = 0i64;
-        splice_all(
-            src.as_raw_fd(),
-            Some(&mut soff),
-            dst.as_raw_fd(),
-            Some(&mut doff),
-            data.len(),
-        )
-        .unwrap();
-
-        let mut got = Vec::new();
-        let mut dst2 = dst;
-        dst2.seek(SeekFrom::Start(0)).unwrap();
-        dst2.read_to_end(&mut got).unwrap();
-        assert_eq!(got, data);
-
-        // Cleanup — best-effort, ignore errors.
-        let _ = std::fs::remove_file(&src_path);
-        let _ = std::fs::remove_file(&dst_path);
-    }
 }
 
 /// Portable fallback: positioned reads through a reusable buffer.

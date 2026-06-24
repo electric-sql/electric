@@ -72,10 +72,6 @@ fn main() {
     // core count; on an existing one reuse the persisted N. A value ≠ the persisted
     // N is rejected with exit 2 (spec §5).
     let mut wal_shards: Option<usize> = None;
-    // `--zero-copy` (Linux-only): forces the tail cache off and routes eligible
-    // binary appends through the splice page-cache relay (Task 4 wires the path).
-    #[cfg(target_os = "linux")]
-    let mut zero_copy_requested = false;
     // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
     // Useful for forcing rolls in tests and benches without writing a full 128 MiB segment.
@@ -155,17 +151,6 @@ fn main() {
                 }
                 wal_segment_bytes = Some(n);
             }
-            "--zero-copy" => {
-                #[cfg(not(target_os = "linux"))]
-                {
-                    eprintln!("--zero-copy is Linux-only (requires splice/sendfile)");
-                    std::process::exit(2);
-                }
-                #[cfg(target_os = "linux")]
-                {
-                    zero_copy_requested = true;
-                }
-            }
             "--durability" => {
                 let v = val(args.next(), "--durability");
                 match handlers::parse_durability(&v) {
@@ -183,19 +168,8 @@ fn main() {
         }
     }
 
-    // Apply --zero-copy AFTER the arg loop so it wins over --tail-cache-bytes
-    // regardless of flag order.
-    #[cfg(target_os = "linux")]
-    if zero_copy_requested {
-        if store::tail_cache_bytes() != 0 {
-            eprintln!("--zero-copy disables the resident tail cache (ignoring --tail-cache-bytes)");
-        }
-        store::set_tail_cache_bytes(0);
-        engine_raw::set_zero_copy(true);
-    }
-
     // Apply --durability memory AFTER the arg loop. On non-Linux, reject immediately.
-    // On Linux, force the tail cache off (binary appends will use zero-copy in Task 2).
+    // On Linux, force the tail cache off (binary appends use the zero-copy socket→file splice).
     if handlers::durability() == handlers::DurabilityMode::Memory {
         #[cfg(not(target_os = "linux"))]
         {

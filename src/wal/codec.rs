@@ -22,12 +22,13 @@
 //! The payload CRC closes Bug #1 (torn-payload-zeros): WAL segments are
 //! `fallocate`'d to full size, so "the payload bytes are physically present" is
 //! trivially true even when a crash left a valid header over a zeroed,
-//! never-fully-written payload. The buffered (default) path has the payload in
-//! userspace and always checksums it, so such a torn record now fails decode.
-//! The `--zero-copy` splice path deliberately never reads the payload into
-//! userspace, so it writes its header with `PAYLOAD_CHECKSUMMED` clear and keeps
-//! the old "bytes present = complete" behavior (its residual exposure to Bug #1
-//! is documented, not fixed here).
+//! never-fully-written payload. Every WAL record is written by the buffered path,
+//! which has the payload in userspace and always sets `PAYLOAD_CHECKSUMMED`, so
+//! such a torn record now fails decode. The old `--zero-copy` splice relay (the
+//! only writer that left the flag clear) has been removed, so Bug #1 is **fully
+//! closed** — there is no longer any unchecksummed WAL record in production. The
+//! `PAYLOAD_CHECKSUMMED` flag and the flag-clear decode branch are retained only
+//! for on-disk format stability.
 //!
 //! The header CRC also doubles as a torn-header detector: a partially-written
 //! header almost always fails the CRC, and an all-zero (`fallocate`'d,
@@ -40,8 +41,10 @@
 pub const HEADER_LEN: usize = 38;
 
 /// `flags` bit 0: the record's `payload_crc` field is a valid crc32c over the
-/// payload and MUST be verified on decode. The buffered path sets this; the
-/// zero-copy splice path leaves it clear (it cannot checksum the spliced bytes).
+/// payload and MUST be verified on decode. Every WAL writer (`encode_into`) sets
+/// this — the old zero-copy splice relay that left it clear has been removed, so
+/// all production WAL records are checksummed. The flag-clear branch in
+/// [`decode_at`] is retained only for on-disk format stability.
 pub const PAYLOAD_CHECKSUMMED: u8 = 0b0000_0001;
 
 /// Record kind discriminant. The numeric values are the on-disk encoding and
@@ -132,14 +135,13 @@ fn header_crc(
 
 /// Append the 38-byte framed **header only** (no payload) to `buf`.
 ///
-/// This is the single canonical source of the header byte layout — both
-/// [`encode_into`] and [`Shard::reserve_for_splice`] call it so the framing
-/// cannot diverge between the two reservation paths.
+/// This is the single canonical source of the header byte layout — [`encode_into`]
+/// calls it so the framing cannot diverge.
 ///
 /// `len` is the payload length in bytes (the on-disk `u32` field). `flags`
-/// carries [`PAYLOAD_CHECKSUMMED`] (set by the buffered path, clear for
-/// zero-copy splice) and `payload_crc` is the crc32c over the payload (0 when
-/// `PAYLOAD_CHECKSUMMED` is clear).
+/// carries [`PAYLOAD_CHECKSUMMED`] (always set by the buffered WAL path) and
+/// `payload_crc` is the crc32c over the payload (0 when `PAYLOAD_CHECKSUMMED` is
+/// clear).
 pub(crate) fn encode_header_into(
     buf: &mut Vec<u8>,
     lsn: u64,
@@ -310,16 +312,20 @@ mod tests {
         }
     }
 
-    // Companion (documents the residual): an UNchecksummed record (the zero-copy
-    // splice path — PAYLOAD_CHECKSUMMED clear, payload_crc=0) with a torn,
-    // zeroed payload tail STILL decodes as `Record`. Zero-copy opts out of the
-    // payload CRC, so Bug #1 is not closed for it (out of scope here).
+    // Pure decode-behavior test (NOT a production case): a header with
+    // PAYLOAD_CHECKSUMMED clear opts out of the payload CRC, so a torn/zeroed
+    // payload tail decodes as `Record` (the legacy "bytes present = complete"
+    // branch). No WAL writer emits flag-clear records any more — the zero-copy
+    // splice relay that used to has been removed — so this branch is unreachable
+    // in production and Bug #1 is fully closed. The test pins the decode
+    // semantics only, for on-disk format stability.
     #[test]
-    fn unchecksummed_torn_payload_still_accepted_residual() {
+    fn flag_clear_payload_skips_crc_validation_decode_only() {
         let len: usize = 8192;
         let prefix: usize = 4096;
         let mut seg = Vec::new();
-        // flags=0, payload_crc=0 (exactly what commit_splice_header writes).
+        // flags=0, payload_crc=0 — a hand-built flag-clear header (no production
+        // writer emits this).
         encode_header_into(&mut seg, 1, RecordKind::Append, 42, 0, len as u32, 0, 0);
         seg.extend(std::iter::repeat(0xAB).take(prefix));
         seg.extend(std::iter::repeat(0u8).take(len - prefix));
@@ -327,8 +333,8 @@ mod tests {
 
         assert!(
             matches!(decode_at(&seg, 0), Decoded::Record { .. }),
-            "zero-copy (unchecksummed) records keep the legacy bytes-present \
-             behavior — Bug #1 residual is documented, not fixed"
+            "a flag-clear (PAYLOAD_CHECKSUMMED unset) header skips payload-CRC \
+             validation — decode-only behavior, unreachable in production"
         );
     }
 

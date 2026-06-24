@@ -1072,7 +1072,7 @@ fn closed_conflict(tail: u64) -> Resp {
         .body(full("stream is closed"))
 }
 
-// ---------- POST (append) — zero-copy splice path (Linux) ----------
+// ---------- POST (append) — zero-copy socket→file splice path (Linux, --durability memory) ----------
 
 /// Result of the zero-copy append entry. `Fallback` means the engine must fall
 /// back to the buffered append path (read the whole body, run `handle`): the
@@ -1094,12 +1094,14 @@ pub enum ZeroCopyOutcome {
     Fallback,
 }
 
-/// Zero-copy binary append: stage the WAL header, relay the request body
-/// socket→file→WAL via `splice(2)` while holding the appender lock, then ack —
-/// the durability/offset/producer semantics are identical to the buffered
-/// append, only the byte movement differs (no userspace `Bytes`).
+/// Zero-copy binary append (`--durability memory`): relay the request body
+/// socket→file via `splice(2)` while holding the appender lock, then ack — the
+/// offset/producer semantics are identical to the buffered append, only the byte
+/// movement differs (no userspace `Bytes`). There is no WAL in memory mode: the
+/// per-stream file write is the ack (durability comes from replication).
 ///
-/// The caller (engine) has already confirmed: `--zero-copy` on, `POST`, a known
+/// The caller (engine) has already confirmed: `--durability memory` (the engine
+/// zero-copy intercept), `POST`, a known
 /// `content_length` (not chunked), and a binary (non-JSON) target stream.
 /// `prefix` is the leading body bytes the HTTP parser over-read; `splice_rest`
 /// moves the remaining `content_len - prefix.len()` bytes from the socket to the
@@ -1161,9 +1163,8 @@ where
     }
 
     // Serialize per stream — same lock the buffered path holds across the byte
-    // write + WAL stage. Held across BOTH the socket→file splice AND the
-    // file→WAL splice; never released between them (file-before-WAL ordering is
-    // a crash-safety invariant).
+    // write. Held across the socket→file splice (the appender's per-stream
+    // serialization).
     let lock_t0 = crate::telemetry::Timer::start();
     let mut ap = st.appender.lock().await;
     crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
@@ -1194,12 +1195,9 @@ where
         }
     }
 
-    // ---- accepted: drive the splice relay ----
+    // ---- accepted: drive the socket→file splice ----
     // File offset O where this append lands in the stream's own data file.
     let file_off = ap.written;
-    // Logical pre-append stream offset for the WAL record (read file_base under
-    // the lock, exactly like `wal_stream_offset`).
-    let stream_offset = st.shared.read().unwrap().file_base + file_off;
 
     // Open a fresh non-O_APPEND fd for positioned writes (splice rejects O_APPEND).
     let splice_file = match st.open_splice_fd() {
@@ -1229,9 +1227,9 @@ where
     // the inode's page cache with the WAL relay's read, so no flush is needed —
     // splice reads from the page cache the writes just populated.
 
-    // Publish the new logical tail BEFORE the WAL stage's wait. `ap.written` and
-    // `s.tail` advance under the lock exactly as in `write_wire`. The tail cache
-    // is OFF under --zero-copy, so we do NOT call set_last_chunk.
+    // Publish the new logical tail. `ap.written` and `s.tail` advance under the
+    // lock exactly as in `write_wire`. The tail cache is OFF under
+    // --durability memory, so we do NOT call set_last_chunk.
     ap.written += content_len as u64;
     let (tail, closed) = {
         let mut s = st.shared.write().unwrap();
@@ -1242,9 +1240,7 @@ where
     };
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
 
-    // Shared response builder: captures `st`, `producer` by ref. Used both by
-    // the memory early-return below and the WAL-path ack at the end, so the
-    // two responses cannot drift.
+    // Shared response builder: captures `st`, `producer` by ref.
     let make_ok = || {
         let t = st.tail();
         let status = if producer.is_some() { 200 } else { 204 };
@@ -1260,94 +1256,12 @@ where
         ZeroCopyOutcome::Done(b.body(empty()))
     };
 
-    // memory mode: the per-stream file write IS the durable-enough ack (no WAL,
-    // no fsync — durability comes from replication). Skip the whole WAL relay.
-    if durability() == DurabilityMode::Memory {
-        // Commit producer/seq dedup state under the appender lock — mirrors the
-        // same block in the WAL path (after mark_staged) so a concurrent
-        // same-producer request cannot double-accept.
-        {
-            let mut s = st.shared.write().unwrap();
-            if let Some(p) = &producer {
-                s.producers.insert(
-                    p.id.clone(),
-                    ProducerState { epoch: p.epoch, last_seq: p.seq },
-                );
-            }
-            if let Some(seq) = &seq_header {
-                s.last_seq_header = Some(seq.clone());
-            }
-        }
-        drop(ap); // critical section ends
-        st.schedule_meta_flush();
-        maybe_seal_bg(&store, &st);
-        return make_ok();
-    }
-
-    // ---- WAL: reserve header → splice file→WAL → mark staged → wait durable ----
-    let wal = store.wal.get().expect("WAL must be attached before serving");
-    let shard = wal.shard_for(st.id);
-    // CQ-1: register-before-stage. `reserve_for_splice` does not register the
-    // dirty stream itself, so do it here (mirrors `maybe_sync_on_ack`).
-    shard.register_dirty(st.id, Arc::clone(&st));
-    let (lsn, seg, header_off, payload_off) = match shard.reserve_for_splice(
-        crate::wal::codec::RecordKind::Append,
-        st.id,
-        stream_offset,
-        content_len,
-    ) {
-        Ok(r) => r,
-        Err(_) => {
-            // Reserve failed: the bytes are in the stream file but no WAL record
-            // covers them. Release the lock and 500 (not durable).
-            drop(ap);
-            return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
-        }
-    };
-    // Step 4: relay the just-written hot file bytes [O, O+content_len) → the WAL
-    // segment's reserved payload range (after the not-yet-written header).
-    // `splice_payload_fd` is the segment's write fd. The header is written LAST
-    // (step 5) so a crash here leaves an all-zero header → recovery sees Incomplete
-    // and the orphan payload is never exposed (header-LAST commit-marker invariant).
-    {
-        use crate::wal::segment::SegmentWriter;
-        let mut src_off = file_off as i64;
-        let mut dst_off = payload_off as i64;
-        if crate::engine_raw::zerocopy::splice_all(
-            file_fd,
-            Some(&mut src_off),
-            seg.splice_payload_fd(),
-            Some(&mut dst_off),
-            content_len,
-        )
-        .is_err()
-        {
-            drop(ap);
-            return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
-        }
-    }
-    // Step 5: write the framed header LAST — the commit marker. Only after this
-    // lands is the record recoverable (header present ⟹ payload present).
-    if shard
-        .commit_splice_header(
-            &seg,
-            header_off,
-            lsn,
-            crate::wal::codec::RecordKind::Append,
-            st.id,
-            stream_offset,
-            content_len,
-        )
-        .is_err()
-    {
-        drop(ap);
-        return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
-    }
-    // Step 6: advance the contiguous-written watermark + notify the committer.
-    shard.mark_staged(lsn);
-    // Commit the producer/seq dedup state under the appender lock — same as the
-    // buffered path, so a concurrent same-producer request can't double-accept in
-    // the window between staging and the durability wait.
+    // This path is reached only in `--durability memory` (the engine zero-copy
+    // intercept is enabled solely by that mode). The per-stream file write IS the
+    // durable-enough ack (no WAL, no fsync — durability comes from replication).
+    debug_assert_eq!(durability(), DurabilityMode::Memory);
+    // Commit producer/seq dedup state under the appender lock so a concurrent
+    // same-producer request cannot double-accept.
     {
         let mut s = st.shared.write().unwrap();
         if let Some(p) = &producer {
@@ -1360,14 +1274,9 @@ where
             s.last_seq_header = Some(seq.clone());
         }
     }
-    drop(ap); // critical section ends — both byte writes + WAL stage are done.
-
-    // Step 7: wait for the WAL record to be durable, then ack.
-    shard.wait_durable(lsn).await;
-
+    drop(ap); // critical section ends
     st.schedule_meta_flush();
     maybe_seal_bg(&store, &st);
-
     make_ok()
 }
 
