@@ -57,8 +57,12 @@ defmodule ElectricTelemetry.SystemMetricsTest do
       assert measurements.allocated >= measurements.used
       assert measurements.unused == measurements.allocated - measurements.used
       assert measurements.unused >= 0
+      # carrier_usage is recon_alloc's used/allocated ratio — nominally 0..1, but an
+      # instantaneous live-VM sample can momentarily exceed 1.0 (observed ~1.003) because
+      # the underlying mbcs/sbcs stats are sampled non-atomically. Use a tolerant sanity
+      # ceiling rather than a hard 1.0 to avoid a flaky test.
       assert measurements.carrier_usage >= 0.0
-      assert measurements.carrier_usage <= 1.0
+      assert measurements.carrier_usage <= 1.5
     end
   end
 
