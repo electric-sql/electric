@@ -74,6 +74,7 @@ fn main() {
     let mut wal_shards: Option<usize> = None;
     // `--zero-copy` (Linux-only): forces the tail cache off and routes eligible
     // binary appends through the splice page-cache relay (Task 4 wires the path).
+    #[cfg(target_os = "linux")]
     let mut zero_copy_requested = false;
     // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
