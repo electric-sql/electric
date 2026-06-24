@@ -436,9 +436,10 @@ impl Shard {
     ///
     /// # Header-LAST commit-marker ordering (the durability invariant)
     ///
-    /// The WAL framing is header-CRC-only (no payload checksum) and segments are
-    /// `fallocate`'d to full size, so the reserved range reads as zeros until
-    /// written. The committer `fdatasync`s the **whole** active segment fd on every
+    /// Zero-copy records opt out of the optional payload CRC (the spliced bytes
+    /// never enter userspace to be checksummed), so for them the framing is
+    /// header-CRC-only — and segments are `fallocate`'d to full size, so the
+    /// reserved range reads as zeros until written. The committer `fdatasync`s the **whole** active segment fd on every
     /// group commit, so a concurrent append to ANY stream on this shard can flush
     /// our reserved region to disk at any time. If we wrote a CRC-valid header here
     /// (declaring `len = payload_len`) and then crashed before the payload landed,
