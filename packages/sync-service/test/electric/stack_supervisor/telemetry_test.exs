@@ -126,5 +126,70 @@ if Electric.telemetry_enabled?() and Code.ensure_loaded?(ElectricTelemetry.Repor
         assert scrape =~ ~r/electric_admission_control_reject_count\{kind="shape"\} 2/
       end
     end
+
+    describe "shape_dir_group_depth/1" do
+      alias Electric.ShapeCache.PureFileStorage
+
+      # The depth must land exactly on the shape-handle directory produced by the
+      # real storage code, for both deployment layouts. We derive the expected
+      # depth from PureFileStorage.shape_data_dir/3 rather than hard-coding it, so
+      # config/sharding drift can't silently re-introduce the off-by-one bug.
+      defp expected_depth(walk_root, shape_storage_dir, stack_id) do
+        base_path = Path.join(shape_storage_dir, stack_id)
+        shape_dir = PureFileStorage.shape_data_dir(base_path, "00000000-0000")
+        length(Path.split(shape_dir)) - length(Path.split(walk_root))
+      end
+
+      test "standalone layout: walk root is the bare storage dir, shapes nested under shapes/" do
+        # ELECTRIC_STORAGE_DIR walked directly; PureFileStorage at <root>/shapes.
+        walk_root = "/var/electric"
+        shape_storage_dir = Path.join(walk_root, "shapes")
+        stack_id = "single-stack"
+
+        config = %{
+          stack_id: stack_id,
+          storage_dir: walk_root,
+          storage: {PureFileStorage, storage_dir: shape_storage_dir}
+        }
+
+        depth = Telemetry.shape_dir_group_depth(config)
+
+        # <root>/shapes/<stack_id>/<p1>/<p2>/<handle> => depth 5.
+        assert depth == 5
+        assert depth == expected_depth(walk_root, shape_storage_dir, stack_id)
+        # Guard the exact bug: bucketing at 4 would key by the <p2> shard prefix.
+        refute depth == 4
+      end
+
+      test "cloud layout: walk root is the per-tenant shapes dir" do
+        # Cloud passes the per-tenant <root>/<tenant_id>/shapes as BOTH the walk
+        # root and the PureFileStorage storage_dir.
+        tenant_id = "tenant-abc"
+        walk_root = Path.join(["/var/electric", tenant_id, "shapes"])
+        shape_storage_dir = walk_root
+
+        config = %{
+          stack_id: tenant_id,
+          storage_dir: walk_root,
+          storage: {PureFileStorage, storage_dir: shape_storage_dir}
+        }
+
+        depth = Telemetry.shape_dir_group_depth(config)
+
+        # <walk_root>/<tenant_id>/<p1>/<p2>/<handle> => depth 4.
+        assert depth == 4
+        assert depth == expected_depth(walk_root, shape_storage_dir, tenant_id)
+      end
+
+      test "non-file storage backends disable grouping" do
+        config = %{
+          stack_id: "s",
+          storage_dir: "/var/electric",
+          storage: {Electric.ShapeCache.InMemoryStorage, []}
+        }
+
+        assert Telemetry.shape_dir_group_depth(config) == nil
+      end
+    end
   end
 end
