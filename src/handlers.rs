@@ -1206,26 +1206,22 @@ where
     };
     let file_fd = splice_file.as_raw_fd();
 
-    // Step 3a: write the already-buffered prefix at O (positioned).
-    // On failure the remaining body is still unconsumed on the socket, so the
-    // HTTP framing is desynced → force-close (see DoneClose).
+    // Write the already-buffered prefix at O (positioned). On failure the
+    // remaining body is still unconsumed on the socket, so the HTTP framing is
+    // desynced → force-close (see DoneClose).
     if !prefix.is_empty() {
         use std::os::unix::fs::FileExt;
         if splice_file.write_all_at(prefix, file_off).is_err() {
             return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
         }
     }
-    // Step 3b: relay the rest socket→file at O+prefix.len() (awaits socket
-    // read-readiness — the socket is non-blocking). On failure some body bytes
-    // may already be consumed from the socket → desynced → force-close.
+    // Relay the rest socket→file at O+prefix.len() (awaits socket read-readiness
+    // — the socket is non-blocking). On failure some body bytes may already be
+    // consumed from the socket → desynced → force-close.
     let rest_off = (file_off + prefix.len() as u64) as i64;
     if splice_rest(file_fd, rest_off).await.is_err() {
         return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
     }
-    // Make the page-cache bytes visible to the file→WAL splice below: the prefix
-    // pwrite + the socket splice both wrote through `splice_file`, which shares
-    // the inode's page cache with the WAL relay's read, so no flush is needed —
-    // splice reads from the page cache the writes just populated.
 
     // Publish the new logical tail. `ap.written` and `s.tail` advance under the
     // lock exactly as in `write_wire`. The tail cache is OFF under
