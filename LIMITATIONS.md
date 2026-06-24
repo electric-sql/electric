@@ -1,5 +1,32 @@
 # Limitations & planned work
 
+## `--durability memory` is not locally crash-durable
+
+`memory` mode writes appends to the per-stream file (page cache) and acks
+immediately — no `fdatasync`, no WAL. This means:
+
+- **Not locally crash-durable.** A power loss, kernel panic, or OOM kill before
+  the OS flushes the page cache can lose any un-fsynced writes. The committed
+  data is those bytes that happened to reach disk before the crash, which is
+  undefined and OS-dependent.
+- **Wider producer-dedup-lag window.** Because there is no WAL, the producer
+  dedup state (in-memory) is only as durable as the `.meta` sidecar flush
+  (debounced, not synchronous on every append). The dedup lag window described
+  in [PROTOCOL.md §4.1](../../PROTOCOL.md) is wider in `memory` mode than in
+  `wal` mode. Producers should bump their epoch on restart.
+- **`wal → memory` mode switch is safe only from a cleanly-stopped dir.** If the
+  server was last stopped gracefully (no un-replayed WAL), the data dir can be
+  reused with `--durability memory`. Switching on a dir that has an un-replayed
+  WAL (a `wal/` subtree with records past the last checkpoint) risks data
+  divergence: the WAL records would not be replayed and the per-stream files
+  would be incomplete.
+- **Replication is the intended (not-yet-built) durability source.** The design
+  intent for `memory` mode is that durability comes from a replication layer
+  (synchronous replica writes before ack). That layer is not yet implemented;
+  `memory` mode today is suitable only for workloads where page-cache loss is
+  acceptable (e.g. ephemeral caches, test environments, or deployments with
+  external synchronous replication).
+
 ## WAL append framing copy (partially addressed)
 
 Each binary append reads the body into a userspace heap buffer, writes it to the

@@ -107,8 +107,31 @@ data is durable.
 
 ## Durability
 
-The server uses a **single, unconditional WAL-based durability path**: an append
-is acked only after its record is durable in the sharded write-ahead log.
+### Durability modes
+
+The server supports two durability modes, chosen at startup via `--durability`.
+
+**`wal` (default)** — durable, single-node no-loss durability via a sharded
+write-ahead log. An append acks only after its record is durable in the WAL
+(group-commit `fdatasync`). This is the safe default for any deployment where
+local disk loss must not cause data loss. See [`durable-wal.md`](../../docs/durable-wal.md)
+for the full design.
+
+**`memory` (Linux-only)** — no WAL, no `fsync`: binary appends move
+`socket→file` via `splice(2)` (zero-copy in the kernel); JSON appends are
+buffered writes; ack fires on the page-cache write. The per-stream files are
+the only durable-enough record, and recovery is the existing sidecar pass
+(rebuild stream state from the per-stream files + `.meta` sidecars). **NOT
+locally crash-durable** — a power loss or kernel panic can lose any
+un-fsynced page. Durability is delegated to (future) replication. Exits with
+status 2 on non-Linux.
+
+| Mode     | ack after        | fsync                  | WAL | crash-safe?          |
+| -------- | ---------------- | ---------------------- | --- | -------------------- |
+| `wal`    | WAL fdatasync    | group-commit per shard | yes | yes                  |
+| `memory` | page-cache write | never                  | no  | no (page-cache only) |
+
+### `wal` mode
 
 Every append is written to the per-stream data file (page cache, no hot fsync —
 this is the read surface) and simultaneously staged into one of N WAL shards
@@ -128,7 +151,15 @@ cache and the tail is published before the WAL `fdatasync`, so live readers see 
 append at memory latency while the appender's acknowledgement waits for the WAL
 commit.
 
-Full design and as-built reference: [`durable-wal.md`](../../docs/durable-wal.md).
+### `memory` mode
+
+In `memory` mode no WAL is created or attached. Appends write directly to the
+per-stream file (buffered write for JSON; zero-copy `socket→file` splice for
+binary) and ack immediately after the page-cache write — no `fdatasync`, no WAL
+staging. The per-stream file is the data; the `.meta` sidecar records the
+stream configuration and tail. On restart, the server runs the same sidecar pass
+it runs in `wal` mode (rebuild each stream from its file + sidecar) — there is
+no WAL to replay. Durability is delegated to replication (not yet built).
 
 ## Read path in detail
 
@@ -318,7 +349,6 @@ sizes, a planned follow-up for very large cold ranges.
 - **`--zero-copy` (Linux only, off by default)** — page-cache relay for binary appends.
   When enabled, an eligible binary `POST` (non-JSON, known `Content-Length`, not a
   producer dup/gap/close) relays the body socket→file→WAL entirely in the kernel:
-
   1. The body is `splice`'d from the socket into the stream's per-stream data file
      at the append offset (socket→file relay via an anonymous pipe).
   2. The WAL header (38 bytes, header CRC + `flags=0` / `payload_crc=0`) is written

@@ -1095,3 +1095,51 @@ mod zero_copy_torn_tail {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+// ===========================================================================
+// (9) MEMORY-MODE sidecar recovery (no WAL)
+// ===========================================================================
+
+/// In `memory` mode there is no WAL: appends write to the per-stream file
+/// (buffered) and ack on the page-cache write. On restart the server rebuilds
+/// state from the per-stream files + `.meta` sidecars (the existing sidecar
+/// pass that also runs in `wal` mode). This test confirms that a memory-mode
+/// server's data is present after a simulated restart — the Store reopen runs
+/// the sidecar pass and the stream is fully accessible.
+///
+/// This is host-runnable: it exercises the plain file I/O path (no splice, no
+/// Linux-only syscalls). The `DurabilityGuard::memory()` acquires the
+/// serialization mutex so this test cannot race the durability-mode global
+/// with other e2e tests.
+#[tokio::test]
+async fn memory_mode_data_survives_restart_via_sidecar() {
+    let _guard = DurabilityGuard::memory();
+    let dir = tmp("mem-sidecar");
+
+    // Phase 1: create + append in memory mode (no WAL attached).
+    {
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap(),
+        );
+        // Do NOT attach a WalSet — memory mode has no WAL.
+        create_stream(&store, "m/keep", OCTET).await;
+        append_acked(&store, "m/keep", OCTET, b"survive-me").await;
+        // `store` drops here without a WAL shutdown — simulates a restart.
+    }
+
+    // Phase 2: reopen — the sidecar pass rebuilds from the per-stream file +
+    // `.meta`; no WAL to replay.
+    let store2 = Arc::new(
+        Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap(),
+    );
+    let st = store2.get("m/keep").expect("stream recovered from sidecar");
+    let got = std::fs::read(&st.file_path).unwrap();
+    assert_eq!(got, b"survive-me", "memory-mode data survives restart via sidecar pass");
+    assert_eq!(
+        st.tail().bytes,
+        b"survive-me".len() as u64,
+        "recovered tail == appended bytes"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

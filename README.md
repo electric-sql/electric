@@ -69,12 +69,13 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 | `--data-dir`             | `$TMPDIR/durable-streams-rust` | storage directory; persists across restarts                     |
 | `--long-poll-timeout-ms` | `30000`                        | how long a `live=long-poll` request blocks before returning 204 |
 
-**Durability** — the server uses a single WAL-based durability path. An append is acked only after its record is durable in the sharded write-ahead log (per-shard group-commit `fdatasync`). See [ARCHITECTURE.md › Durability](ARCHITECTURE.md#durability).
+**Durability** — controls how appends are made durable. See [ARCHITECTURE.md › Durability modes](ARCHITECTURE.md#durability-modes).
 
-| Flag                  | Default   | Description                                                                             |
-| --------------------- | --------- | --------------------------------------------------------------------------------------- |
-| `--wal-shards`        | CPU cores | shard / group-commit-committer count; persisted on first run, a later run must match it |
-| `--wal-segment-bytes` | `128 MiB` | per-shard WAL segment size; lower it only to force segment rolls in tests/benches       |
+| Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                                            |
+| --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--durability`        | `wal`     | `wal` (default) — durable group-commit `fdatasync`; an append acks only after its record is in the sharded WAL. `memory` (Linux-only) — no WAL; binary appends use zero-copy `socket→file` splice, ack on the page-cache write; **NOT locally crash-durable** — durability is delegated to (future) replication. Exits 2 on non-Linux. |
+| `--wal-shards`        | CPU cores | (`wal` mode) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                                   |
+| `--wal-segment-bytes` | `128 MiB` | (`wal` mode) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                                         |
 
 **Read path** — performance knobs; none change protocol behaviour. Leave at defaults unless a benchmark says otherwise.
 
@@ -83,11 +84,11 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 | `--tail-cache-bytes` | `0` (Linux) / `65536` (macOS) | resident tail-cache cap in bytes; `0` disables it (every read resolves to the file via `sendfile`/`pread`). Off by default on Linux (`sendfile` is already fast), on by default on macOS (no `sendfile`).         |
 | `--read-offload`     | `tail`                        | Linux: where `sendfile` reads run — `inline` (async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (blocking pool). `tail` keeps a cold backfill's disk fault off the async workers. |
 
-**Zero-copy mode** — Linux only; off by default.
+**Zero-copy mode** — Linux only; off by default. `--zero-copy` applies to `wal` mode; in `memory` mode zero-copy `socket→file` splice is always used for binary appends.
 
 | Flag          | Default | Description                                                                                                                                  |
 | ------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--zero-copy` | off     | (Linux only) zero-copy binary appends via `splice` + `sendfile` reads; forces the resident tail cache off; exits 2 on non-Linux. |
+| `--zero-copy` | off     | (Linux only, `wal` mode) zero-copy binary appends via `splice` + `sendfile` reads; forces the resident tail cache off; exits 2 on non-Linux. |
 
 When `--zero-copy` is on, eligible binary appends relay the request body socket→file→WAL entirely in the kernel via `splice(2)` — no userspace copy of the payload. The resident tail cache is forced off (incompatible with the page-cache relay). JSON appends and any edge-case (producer dup/gap, closed stream, content-type mismatch) fall back to the normal buffered path transparently. Reads are served via `sendfile(2)` as normal. On non-Linux platforms the flag exits with status 2.
 
