@@ -83,7 +83,7 @@ Visibility vs durability are deliberately decoupled: the bytes are in the page c
 
 The server supports two durability modes, chosen at startup via `--durability`.
 
-**`wal` (default)** — durable, single-node no-loss durability via a sharded write-ahead log. An append acks only after its record is durable in the WAL (group-commit `fdatasync`). This is the safe default for any deployment where local disk loss must not cause data loss. See [`durable-wal.md`](../../docs/durable-wal.md) for the full design.
+**`wal` (default)** — durable, single-node no-loss durability via a sharded write-ahead log. An append acks only after its record is durable in the WAL (group-commit `fdatasync`). This is the safe default for any deployment where local disk loss must not cause data loss. See the `wal` mode section below for the design.
 
 **`memory` (Linux-only)** — no WAL, no `fsync`: binary appends move `socket→file` via `splice(2)` (zero-copy in the kernel); JSON appends are buffered writes; ack fires on the page-cache write. The per-stream files are the only durable-enough record, and recovery is the existing sidecar pass (rebuild stream state from the per-stream files + `.meta` sidecars). **NOT locally crash-durable** — a power loss or kernel panic can lose any un-fsynced page. Durability is delegated to (future) replication. Exits with status 2 on non-Linux.
 
@@ -96,8 +96,8 @@ The server supports two durability modes, chosen at startup via `--durability`.
     "never" describes the append-ack path — appends never `fdatasync`.
     The stream CLOSE control op is the exception: in both modes it fsyncs the `.meta`
     sidecar (`write_meta_sync(…, durable=true)`) before exposing EOF, so a close is
-    durable even in `memory` mode while the data behind it is not. See
-    [LIMITATIONS.md](LIMITATIONS.md#--durability-memory-is-not-locally-crash-durable).
+    durable even in `memory` mode while the data behind it is not — a crash can
+    recover `closed=true` with a tail shorter than a pre-crash read offset.
 
 ### `wal` mode
 

@@ -197,7 +197,7 @@ git push origin server-rust-v0.1.0
 
 Both registries authenticate via OIDC trusted publishing, so the workflow stores
 no registry tokens. A one-time manual bootstrap is required before the first
-tag-driven release — see [the bootstrap runbook](./RELEASING.md).
+tag-driven release.
 
 ---
 
