@@ -1,6 +1,6 @@
 # Limitations & planned work
 
-## WAL append is not zero-copy (planned)
+## WAL append framing copy (partially addressed)
 
 Each binary append reads the body into a userspace heap buffer, writes it to the
 per-stream file (the read view), then **copies it again** into a framed
@@ -18,13 +18,28 @@ destination (the per-stream file) and so cannot also produce the WAL record: a
 WAL append needs the same bytes in a second place (the WAL segment), and
 `splice` consumes the socket once.
 
-### Planned
+### Implemented: `--zero-copy` (page-cache relay, not tee)
+
+The WAL zero-copy path is now implemented as the optional `--zero-copy` flag
+(Linux only). Rather than `tee(2)` (which was considered but not chosen — `tee`
+fans out the pipe into two destinations but requires the entire payload to fit in
+the pipe buffer atomically, and does not support positioned writes to the WAL
+segment), the approach is a **page-cache relay**:
+
+1. `splice` the body socket → per-stream file (at the append offset, via pipe).
+2. Write the 33-byte WAL header at the reserved WAL segment offset.
+3. `splice` the just-written hot file bytes → WAL segment payload offset (via pipe).
+
+Because the WAL uses **header-only CRC** (no payload checksum), the payload
+bytes never need to pass through userspace. Crash safety relies on the
+file-before-WAL write order (step 1 before step 3): a crash between them leaves
+a torn WAL record, which recovery detects and truncates from the per-stream file.
+See [ARCHITECTURE.md](ARCHITECTURE.md#optional-fast-paths--observability) for
+the full design, and `zero_copy_torn_tail_recovered_by_replay` for the crash test.
+
+### Still planned
 
 - **(a) easy** — vectored write (`pwritev` of `[header_iov, payload_iov]`) to
-  drop the header+payload heap copy on the WAL segment write.
-- **(b) zero-copy for WAL** — `socket → pipe`, then `tee(2)` the pipe into two,
-  `splice` one copy to the per-stream file and the other to the WAL segment
-  (after a positioned write of the 33-byte framed header). Feasible because the
-  WAL uses **header-only CRC** (B-light framing): the payload is never
-  checksummed, so the server never needs the payload bytes in userspace. This is
-  the WAL-mode successor to the removed `--splice-appends`.
+  drop the header+payload heap copy on the WAL segment write. Complementary to
+  `--zero-copy` (the buffered path still incurs the framing copy; `pwritev`
+  would eliminate it there without requiring the page-cache relay).

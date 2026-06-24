@@ -140,6 +140,14 @@ pub struct Shard {
     /// (propagates a `Result::Err`) rather than panicking the process.
     #[cfg(test)]
     fail_next_write: std::sync::atomic::AtomicBool,
+    /// Test-only fault injection for the zero-copy splice path: when set, the
+    /// NEXT `reserve_for_splice` call writes the WAL header successfully but then
+    /// returns an error (simulating a crash after the socket→file splice completes
+    /// but before the file→WAL payload splice). The lsn stays as a permanent gap
+    /// (mark_staged is never called), so the committer cannot advance `durable_lsn`
+    /// past it — the torn WAL record scenario. Used by `zero_copy_torn_tail` tests.
+    #[cfg(test)]
+    fail_next_wal_splice: std::sync::atomic::AtomicBool,
 }
 
 /// Name of the per-shard checkpoint-lsn file: `<shard_dir>/checkpoint` (plain
@@ -216,6 +224,8 @@ impl Shard {
             on_stage: Mutex::new(None),
             #[cfg(test)]
             fail_next_write: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            fail_next_wal_splice: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -486,6 +496,19 @@ impl Shard {
             let seg = Arc::clone(&g.active);
             (lsn, off, seg)
         };
+
+        // Test-only fault injection for the zero-copy torn-tail scenario: fire
+        // BEFORE the WAL header write to simulate a crash between step 3 (socket→
+        // file splice, per-stream file has the bytes) and step 4 (file→WAL payload
+        // splice). The lsn is reserved (a gap in the watermark) but no WAL bytes
+        // are written — the per-stream file carries the bytes but the WAL has no
+        // record, so the durable frontier ends at the last whole record before this
+        // lsn. Recovery sees the per-stream file as longer than the frontier and
+        // truncates it. `mark_staged` must NOT be called after this error.
+        #[cfg(test)]
+        if self.fail_next_wal_splice.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            return Err(io::Error::other("injected WAL splice failure (zero-copy torn-tail test)"));
+        }
 
         // Write ONLY the framed header; the payload is spliced in by the caller.
         let mut hdr = Vec::with_capacity(super::codec::HEADER_LEN);
@@ -1008,6 +1031,17 @@ impl Shard {
     #[cfg(test)]
     pub fn fail_next_write(&self) {
         self.fail_next_write
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Test-only: arm the next `reserve_for_splice` to simulate a crash after the
+    /// WAL header is written but before the file→WAL payload splice completes (see
+    /// `fail_next_wal_splice`). Used by the zero-copy torn-tail crash test to prove
+    /// that a half-written splice append (bytes in the per-stream file but not in
+    /// the durable WAL) is discarded by recovery.
+    #[cfg(test)]
+    pub fn fail_next_wal_splice(&self) {
+        self.fail_next_wal_splice
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 

@@ -83,6 +83,14 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 | `--tail-cache-bytes` | `0` (Linux) / `65536` (macOS) | resident tail-cache cap in bytes; `0` disables it (every read resolves to the file via `sendfile`/`pread`). Off by default on Linux (`sendfile` is already fast), on by default on macOS (no `sendfile`).         |
 | `--read-offload`     | `tail`                        | Linux: where `sendfile` reads run — `inline` (async worker), `tail` (live tail inline, catch-up on the blocking pool), `always` (blocking pool). `tail` keeps a cold backfill's disk fault off the async workers. |
 
+**Zero-copy mode** — Linux only; off by default.
+
+| Flag          | Default | Description                                                                                                                                  |
+| ------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--zero-copy` | off     | (Linux only) zero-copy binary appends via `splice` + `sendfile` reads; forces the resident tail cache off; exits 2 on non-Linux. |
+
+When `--zero-copy` is on, eligible binary appends relay the request body socket→file→WAL entirely in the kernel via `splice(2)` — no userspace copy of the payload. The resident tail cache is forced off (incompatible with the page-cache relay). JSON appends and any edge-case (producer dup/gap, closed stream, content-type mismatch) fall back to the normal buffered path transparently. Reads are served via `sendfile(2)` as normal. On non-Linux platforms the flag exits with status 2.
+
 **Cold-storage tier** — off by default; see [Tiered storage](#tiered-storage-cold-offload). With `--tier off` the server is byte-identical to a single-file deployment.
 
 | Flag                                          | Default    | Description                                                                              |

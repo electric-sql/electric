@@ -804,3 +804,137 @@ async fn strict_created_dir_reopens_wal_only_without_data_loss() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ===========================================================================
+// (8) ZERO-COPY TORN TAIL — crash between socket→file splice and file→WAL splice
+// ===========================================================================
+// Linux-only: the zero-copy path uses splice(2) which is Linux-specific.
+// On macOS/other this module is cfg'd out — the test still compiles for the
+// Linux target (verified by `cargo check --target x86_64-unknown-linux-gnu`)
+// and runs in Docker against a Linux kernel.
+
+/// Simulate a crash that occurs AFTER the socket→file splice (step 3) but
+/// BEFORE the file→WAL payload splice (step 4) completes.
+///
+/// The crash-safety invariant of the `--zero-copy` append path is that the
+/// per-stream file is written BEFORE the WAL payload. A crash between these
+/// two steps leaves the file with more bytes than the WAL's durable frontier:
+///
+///   step 3: bytes spliced socket → per-stream file  ← done (page cache)
+///   CRASH HERE
+///   step 4: bytes spliced file → WAL segment payload ← never completes
+///   step 5: `mark_staged` → committer fdatasync → ack ← never happens
+///
+/// Recovery detects the torn tail: the WAL has a header-only torn record
+/// (payload absent → the decoder stops there), so the durable frontier does
+/// not include this record. The per-stream file is longer than the frontier →
+/// recovery truncates it back. The half-append is gone and was never acked.
+///
+/// The `fail_next_wal_splice` seam on the shard writes the WAL header but
+/// then returns an error (simulating the crash mid-payload-splice). The lsn
+/// is a permanent gap (mark_staged never called), so the committer cannot
+/// advance `durable_lsn` past it — a realistic torn-WAL-record scenario.
+#[cfg(all(test, target_os = "linux"))]
+mod zero_copy_torn_tail {
+    use super::*;
+
+    #[tokio::test]
+    async fn zero_copy_torn_tail_recovered_by_replay() {
+        let dir = tmp("zero-copy-torn");
+
+        // Boot a 1-shard WAL server and create a binary (non-JSON) stream.
+        let h = Harness::boot(&dir, Some(1), 1).unwrap();
+        create_stream(&h.store, "zc", OCTET).await;
+
+        // Two genuinely-acked records through the real handler path — these become
+        // the durable frontier the torn tail must be truncated back to.
+        append_acked(&h.store, "zc", OCTET, b"durable-one|").await;
+        append_acked(&h.store, "zc", OCTET, b"durable-two|").await;
+        let durable: &[u8] = b"durable-one|durable-two|";
+
+        // --- Simulate the zero-copy torn-tail scenario ---
+        //
+        // The "torn" append: its payload reaches the per-stream FILE (step 3
+        // complete) but the WAL payload NEVER lands (crash between step 3 and
+        // step 4). We reproduce this as follows:
+        //
+        // (a) Write the payload bytes directly to the per-stream file, as the
+        //     socket→file splice would have (step 3 done).
+        // (b) Arm `fail_next_wal_splice`, then call `reserve_for_splice`: the
+        //     shard writes the WAL header (33 bytes), then the fault fires and
+        //     returns Err before the payload splice runs. `mark_staged` is never
+        //     called, so the lsn is a permanent gap — the WAL decoder sees a
+        //     header-only torn record and stops, leaving the durable frontier
+        //     at the end of the two acked records.
+        let torn_payload = b"zero-copy-torn-never-durable|";
+
+        let st = h.store.get("zc").unwrap_or_else(|| panic!("stream zc not found"));
+        let stream_id = st.id;
+
+        // (a) Per-stream file now has the torn bytes (step 3 complete).
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&st.file_path)
+                .unwrap();
+            f.write_all(torn_payload).unwrap();
+            f.sync_all().unwrap();
+        }
+
+        // (b) Arm the seam: reserve_for_splice will write the WAL header, then
+        // return Err. The lsn is never marked staged → permanent gap → committer
+        // cannot advance durable_lsn past the torn header.
+        let shard = Arc::clone(h.walset.shard_for(stream_id));
+        shard.fail_next_wal_splice();
+        // `stream_offset` is the logical pre-append tail — the WAL record header
+        // records this as the write position for recovery's file_pos inversion.
+        let stream_offset = st.shared.read().unwrap().tail;
+        let splice_result = shard.reserve_for_splice(
+            crate::wal::codec::RecordKind::Append,
+            stream_id,
+            stream_offset,
+            torn_payload.len(),
+        );
+        assert!(
+            splice_result.is_err(),
+            "reserve_for_splice must return Err (fault seam fired)"
+        );
+
+        // Confirm the file carries the torn tail before crash.
+        let file_len_before = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(
+            file_len_before as usize,
+            durable.len() + torn_payload.len(),
+            "per-stream file has the torn tail bytes before recovery"
+        );
+
+        // Crash: abort committers + drop store + walset without graceful shutdown.
+        drop(st);
+        h.crash();
+
+        // --- Reopen with the full startup recovery sequence ---
+        let h2 = Harness::boot(&dir, None, 1).unwrap();
+
+        // (a) The per-stream file is truncated to the durable frontier: the torn
+        //     payload bytes that reached the file (step 3) are gone.
+        let got = stream_file_bytes(&h2.store, "zc");
+        assert_eq!(
+            got, durable,
+            "zero-copy torn tail: recovery truncated the per-stream file to the durable frontier; \
+             the half-append bytes are gone"
+        );
+
+        // (b) The stream tail equals the durable frontier — the torn record is
+        //     not acked, not visible, not durable.
+        let st2 = h2.store.get("zc").unwrap_or_else(|| panic!("stream zc not found after recovery"));
+        assert_eq!(
+            st2.tail().bytes,
+            durable.len() as u64,
+            "zero-copy torn tail: stream tail == durable frontier (torn record not acked)"
+        );
+
+        h2.crash();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

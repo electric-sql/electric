@@ -314,3 +314,29 @@ sizes, a planned follow-up for very large cold ranges.
   (group-commit health) and **`ds.read.offload.wait`** (cold-read pool pressure),
   alongside fsync/lock-wait/append/read latency histograms and the tail-cache hit
   ratio. This is how you watch the levers above in production.
+
+- **`--zero-copy` (Linux only, off by default)** — page-cache relay for binary appends.
+  When enabled, an eligible binary `POST` (non-JSON, known `Content-Length`, not a
+  producer dup/gap/close) relays the body socket→file→WAL entirely in the kernel:
+
+  1. The body is `splice`'d from the socket into the stream's per-stream data file
+     at the append offset (socket→file relay via an anonymous pipe).
+  2. The WAL header (33 bytes, header-only CRC) is written at the reserved WAL
+     segment offset.
+  3. The just-written hot file bytes are `splice`'d file→WAL segment at the payload
+     offset (file→WAL relay via an anonymous pipe).
+  4. The committer `fdatasync`s the segment, advances `durable_lsn`, and the ack
+     returns.
+
+  **Crash safety (torn-tail invariant):** the per-stream file is always written
+  BEFORE the WAL payload (step 1 before step 3). A crash between these two steps
+  leaves the file with more bytes than the WAL's durable frontier — a torn record.
+  Recovery detects this: the WAL decoder stops at the header-only torn record, and
+  `reconcile_tail` truncates the per-stream file back to the durable frontier. The
+  half-append is gone and is never acked. This invariant is positive-tested by
+  `zero_copy_torn_tail_recovered_by_replay` (Linux-gated, runs in Docker).
+
+  The resident tail cache is forced off under `--zero-copy` (the page-cache relay's
+  write is in-kernel via `splice`, not through any in-process buffer). Reads are
+  served via `sendfile(2)` as normal. Any non-eligible append falls back to the
+  buffered path transparently.
