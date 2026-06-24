@@ -142,8 +142,6 @@ Durable: in `wal` mode (the default), an append returns only after its record is
 
 In `memory` mode there is no WAL and no WAL replay. Recovery is a sidecar pass: each stream is rebuilt from its per-stream data file and `.meta` sidecar; durability is delegated to (future) replication.
 
-**Not implemented: subscriptions / the `__ds` control plane.** Webhook and pull-wake subscriptions (the protocol's `__ds` routes, Ed25519-signed delivery, JWKS) are not part of this server. Clients consume streams directly via long-poll / SSE; if you need push delivery, run it as a separate component on top.
-
 ## How it's built
 
 - **Contiguous wire-byte storage** — each stream's data file holds exactly the bytes that go on the wire, so a catch-up read is a literal byte range. No reframing, no per-message copies.
@@ -176,8 +174,7 @@ RUST_SERVER_URL=http://localhost:4562 pnpm exec vitest run \
   --config packages/server-rust/conformance/vitest.config.ts
 ```
 
-The core protocol suite passes; the subscription tests are out of scope (the `__ds`
-control plane is not implemented — see above).
+The core protocol suite passes.
 
 ## Releasing
 

@@ -10,13 +10,13 @@
  *     RUST_SERVER_URL=http://localhost:4562 vitest run \
  *       --config packages/server-rust/conformance/vitest.config.ts
  */
-import { spawn } from "node:child_process"
-import { mkdtempSync } from "node:fs"
-import { tmpdir } from "node:os"
-import * as path from "node:path"
-import { afterAll, beforeAll, describe } from "vitest"
-import { runConformanceTests } from "../../server-conformance-tests/src/index.js"
-import type { ChildProcess } from "node:child_process"
+import { spawn } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import * as path from 'node:path'
+import { afterAll, beforeAll, describe } from 'vitest'
+import { runConformanceTests } from '@durable-streams/server-conformance-tests'
+import type { ChildProcess } from 'node:child_process'
 
 // Manual mode: run against an externally-started server. Otherwise spawn our own.
 const externalUrl = process.env.RUST_SERVER_URL
@@ -26,9 +26,8 @@ const longPollTimeoutMs = 500
 const config = {
   baseUrl: externalUrl ?? `http://localhost:${port}`,
   longPollTimeoutMs,
-  // The Rust server implements the core protocol only; the `__ds` subscription
-  // control plane is out of scope (see PR #387 / README). Skip that suite here
-  // rather than report it as failing.
+  // This server implements the core protocol only; the subscription/control-plane
+  // suite is out of scope, so skip it rather than report it as failing.
   subscriptions: false,
 }
 
