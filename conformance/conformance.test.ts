@@ -49,7 +49,10 @@ beforeAll(async () => {
     // RUST_SERVER_ARGS="--durability memory" or "--read-offload always" or
     // "--tail-cache-bytes 65536". Whitespace-separated; empty = the default
     // (wal, resident cache off on Linux).
-    const extraArgs = (process.env.RUST_SERVER_ARGS ?? ``).trim().split(/\s+/).filter(Boolean)
+    const extraArgs = (process.env.RUST_SERVER_ARGS ?? ``)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
     server = spawn(
       binary,
       [
