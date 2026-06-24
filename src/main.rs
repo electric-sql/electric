@@ -32,6 +32,52 @@ fn parse_val<T: std::str::FromStr>(o: Option<String>, flag: &str) -> T {
     })
 }
 
+/// True if `<data_dir>/wal` holds a `*.wal` segment that contains at least one
+/// RECORD (`wal/<shard>/*.wal` layout, or directly under `wal/`). Used to fail
+/// fast when `--durability memory` is pointed at a data dir left behind by a
+/// previous `--durability wal` run — memory mode never opens/replays a WAL, so it
+/// would silently ignore those records (and drop any not yet folded into the
+/// per-stream files). A clean rejection beats a silent divergence.
+///
+/// A segment with a record begins with a non-zero header (`[0..4)` framed `len`,
+/// `[8..16)` `lsn ≥ 1`); a fresh/`fallocate`-zeroed segment reads as all-zero. We
+/// therefore ignore empty (never-written or reset) segments — but this is
+/// FAIL-CLOSED: records that were already checkpointed into the per-stream files
+/// still physically occupy the segment until the next startup recycles it, so
+/// this can over-report (reject a dir that is actually safe), never under-report.
+fn wal_dir_has_segments(wal_dir: &std::path::Path) -> bool {
+    // A segment holds a record iff its first 16 header bytes are not all zero.
+    fn has_record(path: &std::path::Path) -> bool {
+        use std::io::Read;
+        let Ok(mut f) = std::fs::File::open(path) else {
+            return false;
+        };
+        let mut hdr = [0u8; 16];
+        matches!(f.read_exact(&mut hdr), Ok(())) && hdr != [0u8; 16]
+    }
+    let is_wal = |p: &std::path::Path| p.extension().and_then(|e| e.to_str()) == Some("wal");
+    let Ok(entries) = std::fs::read_dir(wal_dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if is_wal(&path) && has_record(&path) {
+            return true;
+        }
+        if path.is_dir() {
+            if let Ok(inner) = std::fs::read_dir(&path) {
+                for e in inner.flatten() {
+                    let p = e.path();
+                    if is_wal(&p) && has_record(&p) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Raise the open-file-descriptor soft limit to the hard limit at startup. Each
 /// connection costs ≥1 fd (plus per-stream data-file fds), so the default soft
 /// limit (commonly 1024) caps concurrency far below what the server can handle
@@ -171,6 +217,22 @@ fn main() {
     // Apply --durability memory AFTER the arg loop. On non-Linux, reject immediately.
     // On Linux, force the tail cache off (binary appends use the zero-copy socket→file splice).
     if handlers::durability() == handlers::DurabilityMode::Memory {
+        // Fail fast on a WAL left by a previous `--durability wal` run: memory mode
+        // never opens/replays it, so starting here would silently ignore those
+        // records (and drop any not yet folded into the per-stream files). Refuse
+        // rather than diverge quietly; the operator can replay with `--durability
+        // wal` first, or remove the `wal/` directory to discard it deliberately.
+        let wal_dir = data_dir.join("wal");
+        if wal_dir_has_segments(&wal_dir) {
+            eprintln!(
+                "error: --durability memory refuses to start: {} holds a WAL from a previous \
+                 --durability wal run. Memory mode would ignore it and could drop un-checkpointed \
+                 records. Replay it first with --durability wal, or remove {} to discard it.",
+                wal_dir.display(),
+                wal_dir.display()
+            );
+            std::process::exit(2);
+        }
         #[cfg(not(target_os = "linux"))]
         {
             eprintln!("--durability memory is Linux-only (zero-copy socket→file)");

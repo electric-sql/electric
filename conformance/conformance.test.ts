@@ -46,7 +46,7 @@ beforeAll(async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), `ds-rust-conformance-`))
     // Extra server flags for the run-configuration matrix (CI runs the suite
     // once per config — see README "Run-configuration matrix" + ci.yml). E.g.
-    // RUST_SERVER_ARGS="--durability memory" or "--zero-copy" or
+    // RUST_SERVER_ARGS="--durability memory" or "--read-offload always" or
     // "--tail-cache-bytes 65536". Whitespace-separated; empty = the default
     // (wal, resident cache off on Linux).
     const extraArgs = (process.env.RUST_SERVER_ARGS ?? ``).trim().split(/\s+/).filter(Boolean)

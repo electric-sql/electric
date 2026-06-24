@@ -136,6 +136,13 @@ fn recover_shard(
     // below. Only streams with EITHER a persisted tail OR an in-range Append are
     // inserted, so we reconcile exactly the streams the WAL touched.
     let mut frontier: HashMap<u64, u64> = shard.read_durable_tails();
+    // (debug) Snapshot the persisted-tail seed and track the lowest replayed
+    // offset per stream, to assert that a stream reconstructed purely from
+    // replayed Appends covers `[file_base, frontier)` with no interior gap.
+    #[cfg(debug_assertions)]
+    let persisted_tails = frontier.clone();
+    #[cfg(debug_assertions)]
+    let mut min_applied: HashMap<u64, u64> = HashMap::new();
     // Captured replay error from inside the closure (the closure cannot return
     // `io::Result`). The first error aborts further application for this shard.
     let mut replay_err: Option<io::Error> = None;
@@ -167,6 +174,11 @@ fn recover_shard(
         let end = stream_offset + payload.len() as u64;
         let slot = frontier.entry(stream_id).or_insert(0);
         *slot = (*slot).max(end);
+        #[cfg(debug_assertions)]
+        {
+            let lo = min_applied.entry(stream_id).or_insert(u64::MAX);
+            *lo = (*lo).min(stream_offset);
+        }
     })?;
 
     if let Some(e) = replay_err {
@@ -190,6 +202,17 @@ fn recover_shard(
         if logical_tail < st.shared.read().unwrap().file_base {
             continue;
         }
+        // (debug) A stream rebuilt PURELY from replay (no persisted durable tail)
+        // must start at `file_base`; otherwise `[file_base, lowest_record)` is a
+        // torn interior prefix kept silently. Fail loudly in tests if a future
+        // compaction/`file_base` interaction breaks the contiguous-tiling premise.
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            persisted_tails.contains_key(stream_id)
+                || min_applied.get(stream_id).copied()
+                    == Some(st.shared.read().unwrap().file_base),
+            "WAL replay gap: stream {stream_id} rebuilt from replay does not start at file_base"
+        );
         reconcile_tail(st, logical_tail)?;
     }
     Ok(())
@@ -257,10 +280,12 @@ fn reconcile_tail(st: &StreamState, logical_tail: u64) -> io::Result<()> {
     #[cfg(test)]
     RECOVERY_FSYNCS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-    // Publish the reconciled tail to in-memory state.
+    // Publish the reconciled tail to in-memory state. The reconciled tail is the
+    // durable frontier, so the reader-observable `durable_tail` advances with it.
     let closed = {
         let mut s = st.shared.write().unwrap();
         s.tail = logical_tail;
+        s.durable_tail = logical_tail;
         s.closed_durable
     };
     // Refresh the reader-notification watch so any future subscriber observes the

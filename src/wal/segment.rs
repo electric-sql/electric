@@ -98,15 +98,8 @@ impl FileSegment {
         // The truncate changes file SIZE (metadata), so a plain fdatasync may not
         // persist it — use a full fsync (macOS F_FULLFSYNC, Linux fsync).
         #[cfg(target_os = "macos")]
-        // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
-        unsafe {
-            if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
-                return Ok(());
-            }
-            if libc::fsync(fd) == 0 {
-                return Ok(());
-            }
-            Err(io::Error::last_os_error())
+        {
+            macos_full_fsync(fd)
         }
         #[cfg(not(target_os = "macos"))]
         // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
@@ -117,6 +110,28 @@ impl FileSegment {
                 Err(io::Error::last_os_error())
             }
         }
+    }
+}
+
+/// macOS F_FULLFSYNC with a plain-`fsync` fallback. On double failure the error
+/// preserves the ORIGINAL F_FULLFSYNC errno in context — the fallback's errno
+/// alone would mislead durability diagnostics. (Shared by `seal_to` and
+/// `FileSegment::fdatasync`; mirrors `store::barrier_fsync`.)
+#[cfg(target_os = "macos")]
+fn macos_full_fsync(fd: libc::c_int) -> io::Result<()> {
+    // SAFETY: callers pass a valid open fd for the lifetime of the call.
+    unsafe {
+        if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
+            return Ok(());
+        }
+        let fullfsync_err = io::Error::last_os_error();
+        if libc::fsync(fd) == 0 {
+            return Ok(());
+        }
+        Err(io::Error::other(format!(
+            "F_FULLFSYNC failed ({fullfsync_err}); fallback fsync also failed ({})",
+            io::Error::last_os_error()
+        )))
     }
 }
 
@@ -157,15 +172,8 @@ impl SegmentWriter for FileSegment {
         // F_FULLFSYNC for a true flush-to-platter (power-loss durable); Linux
         // uses fdatasync.
         #[cfg(target_os = "macos")]
-        // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
-        unsafe {
-            if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
-                return Ok(());
-            }
-            if libc::fsync(fd) == 0 {
-                return Ok(());
-            }
-            Err(io::Error::last_os_error())
+        {
+            macos_full_fsync(fd)
         }
         #[cfg(not(target_os = "macos"))]
         // SAFETY: `fd` is a valid open fd for the lifetime of `self.file`.
@@ -177,7 +185,6 @@ impl SegmentWriter for FileSegment {
             }
         }
     }
-
 }
 
 #[cfg(test)]

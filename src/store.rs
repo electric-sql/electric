@@ -46,8 +46,19 @@ pub struct StreamConfig {
 }
 
 pub struct Shared {
-    /// Logical tail offset (file_base + bytes written to this stream's own file).
+    /// Writer-facing logical tail (file_base + bytes written to this stream's own
+    /// file). Advanced under the appender lock the instant bytes hit the page
+    /// cache, so it can be AHEAD of what is durable. NOT what readers observe —
+    /// see `durable_tail`.
     pub tail: u64,
+    /// Reader-observable tail: advanced only AFTER the appended bytes are durable
+    /// (in `wal` mode, after the WAL `fdatasync`; in `memory` mode, immediately —
+    /// the page-cache write IS the ack). `tail()` reports this so a live/catch-up
+    /// reader never observes (and acts on) bytes a crash could roll back
+    /// (PROTOCOL.md §4.1) — the same durability-before-visibility ordering the
+    /// close path applies via `closed_durable`. On recovery it equals the
+    /// reconciled durable tail (durable by definition).
+    pub durable_tail: u64,
     /// Logical offset of the live data file's first byte. Equals `base_offset`
     /// until the first compaction, then advances to the sealed watermark as the
     /// redundant sealed prefix is reclaimed. Live-region reads map
@@ -104,10 +115,16 @@ pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
         if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
             return Ok(());
         }
+        // Preserve the F_FULLFSYNC cause before falling back; on double failure the
+        // fallback fsync's errno alone would mislead durability diagnostics.
+        let fullfsync_err = std::io::Error::last_os_error();
         if libc::fsync(fd) == 0 {
             return Ok(());
         }
-        Err(std::io::Error::last_os_error())
+        Err(std::io::Error::other(format!(
+            "F_FULLFSYNC failed ({fullfsync_err}); fallback fsync also failed ({})",
+            std::io::Error::last_os_error()
+        )))
     }
     #[cfg(not(target_os = "macos"))]
     unsafe {
@@ -259,8 +276,9 @@ impl StreamState {
     pub fn tail(&self) -> Tail {
         let s = self.shared.read().unwrap();
         Tail {
-            // Readers observe EOF only once the closure is durable.
-            bytes: s.tail,
+            // Readers observe bytes only once they are durable, and EOF only once
+            // the closure is durable.
+            bytes: s.durable_tail,
             closed: s.closed_durable,
         }
     }
@@ -336,10 +354,13 @@ impl Store {
             use std::os::unix::fs::PermissionsExt;
             let _ = std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o700));
         }
+        // Intentional u128→u64 truncation: this is only an id seed, and it is
+        // masked by `& MAX_SAFE_INT` below. Non-panicking on a pre-1970 clock
+        // (unlike `.unwrap()`), matching the `unix_secs` helper's discipline.
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
         let blobstore = build_blobstore(&tier_config, &data_dir)?;
         let store = Store {
             streams: DashMap::new(),
@@ -529,6 +550,8 @@ impl Store {
             appender: AsyncMutex::new(Appender { file: file.clone(), written }),
             shared: RwLock::new(Shared {
                 tail,
+                // Recovered/opened tail is durable by definition.
+                durable_tail: tail,
                 file_base,
                 file,
                 closed: meta.closed,
@@ -696,6 +719,7 @@ impl Store {
             appender: AsyncMutex::new(Appender { file: file.clone(), written: 0 }),
             shared: RwLock::new(Shared {
                 tail: base_offset,
+                durable_tail: base_offset,
                 file_base: base_offset,
                 file,
                 closed,
@@ -1130,6 +1154,8 @@ mod tier_tests {
         let mut s = st.shared.write().unwrap();
         let tail = s.file_base + ap.written;
         s.tail = tail;
+        // Test shortcut: treat the write as immediately durable/visible.
+        s.durable_tail = tail;
     }
 
     /// Read a logical range back through the placement-aware resolver, exactly as
@@ -1881,6 +1907,162 @@ mod tier_tests {
         let payload: Vec<u8> = (0..200 * 1024).map(|i| (i % 251) as u8).collect();
         let got = read_logical(&st, 0, payload.len() as u64).await;
         assert_eq!(got, payload, "post-recovery cold read mismatch");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression for the WAL read-before-durable bug: a reader (via `tail()`)
+    /// must observe bytes only once they are DURABLE. During the WAL-fsync window
+    /// the writer tail `s.tail` runs ahead of the reader-observable `durable_tail`
+    /// (set in `write_wire` vs published in `publish_durable_tail` after the WAL
+    /// `fdatasync`). `tail()` must report the durable frontier so a live/catch-up
+    /// reader never observes (and acts on) bytes a crash could roll back
+    /// (PROTOCOL.md §4.1).
+    #[tokio::test]
+    async fn reader_tail_tracks_durable_not_writer_tail() {
+        let dir = tmp_dir("durable-tail");
+        let store =
+            Arc::new(Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap());
+        let st = match store.create("s/dur", octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(st) => st,
+            _ => panic!("expected created"),
+        };
+
+        // Fresh stream: writer and durable tails agree at 0.
+        assert_eq!(st.tail().bytes, 0);
+
+        // Simulate `write_wire`: bytes hit the page cache and the WRITER tail
+        // advances, but durability has NOT been published (WAL fsync pending).
+        let wire = b"hello world";
+        {
+            use std::io::Write;
+            let mut ap = st.appender.lock().await;
+            (&*ap.file).write_all(wire).unwrap();
+            ap.written += wire.len() as u64;
+            let mut s = st.shared.write().unwrap();
+            s.tail = s.file_base + ap.written;
+            // `durable_tail` intentionally NOT advanced — fsync still pending.
+        }
+
+        // A reader must NOT observe the not-yet-durable bytes.
+        assert_eq!(
+            st.tail().bytes,
+            0,
+            "reader observed bytes before they were durable"
+        );
+
+        // Simulate `publish_durable_tail` after the WAL fsync succeeds.
+        {
+            let mut s = st.shared.write().unwrap();
+            s.durable_tail = s.tail;
+        }
+
+        // Durable now → reader-visible.
+        assert_eq!(st.tail().bytes, wire.len() as u64);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression for the hard-delete GC race: after a hard delete, every
+    /// offloaded remote object (and any staged local chunk) backing the stream
+    /// must be reclaimed — no orphans. Guards `gc_remote_segments` and its
+    /// `deleted`-flag coordination with seal/offload.
+    #[tokio::test]
+    async fn hard_delete_reclaims_offloaded_segments() {
+        fn count_files(root: &std::path::Path) -> usize {
+            let mut n = 0;
+            if let Ok(rd) = std::fs::read_dir(root) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        n += count_files(&p);
+                    } else {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        }
+
+        let dir = tmp_dir("gc-reclaim");
+        let store =
+            Arc::new(Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap());
+        let st = match store.create("s/gc", octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+
+        // Append > 2 segments and offload them to the (local) remote tier.
+        let total = 200 * 1024usize;
+        let payload: Vec<u8> = (0..total).map(|i| (i % 251) as u8).collect();
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+        store.maybe_seal(&st).await;
+
+        let cold = dir.join("cold");
+        assert!(
+            count_files(&cold) >= 1,
+            "expected offloaded remote objects before delete"
+        );
+
+        // Hard delete (ref_count == 0 → hard delete → gc_remote_segments).
+        store.delete_or_soft_delete(&st);
+
+        // The GC runs as a detached task — wait for it to reclaim everything.
+        let mut waited = 0;
+        while count_files(&cold) > 0 && waited < 300 {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            waited += 1;
+        }
+        assert_eq!(
+            count_files(&cold),
+            0,
+            "orphaned remote objects after hard delete"
+        );
+        assert_eq!(
+            count_files(&dir.join("segments")),
+            0,
+            "leaked local chunk files after hard delete"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Once a stream is hard-deleted (`deleted` set), a seal pass must bail
+    /// without staging new chunk files or manifest entries — otherwise it would
+    /// race the GC reclaim and leak. (On the pre-fix code, with no `deleted`
+    /// flag, `maybe_seal` would proceed and stage segments here.)
+    #[tokio::test]
+    async fn seal_bails_after_hard_delete_flag() {
+        let dir = tmp_dir("gc-seal-bail");
+        let store =
+            Arc::new(Store::new_with_tier(dir.clone(), local_tier(&dir, 64 * 1024)).unwrap());
+        let st = match store.create("s/gcseal", octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        // Enough unsealed data for several seals.
+        let payload: Vec<u8> = (0..200 * 1024).map(|i| (i % 251) as u8).collect();
+        for chunk in payload.chunks(8 * 1024) {
+            append_wire(&st, chunk).await;
+        }
+
+        // Hard delete arrived before the seal pass runs.
+        st.tier.manifest.lock().unwrap().deleted = true;
+
+        // The seal pass must be a no-op now.
+        store.maybe_seal(&st).await;
+
+        {
+            let m = st.tier.manifest.lock().unwrap();
+            assert_eq!(m.segments.len(), 0, "seal staged segments despite deleted");
+            assert_eq!(m.sealed_offset, 0, "seal advanced watermark despite deleted");
+        }
+        let seg_files = std::fs::read_dir(dir.join("segments"))
+            .map(|rd| rd.count())
+            .unwrap_or(0);
+        assert_eq!(seg_files, 0, "seal staged chunk files despite deleted");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

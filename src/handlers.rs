@@ -108,6 +108,10 @@ fn long_poll_timeout_dur() -> Duration {
 }
 
 const SSE_MAX_DURATION: Duration = Duration::from_secs(60);
+/// Idle keep-alive cadence for SSE: when no new data arrives, emit a periodic
+/// up-to-date control event so proxies/clients see liveness (still capped by
+/// `SSE_MAX_DURATION`). Matches the reference servers' periodic control emits.
+const SSE_KEEPALIVE: Duration = Duration::from_secs(15);
 const CACHEABLE: &str = "public, max-age=60, stale-while-revalidate=300";
 
 // ---------- response building ----------
@@ -159,7 +163,7 @@ struct Query {
     cursor: Option<u64>,
 }
 
-fn parse_query(q: Option<&str>) -> Query {
+fn parse_query(q: Option<&str>) -> Result<Query, &'static str> {
     let mut out = Query {
         offset: None,
         live: None,
@@ -172,16 +176,30 @@ fn parse_query(q: Option<&str>) -> Query {
                 .decode_utf8_lossy()
                 .to_string();
             match k {
-                "offset" => out.offset = Some(v),
+                // A duplicate `offset` is rejected (matches the Go/TS reference
+                // servers), not silently last-wins coalesced. `live`/`cursor`
+                // keep last-wins (the Go server reads them with a last-value
+                // getter and does not reject duplicates).
+                "offset" => {
+                    if out.offset.is_some() {
+                        return Err("multiple offset parameters not allowed");
+                    }
+                    out.offset = Some(v);
+                }
                 "live" => out.live = Some(v),
                 "cursor" => out.cursor = v.parse().ok(),
                 _ => {}
             }
         }
     }
-    out
+    Ok(out)
 }
 
+// Thin, intentional seams over the `Req` header accessors: every handler reads
+// headers through these two free functions, so the underlying header source (and
+// any future normalization — casing, trimming, multi-value policy) can change in
+// one place without touching call sites. Kept as free functions for uniform,
+// greppable call sites.
 fn header_str<'a>(req: &'a Req, name: &str) -> Option<&'a str> {
     req.header(name)
 }
@@ -347,7 +365,12 @@ fn parse_rfc3339(s: &str) -> Result<SystemTime, ()> {
 }
 
 async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
-    let content_type = header_str(&req, "content-type")
+    // Read Content-Type ONCE: `content_type_hdr` carries presence (used for fork
+    // inheritance / match below); `content_type` is the resolved value with the
+    // octet-stream default.
+    let content_type_hdr = header_str(&req, "content-type").map(|s| s.to_string());
+    let content_type = content_type_hdr
+        .as_deref()
         .unwrap_or("application/octet-stream")
         .to_string();
     let ttl_raw = header_str(&req, H_TTL).map(|s| s.to_string());
@@ -407,7 +430,6 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
     }
 
     // Resolve the fork source and the fork point (logical byte offset).
-    let content_type_hdr = header_str(&req, "content-type").map(|s| s.to_string());
     let mut parent: Option<Arc<StreamState>> = None;
     let mut base_offset: u64 = 0;
     let mut content_type = content_type;
@@ -457,6 +479,10 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
             0 => anchor,
             sub if src.is_json => {
                 // Sub-offset counts messages past the anchor; each message ends with ','.
+                // NOTE: this materializes the whole `[anchor, src_tail)` range to
+                // scan for the Nth comma, even for a small `sub` over a huge stream
+                // — O(tail) memory. Acceptable here: fork-create is a cold control
+                // op, not a hot path. A bounded-window scan would remove the cost.
                 let data = match read_range_bytes(&src, anchor, src_tail).await {
                     Ok(d) => d,
                     // A short/cold read must not be miscounted as a value boundary.
@@ -559,21 +585,28 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let lock_t0 = crate::telemetry::Timer::start();
                 let mut ap = st.appender.lock().await;
                 crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
-                if write_wire(&st, &mut ap, &wire).is_err() {
-                    return text_response(500, "write failed");
-                }
+                let new_tail = match write_wire(&st, &mut ap, &wire) {
+                    Ok(t) => t,
+                    Err(_) => return text_response(500, "write failed"),
+                };
                 let target = ap.written;
                 // Read `file_base` under the appender lock so a concurrent
                 // compaction that raises `file_base` + resets `ap.written` together
                 // can't desync it from `target`.
                 let stream_offset = wal_stream_offset(&st, target, &wire);
+                // Stage to the WAL UNDER the appender lock so per-stream LSN order
+                // matches byte order (see stage_for_durability); the slow
+                // durability wait runs after the lock is dropped.
+                let staged_lsn = match stage_for_durability(&store, &st, &wire, stream_offset) {
+                    Ok(lsn) => lsn,
+                    Err(_) => return text_response(500, "wal stage failed"),
+                };
                 drop(ap);
-                if maybe_sync_on_ack(&store, &st, &wire, stream_offset)
-                    .await
-                    .is_err()
-                {
-                    return text_response(500, "fsync failed");
+                if let Some(lsn) = staged_lsn {
+                    wait_durable_lsn(&store, &st, lsn).await;
                 }
+                // Durable now (wal) / page-cache written (memory): expose to readers.
+                publish_durable_tail(&st, new_tail, &wire);
             }
             let t = st.tail();
             let mut b = ResponseBuilder::new(201)
@@ -646,15 +679,28 @@ fn wal_stream_offset(st: &StreamState, target: u64, wire: &Bytes) -> u64 {
     st.shared.read().unwrap().file_base + target - wire.len() as u64
 }
 
-async fn maybe_sync_on_ack(
+/// Stage the append into the WAL, assigning its LSN. MUST be called while the
+/// appender lock is still held, so that PER STREAM the WAL LSN order matches the
+/// byte/file-write order. That ordering is load-bearing: the committer's durable
+/// watermark is a CONTIGUOUS-LSN cursor, so once LSN order tracks byte order,
+/// `wait_durable(lsn)` returning guarantees every lower-offset record of this
+/// stream is durable too — which is exactly what `publish_durable_tail` relies on
+/// when it exposes bytes up to a tail. Reserving the LSN off the appender lock
+/// (as a plain `drop(ap)` before staging would) lets a later-byte append win a
+/// LOWER LSN, so its `wait_durable` could fire while an earlier-byte (higher-LSN)
+/// record is still un-durable — exposing a non-durable interior range.
+///
+/// Returns the staged LSN, or `None` in memory mode (no WAL). The durability WAIT
+/// is done separately, off the lock, by `wait_durable_lsn` (the slow part).
+fn stage_for_durability(
     store: &Arc<Store>,
     st: &Arc<StreamState>,
     wire: &Bytes,
     stream_offset: u64,
-) -> std::io::Result<()> {
+) -> std::io::Result<Option<u64>> {
     // memory mode: no WAL — the page-cache file write IS the ack. No fsync, no stage.
     if durability() == DurabilityMode::Memory {
-        return Ok(());
+        return Ok(None);
     }
     let wal = store.wal.get().expect("WAL must be attached before serving");
     let shard = wal.shard_for(st.id);
@@ -668,21 +714,58 @@ async fn maybe_sync_on_ack(
         stream_offset,
         wire,
     )?;
-    shard.wait_durable(lsn).await;
-    Ok(())
+    Ok(Some(lsn))
 }
 
-fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<()> {
+/// Wait until `lsn` is durable (the WAL `fdatasync` has covered it). Runs OFF the
+/// appender lock — only the LSN reservation (`stage_for_durability`) needs the
+/// lock; the fsync wait must not serialize same-stream appenders.
+async fn wait_durable_lsn(store: &Arc<Store>, st: &Arc<StreamState>, lsn: u64) {
+    let wal = store.wal.get().expect("WAL must be attached before serving");
+    let shard = wal.shard_for(st.id);
+    shard.wait_durable(lsn).await;
+}
+
+/// Write the wire bytes to the stream's own file (page cache) and advance the
+/// WRITER tail `s.tail`. Returns the new logical tail. Does NOT make the bytes
+/// reader-visible: visibility is published by `publish_durable_tail` only after
+/// the bytes are durable (mirrors the close path's durability-before-visibility
+/// ordering — PROTOCOL.md §4.1). Adds no fsync: the per-stream file stays
+/// async/WAL-recoverable; the only durability barrier is the WAL `fdatasync`
+/// awaited in `wait_durable_lsn`.
+fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
     use std::io::Write;
     (&*ap.file).write_all(wire)?;
     ap.written += wire.len() as u64;
-    let tail;
+    let tail = {
+        let mut s = st.shared.write().unwrap();
+        let tail = s.file_base + ap.written;
+        s.tail = tail;
+        s.last_access = SystemTime::now();
+        tail
+    };
+    Ok(tail)
+}
+
+/// Expose freshly-appended bytes to readers AFTER they are durable (in `wal` mode
+/// `wait_durable_lsn` has awaited the WAL `fdatasync` for an LSN staged in byte
+/// order; in `memory` mode there is no WAL and the page-cache write IS the ack).
+/// Advances the reader-observable
+/// `durable_tail` MONOTONICALLY and, only when it actually advances, refreshes the
+/// tail-chunk cache and wakes live subscribers. The monotonic guard makes
+/// concurrent appenders (whose group-commit fsyncs may resolve out of order)
+/// safe: a later appender publishing the higher frontier first is fine (all
+/// lower bytes are durable too), and the earlier appender then no-ops.
+fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
     let closed;
     {
         let mut s = st.shared.write().unwrap();
-        tail = s.file_base + ap.written;
-        s.tail = tail;
-        s.last_access = SystemTime::now();
+        if tail <= s.durable_tail {
+            // A concurrent appender already published an equal/greater durable
+            // frontier — nothing to expose, and re-firing would regress the watch.
+            return;
+        }
+        s.durable_tail = tail;
         closed = s.closed_durable;
     }
     // Publish the resident chunk BEFORE waking subscribers, so a long-poll/SSE
@@ -690,11 +773,7 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
     // instead of racing ahead and falling back to a file read. The chunk spans
     // [tail - wire.len(), tail).
     st.set_last_chunk(tail - wire.len() as u64, wire.clone());
-    st.tail_tx.send_replace(Tail {
-        bytes: tail,
-        closed,
-    });
-    Ok(())
+    st.tail_tx.send_replace(Tail { bytes: tail, closed });
 }
 
 // ---------- POST (append) ----------
@@ -874,7 +953,9 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     {
         let s = st.shared.read().unwrap();
         if s.closed {
-            let tail = s.tail;
+            // Report the durable tail to clients (never an offset a crash could
+            // roll back) — same monotonicity contract as `tail()`.
+            let tail = s.durable_tail;
             if close_req {
                 if let Some(p) = &producer {
                     if let Some((cid, cep, cseq)) = &s.closed_by {
@@ -920,20 +1001,32 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         match outcome {
             ProducerOutcome::Accept => {}
             ProducerOutcome::Duplicate { last_seq } => {
-                let tail = st.shared.read().unwrap().tail;
+                // Gate Stream-Closed on the stream's ACTUAL durable-closed state
+                // (what readers observe), not on the retry request's close flag.
+                // This branch is past the already-closed early-return, so the
+                // stream is open here unless it was closed durably in between.
+                let (tail, closed) = {
+                    let s = st.shared.read().unwrap();
+                    (s.durable_tail, s.closed_durable)
+                };
                 let mut b = ResponseBuilder::new(204)
                     .h(H_NEXT_OFFSET, format_offset(tail))
                     .h(H_PRODUCER_EPOCH, p.epoch.to_string())
                     .h(H_PRODUCER_SEQ, last_seq.to_string());
-                if close_req {
+                if closed {
                     b = b.hs(H_CLOSED, "true");
                 }
                 ret!(b.body(empty()), Dup);
             }
             ProducerOutcome::StaleEpoch { current } => {
+                // Include the durable tail (matching the production Caddy server)
+                // so a fenced producer learns the current offset. Spec §5.2.1
+                // mandates only Producer-Epoch; Stream-Next-Offset is additive.
+                let tail = st.shared.read().unwrap().durable_tail;
                 ret!(
                     ResponseBuilder::new(403)
                         .h(H_PRODUCER_EPOCH, current.to_string())
+                        .h(H_NEXT_OFFSET, format_offset(tail))
                         .body(full("stale producer epoch")),
                     Conflict
                 );
@@ -961,7 +1054,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         let s = st.shared.read().unwrap();
         if let Some(last) = &s.last_seq_header {
             if seq.as_str() <= last.as_str() {
-                let tail = s.tail;
+                let tail = s.durable_tail;
                 drop(s);
                 // Body must read "Sequence conflict" to match the reference
                 // server: clients classify a 409 as a sequence conflict by the
@@ -976,9 +1069,15 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         }
     }
 
-    // Write + state updates.
-    if !wire.is_empty() && write_wire(&st, &mut ap, &wire).is_err() {
-        ret!(text_response(500, "write failed"), Conflict);
+    // Write + state updates. `new_tail` carries the writer tail to publish to
+    // readers only AFTER durability (below), so a live reader never observes
+    // bytes a crash could roll back (PROTOCOL.md §4.1).
+    let mut new_tail = None;
+    if !wire.is_empty() {
+        match write_wire(&st, &mut ap, &wire) {
+            Ok(t) => new_tail = Some(t),
+            Err(_) => ret!(text_response(500, "write failed"), Conflict),
+        }
     }
     {
         let mut s = st.shared.write().unwrap();
@@ -1012,16 +1111,28 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     // Read `file_base` under the appender lock so a concurrent compaction can't desync
     // it from `target`.
     let stream_offset = wal_stream_offset(&st, target, &wire);
+    // Stage to the WAL UNDER the appender lock so per-stream LSN order matches
+    // byte order (see stage_for_durability). A stage failure is not durable —
+    // error out (and skip the close commit below) rather than ack 2xx.
+    let staged_lsn = if !wire.is_empty() {
+        match stage_for_durability(&store, &st, &wire, stream_offset) {
+            Ok(lsn) => lsn,
+            Err(_) => ret!(text_response(500, "wal stage failed"), Conflict),
+        }
+    } else {
+        None
+    };
     drop(ap);
 
-    // Covering fsync failed: not durable. Error out (and skip the close commit
-    // below) rather than ack 2xx.
-    if !wire.is_empty()
-        && maybe_sync_on_ack(&store, &st, &wire, stream_offset)
-            .await
-            .is_err()
-    {
-        ret!(text_response(500, "fsync failed"), Conflict);
+    // Wait for durability off the lock before exposing the bytes.
+    if let Some(lsn) = staged_lsn {
+        wait_durable_lsn(&store, &st, lsn).await;
+    }
+
+    // Durable now (wal) / page-cache written (memory): expose the new bytes to
+    // readers, mirroring the close-visibility ordering below.
+    if let Some(t) = new_tail {
+        publish_durable_tail(&st, t, &wire);
     }
 
     // Closure ordering: WAL fsync → durable meta commit → expose the closure to
@@ -1037,7 +1148,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         let tail = {
             let mut s = st.shared.write().unwrap();
             s.closed_durable = true;
-            s.tail
+            s.durable_tail
         };
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
     } else {
@@ -1081,7 +1192,7 @@ fn closed_conflict(tail: u64) -> Resp {
 /// missing/mismatched content-type, …). Every such edge case is handled
 /// byte-for-byte by the existing buffered handler — the splice path deliberately
 /// covers only the accept-and-write case so its critical section is a tight
-/// mirror of `write_wire` + `maybe_sync_on_ack`.
+/// mirror of `write_wire` (memory mode has no WAL stage).
 #[cfg(target_os = "linux")]
 pub enum ZeroCopyOutcome {
     /// Append handled; send `resp` and continue keep-alive as normal.
@@ -1231,6 +1342,9 @@ where
         let mut s = st.shared.write().unwrap();
         let tail = s.file_base + ap.written;
         s.tail = tail;
+        // memory mode: the page-cache write IS the ack, so the bytes are
+        // reader-visible immediately (no WAL fsync to wait for).
+        s.durable_tail = tail;
         s.last_access = SystemTime::now();
         (tail, s.closed_durable)
     };
@@ -1493,7 +1607,10 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
         st.touch();
         st.schedule_meta_flush(); // sliding TTL must survive restarts
     }
-    let q = parse_query(req.query.as_deref());
+    let q = match parse_query(req.query.as_deref()) {
+        Ok(q) => q,
+        Err(m) => return text_response(400, m),
+    };
     let offset = match parse_offset(q.offset.as_deref()) {
         Ok(o) => o,
         Err(_) => return text_response(400, "malformed offset"),
@@ -1522,6 +1639,56 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
     resp
 }
 
+/// Resolved start position for a read (catch-up / long-poll / SSE).
+///
+/// `parse_offset` has already rejected malformed offsets with `400`. A
+/// well-formed offset is always accepted here: a NUMERIC offset that is beyond
+/// the current tail is treated as "caught up at the tail" (matching the Go and
+/// TS reference servers), NOT a `400`. The beyond-tail behaviour is therefore
+/// defined in exactly ONE place and shared by all three read paths.
+struct StartResolution {
+    /// Byte position to read from, clamped to the tail (never `> tail`).
+    start: u64,
+    /// Sentinel/no-cache read (`offset=now` or an offset at/beyond the tail):
+    /// no ETag, `Cache-Control: no-store`.
+    now_mode: bool,
+    /// `Stream-Next-Offset` to report when the response is up-to-date. For a
+    /// beyond-tail offset this is the requested offset (PROTOCOL.md §5.5).
+    next_offset: u64,
+}
+
+fn resolve_start(offset: ParsedOffset, tail: u64) -> StartResolution {
+    match offset {
+        ParsedOffset::Start => StartResolution {
+            start: 0,
+            now_mode: false,
+            next_offset: tail,
+        },
+        ParsedOffset::Now => StartResolution {
+            start: tail,
+            now_mode: true,
+            next_offset: tail,
+        },
+        ParsedOffset::At(b) => {
+            if b > tail {
+                // Beyond-tail numeric offset: caught up at the tail. Read from
+                // the tail (empty range) but report the requested offset.
+                StartResolution {
+                    start: tail,
+                    now_mode: true,
+                    next_offset: b,
+                }
+            } else {
+                StartResolution {
+                    start: b,
+                    now_mode: false,
+                    next_offset: b,
+                }
+            }
+        }
+    }
+}
+
 async fn handle_catchup(
     st: Arc<StreamState>,
     offset: ParsedOffset,
@@ -1529,24 +1696,24 @@ async fn handle_catchup(
     cache_hit: &mut bool,
 ) -> Resp {
     let t = st.tail();
-    let (start, now_mode) = match offset {
-        ParsedOffset::Start => (0, false),
-        ParsedOffset::Now => (t.bytes, true),
-        ParsedOffset::At(b) => {
-            if b > t.bytes {
-                return text_response(400, "offset beyond tail");
-            }
-            (b, false)
-        }
-    };
+    let StartResolution {
+        start,
+        now_mode,
+        next_offset,
+    } = resolve_start(offset, t.bytes);
     let end = t.bytes;
+    // In sentinel mode (offset=now or a beyond-tail offset) the range is empty
+    // (`start == end == tail`); report the resolved next offset — the requested
+    // offset for a beyond-tail read (PROTOCOL.md §5.5). Otherwise report the
+    // tail reached by the catch-up read.
+    let reported = if now_mode { next_offset } else { end };
     // No ETag for offset=now (§10.1) — it's a tail sentinel, not a cacheable range.
     let etag = (!now_mode).then(|| st.etag(start, end, t.closed));
     if let Some(etag) = &etag {
         if header_str(req, "if-none-match") == Some(etag.as_str()) {
             let mut b = ResponseBuilder::new(304)
                 .h("etag", etag.clone())
-                .h(H_NEXT_OFFSET, format_offset(end))
+                .h(H_NEXT_OFFSET, format_offset(reported))
                 .hs(H_UP_TO_DATE, "true");
             if t.closed {
                 b = b.hs(H_CLOSED, "true");
@@ -1558,7 +1725,7 @@ async fn handle_catchup(
     let body = read_range_body(&st, start, end, false, "catchup", cache_hit).await;
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
-        .h(H_NEXT_OFFSET, format_offset(end))
+        .h(H_NEXT_OFFSET, format_offset(reported))
         .hs(H_UP_TO_DATE, "true")
         .h(
             "cache-control",
@@ -1580,16 +1747,9 @@ async fn handle_long_poll(
     cache_hit: &mut bool,
 ) -> Resp {
     let t0 = st.tail();
-    let from = match offset {
-        ParsedOffset::Start => 0,
-        ParsedOffset::Now => t0.bytes,
-        ParsedOffset::At(b) => {
-            if b > t0.bytes {
-                return text_response(400, "offset beyond tail");
-            }
-            b
-        }
-    };
+    // A beyond-tail numeric offset is treated as caught-up at the tail (see
+    // `resolve_start`), so it follows the normal wait path below.
+    let from = resolve_start(offset, t0.bytes).start;
     let cursor = compute_cursor(client_cursor);
 
     // Existing data → return immediately. This is a backlog (the consumer was
@@ -1623,7 +1783,7 @@ async fn handle_long_poll(
                     return long_poll_timeout(t.bytes, cursor, t.closed);
                 }
             }
-            _ = tokio::time::sleep_until(tokio::time::Instant::now() + deadline.saturating_duration_since(Instant::now())) => {
+            _ = tokio::time::sleep(deadline.saturating_duration_since(Instant::now())) => {
                 let t = st.tail();
                 return long_poll_timeout(t.bytes, cursor, t.closed);
             }
@@ -1727,16 +1887,9 @@ fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool,
 
 async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: Option<u64>) -> Resp {
     let t0 = st.tail();
-    let start = match offset {
-        ParsedOffset::Start => 0,
-        ParsedOffset::Now => t0.bytes,
-        ParsedOffset::At(b) => {
-            if b > t0.bytes {
-                return text_response(400, "offset beyond tail");
-            }
-            b
-        }
-    };
+    // A beyond-tail numeric offset starts caught-up at the tail (see
+    // `resolve_start`): emit the initial up-to-date control event, then wait.
+    let start = resolve_start(offset, t0.bytes).start;
     let encoding = sse_encoding(&st);
     let is_b64 = matches!(encoding, SseEncoding::Base64);
 
@@ -1753,6 +1906,9 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
         let mut pos = start;
         let mut rxw = st.tail_tx.subscribe();
         let deadline = Instant::now() + SSE_MAX_DURATION;
+        // Emit the initial caught-up control exactly once; subsequent liveness is
+        // carried by the periodic keep-alive in the idle wait below.
+        let mut sent_initial = false;
         loop {
             let t = *rxw.borrow_and_update();
             if t.bytes > pos {
@@ -1830,22 +1986,37 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
             if t.bytes > pos {
                 continue;
             }
-            // Initial control event when starting caught-up.
-            if pos == start && t.bytes == start && !t.closed && pos == st.tail().bytes {
+            // Initial control event when starting caught-up (once).
+            if !sent_initial && pos == start && t.bytes == start && !t.closed && pos == st.tail().bytes {
                 let mut ev = String::new();
                 sse_control_event(&mut ev, pos, compute_cursor(client_cursor), true, false);
                 if tx.send(Bytes::from(ev)).await.is_err() {
                     return;
                 }
+                sent_initial = true;
             }
+            // Idle wait: bounded by the total SSE duration, but woken early by new
+            // data and broken into keep-alive intervals so an idle stream still
+            // emits a periodic up-to-date control (liveness for proxies/clients).
+            let now = Instant::now();
+            if now >= deadline {
+                return; // total cap reached; client reconnects
+            }
+            let wait = SSE_KEEPALIVE.min(deadline - now);
             tokio::select! {
                 r = rxw.changed() => {
                     if r.is_err() {
                         return;
                     }
                 }
-                _ = tokio::time::sleep_until(tokio::time::Instant::now() + deadline.saturating_duration_since(Instant::now())) => {
-                    return; // close connection; client reconnects
+                _ = tokio::time::sleep(wait) => {
+                    // No new data within the keep-alive window: emit a heartbeat
+                    // control (still open here — the close path returns above).
+                    let mut ev = String::new();
+                    sse_control_event(&mut ev, pos, compute_cursor(client_cursor), true, false);
+                    if tx.send(Bytes::from(ev)).await.is_err() {
+                        return;
+                    }
                 }
             }
         }

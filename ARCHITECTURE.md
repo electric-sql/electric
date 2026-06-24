@@ -90,7 +90,14 @@ The server supports two durability modes, chosen at startup via `--durability`.
 | Mode     | ack after        | fsync                  | WAL | crash-safe?          |
 | -------- | ---------------- | ---------------------- | --- | -------------------- |
 | `wal`    | WAL fdatasync    | group-commit per shard | yes | yes                  |
-| `memory` | page-cache write | never                  | no  | no (page-cache only) |
+| `memory` | page-cache write | never[^close]          | no  | no (page-cache only) |
+
+[^close]:
+    "never" describes the append-ack path — appends never `fdatasync`.
+    The stream CLOSE control op is the exception: in both modes it fsyncs the `.meta`
+    sidecar (`write_meta_sync(…, durable=true)`) before exposing EOF, so a close is
+    durable even in `memory` mode while the data behind it is not. See
+    [LIMITATIONS.md](LIMITATIONS.md#--durability-memory-is-not-locally-crash-durable).
 
 ### `wal` mode
 

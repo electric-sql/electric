@@ -24,6 +24,16 @@ immediately — no `fdatasync`, no WAL. This means:
   with `--durability wal` simply runs WAL recovery over an absent or empty WAL
   and leaves the per-stream files intact — no data loss, and subsequent appends
   are immediately WAL-durable.
+- **A CLOSE is made durable while the stream's DATA is not.** A close is the one
+  control op `memory` mode still fsyncs: closing a stream fsyncs the `.meta`
+  sidecar (`write_meta_sync(…, durable=true)` — `sync_all` on the sidecar plus a
+  parent-dir fsync) before exposing EOF to readers, exactly as in `wal` mode. The
+  stream's appended data, however, is only in the page cache (no per-append
+  `fdatasync`, no WAL). So a crash can recover a stream as `closed=true` with a
+  durable tail SHORTER than an offset a reader had already read pre-crash — the
+  closure survives but the un-flushed tail bytes behind it do not. This is the
+  already-disclosed consequence of `memory` mode not being locally crash-durable:
+  only the close metadata is synced, never the data.
 - **Replication is the intended (not-yet-built) durability source.** The design
   intent for `memory` mode is that durability comes from a replication layer
   (synchronous replica writes before ack). That layer is not yet implemented;

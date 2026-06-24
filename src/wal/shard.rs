@@ -42,6 +42,15 @@ use super::telemetry::{ShardStats, StatsSnapshot};
 use crate::store::StreamState;
 
 /// Mutable, lock-guarded shard state.
+///
+/// **No-panic-under-lock invariant:** every critical section holding `inner`
+/// (and `dirty`) must be panic-free — fallible operations use `?`, and the only
+/// `.unwrap()`s are on lock acquisition itself. This is load-bearing: a panic
+/// while holding `inner` would poison the std `Mutex`, and the committer's
+/// `snapshot_watermark`/`collect_fsync_targets`/`publish_durable` would then
+/// panic on every poll, freezing `durable_lsn` and hanging all `wait_durable`
+/// waiters (acks) for this shard forever. Keep allocation and indexing out of
+/// these sections, or guard them, when editing.
 struct ShardInner {
     /// The active (current) segment all new records are written into. Held as an
     /// `Arc` so an appender can clone the handle under the short lock and run its
@@ -851,6 +860,15 @@ impl Shard {
     /// `durable_lsn` and do **not** publish — the staged records stay un-acked,
     /// exactly as the no-loss invariant requires (spec §6).
     pub async fn run_committer(self: std::sync::Arc<Self>) {
+        // Backoff state for the fsync-error path: a persistently failing disk
+        // (ENOSPC/EIO/read-only volume) must not busy-spin a core, hammer the disk,
+        // and flood stderr. The no-loss invariant holds throughout — `durable_lsn`
+        // is never advanced on failure, so nothing is ever acked.
+        const RETRY_BACKOFF_MIN: std::time::Duration = std::time::Duration::from_millis(5);
+        const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_secs(1);
+        const LOG_EVERY: u64 = 100;
+        let mut backoff = RETRY_BACKOFF_MIN;
+        let mut consecutive_errors: u64 = 0;
         loop {
             // Register interest BEFORE reading state (lost-wakeup safety).
             let notified = self.notify.notified();
@@ -872,17 +890,35 @@ impl Shard {
                 match fsync_res {
                     Ok(()) => {
                         self.publish_durable(watermark);
+                        consecutive_errors = 0;
+                        backoff = RETRY_BACKOFF_MIN;
                         continue;
                     }
                     Err(e) => {
-                        eprintln!("WAL committer fdatasync failed: {e}");
-                        notified.await;
+                        // Rate-limited log + bounded exponential backoff. We SLEEP
+                        // (rather than await `notified`) so a stream of concurrent
+                        // appends — each leaving a `Notify` permit — cannot turn the
+                        // retry into a hot loop. A recovered disk costs at most one
+                        // backoff interval of extra latency. Dropping the registered
+                        // `notified` here is safe: an un-polled `Notified` does not
+                        // consume the stored permit, so no stage wakeup is lost.
+                        consecutive_errors += 1;
+                        if consecutive_errors == 1 || consecutive_errors % LOG_EVERY == 0 {
+                            eprintln!(
+                                "WAL committer fdatasync failed (attempt {consecutive_errors}): {e}"
+                            );
+                        }
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(RETRY_BACKOFF_MAX);
                         continue;
                     }
                 }
             }
 
-            // Nothing new to commit — wait for the next stage.
+            // Nothing new to commit — caught up, so reset the error backoff and
+            // wait for the next stage.
+            consecutive_errors = 0;
+            backoff = RETRY_BACKOFF_MIN;
             notified.await;
         }
     }

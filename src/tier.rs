@@ -83,6 +83,10 @@ pub struct Manifest {
     pub sealed_offset: u64,
     /// True while an offload pass is in flight, so we never launch two at once.
     pub offloading: bool,
+    /// Set on hard delete: seal/offload passes bail out instead of staging new
+    /// chunk files or uploading objects, so `gc_remote_segments` can reclaim a
+    /// final, stable set of segments without racing an in-flight pass.
+    pub deleted: bool,
 }
 
 // ---------------- JSON value-boundary scanning ----------------
@@ -269,6 +273,7 @@ impl TierState {
                 segments,
                 sealed_offset,
                 offloading: false,
+                deleted: false,
             }),
         }
     }
@@ -345,10 +350,11 @@ impl Store {
         if !self.tier_config.enabled() {
             return;
         }
-        // Only one sealing pass per stream at a time.
+        // Only one sealing pass per stream at a time, and never after a hard
+        // delete (the GC pass owns the segments now).
         {
             let mut m = st.tier.manifest.lock().unwrap();
-            if m.offloading {
+            if m.offloading || m.deleted {
                 return;
             }
             m.offloading = true;
@@ -501,7 +507,15 @@ impl Store {
             // them in the opposite order here would deadlock under a queued shared writer
             // (std RwLock is writer-preferring). These are heuristic reads; the seal cut is
             // re-derived consistently below.
-            let sealed_offset = st.tier.manifest.lock().unwrap().sealed_offset.max(st.base_offset);
+            let sealed_offset = {
+                let m = st.tier.manifest.lock().unwrap();
+                // Hard delete arrived mid-pass: stop staging/uploading and let
+                // `gc_remote_segments` reclaim from here.
+                if m.deleted {
+                    return Ok(());
+                }
+                m.sealed_offset.max(st.base_offset)
+            };
             let (tail, file_base, file) = {
                 let s = st.shared.read().unwrap();
                 (s.tail, s.file_base, s.file.clone())
@@ -612,6 +626,12 @@ impl Store {
         let Some(bs) = &self.blobstore else {
             return Ok(());
         };
+        // Hard delete arrived: don't upload an object the GC pass would have to
+        // chase (it deletes by deterministic key, but skipping the put avoids the
+        // orphan window entirely).
+        if st.tier.manifest.lock().unwrap().deleted {
+            return Ok(());
+        }
         let key = segment_key(&self.tier_config.key_prefix, st, seg_start);
         let len = payload.len() as u64;
         // Upload.
@@ -661,39 +681,83 @@ impl Store {
         if !self.tier_config.enabled() {
             return;
         }
-        let Some(bs) = self.blobstore.clone() else {
-            return;
-        };
-        let keys: Vec<String> = {
-            let m = st.tier.manifest.lock().unwrap();
-            m.segments
-                .iter()
-                .filter_map(|s| match &s.placement {
-                    crate::tier::Placement::Remote(k) => Some(k.clone()),
-                    crate::tier::Placement::Local(_) => None,
-                })
-                .collect()
-        };
-        // Also unlink any still-staged local chunk files.
-        let local_paths: Vec<std::path::PathBuf> = {
-            let m = st.tier.manifest.lock().unwrap();
-            m.segments
-                .iter()
-                .filter_map(|s| match &s.placement {
-                    crate::tier::Placement::Local(p) => Some(p.clone()),
-                    crate::tier::Placement::Remote(_) => None,
-                })
-                .collect()
-        };
-        if keys.is_empty() && local_paths.is_empty() {
-            return;
-        }
+        // Mark the stream deleted FIRST (synchronously, before serving stops
+        // referencing it): any in-flight or future seal/offload pass sees this and
+        // bails (see `maybe_seal`/`seal_loop`/`offload_one`), so the snapshot below
+        // is final and we never race a concurrent stage/upload.
+        st.tier.manifest.lock().unwrap().deleted = true;
+
+        let bs = self.blobstore.clone();
+        let prefix = self.tier_config.key_prefix.clone();
+        let seg_dir = self.segments_dir();
+        // Deterministic on-disk prefix for this stream's chunk files
+        // (`<fname>.seg.<start>`), used as a GC backstop for chunks staged on disk
+        // but not yet in the manifest snapshot.
+        let file_prefix = format!(
+            "{}.seg.",
+            st.file_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("stream")
+        );
+        let st = st.clone();
         tokio::spawn(async move {
-            for k in keys {
-                let _ = bs.delete(&k).await;
+            // Wait out any pass that was already inside its offloading window so we
+            // don't snapshot/delete while it is mid-upload or mid-stage. It bails
+            // quickly on `deleted`; the bound stops a wedged pass from blocking GC
+            // forever (deterministic-key deletion below still reclaims either way).
+            for _ in 0..1000 {
+                if !st.tier.manifest.lock().unwrap().offloading {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(2)).await;
             }
+            // Snapshot the final segment set. Delete EVERY segment's remote object
+            // by its deterministic key — this covers an object that was uploaded
+            // just before a pass bailed but not yet flipped to `Remote` (a plain
+            // `Remote`-only filter would miss it and orphan it). Deleting a key that
+            // was never uploaded is a harmless no-op.
+            let (keys, local_paths): (Vec<String>, Vec<std::path::PathBuf>) = {
+                let m = st.tier.manifest.lock().unwrap();
+                let keys = m
+                    .segments
+                    .iter()
+                    .map(|s| segment_key(&prefix, &st, s.logical_start))
+                    .collect();
+                let local = m
+                    .segments
+                    .iter()
+                    .filter_map(|s| match &s.placement {
+                        crate::tier::Placement::Local(p) => Some(p.clone()),
+                        crate::tier::Placement::Remote(_) => None,
+                    })
+                    .collect();
+                (keys, local)
+            };
+            // Remote deletes (only when a blobstore is configured)…
+            if let Some(bs) = bs {
+                for k in keys {
+                    let _ = bs.delete(&k).await;
+                }
+            }
+            // …and unlink any still-staged local chunk files (reclaimed even for a
+            // local-only tier, which has no blobstore).
             for p in local_paths {
                 let _ = tokio::fs::remove_file(&p).await;
+            }
+            // Backstop sweep: remove any chunk file of this stream the manifest
+            // snapshot missed — e.g. a chunk staged on disk before it was recorded
+            // when a seal pass was cut short, or a leftover `.tmp` write.
+            if let Ok(mut rd) = tokio::fs::read_dir(&seg_dir).await {
+                while let Ok(Some(entry)) = rd.next_entry().await {
+                    if entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with(&file_prefix))
+                    {
+                        let _ = tokio::fs::remove_file(entry.path()).await;
+                    }
+                }
             }
         });
     }
@@ -715,7 +779,7 @@ impl TierTask {
         // segment concurrently. (boot one-shot, so the simple set/clear is fine.)
         {
             let mut m = st.tier.manifest.lock().unwrap();
-            if m.offloading {
+            if m.offloading || m.deleted {
                 return;
             }
             m.offloading = true;
@@ -732,6 +796,12 @@ impl TierTask {
                 .collect()
         };
         for (start, path) in pending {
+            // Hard delete arrived mid-backlog: stop uploading (GC owns reclaim now)
+            // and fall through to clear `offloading`, so the GC bounded wait sees
+            // offloading==false promptly instead of timing out and racing our puts.
+            if st.tier.manifest.lock().unwrap().deleted {
+                break;
+            }
             let payload = match tokio::fs::read(&path).await {
                 Ok(b) => bytes::Bytes::from(b),
                 Err(_) => continue,
