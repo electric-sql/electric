@@ -15,11 +15,12 @@ cargo install durable-streams
 # 2. npm (downloads a prebuilt binary for your platform)
 npm install -g @electric-ax/durable-streams-server-rust
 
-# 3. prebuilt tarball — download from the GitHub Releases page
-#    (tag server-rust-vX.Y.Z), verify the .sha256, extract durable-streams-server
+# 3. Docker (multi-arch image)
+docker run -p 4437:4437 electricax/durable-streams-server-rust
 ```
 
-All three install the same `durable-streams-server` command.
+cargo and npm both install the `durable-streams-server` command; the Docker image
+runs it directly.
 
 ## Quickstart
 
@@ -178,23 +179,24 @@ The core protocol suite passes.
 
 ## Releasing
 
-Pushing a `server-rust-v*` tag runs the `release-server-rust` workflow, which
-publishes all three install channels from one tag:
+Released via Changesets, like the rest of the monorepo. The version lives in this
+package's `package.json` (the `@electric-ax/durable-streams-server-rust` anchor,
+`private: true` — Changesets bumps it but does not publish it; CI publishes the
+real binary packages). To cut a release: add a changeset for this package and
+merge the "Version Packages" PR. On the version bump, `changesets_release.yml`
+fans out to publish all three channels at that version:
 
-```bash
-# bump version in Cargo.toml (the tag must match it), then:
-git tag server-rust-v0.1.0
-git push origin server-rust-v0.1.0
-```
+- **crates.io** — the `durable-streams` crate (`cargo install durable-streams`),
+  via `server_rust_publish.yml`. `Cargo.toml`'s version is synced from
+  `package.json` at publish time (`scripts/sync-cargo-version.mjs`).
+- **npm** — `@electric-ax/durable-streams-server-rust` plus its four platform
+  packages (built per target, assembled by `npm/assemble.mjs`).
+- **Docker Hub** — `electricax/durable-streams-server-rust` (multi-arch), via
+  `server_rust_dockerhub_image.yml`.
 
-- **GitHub Releases** — `durable-streams-server` tarballs (+ SHA-256) for linux
-  and macOS (x86_64 + arm64).
-- **crates.io** — the `durable-streams` crate (`cargo install durable-streams`).
-- **npm** — `@electric-ax/durable-streams-server-rust` plus its four platform packages.
-
-Both registries authenticate via OIDC trusted publishing, so the workflow stores
-no registry tokens. A one-time manual bootstrap is required before the first
-tag-driven release.
+Both registries authenticate via OIDC trusted publishing, so CI stores no registry
+tokens. A one-time manual bootstrap is required before the first release (claim the
+`durable-streams` crate + configure trusted publishers on the npm packages).
 
 ---
 
