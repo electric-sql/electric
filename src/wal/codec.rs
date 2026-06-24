@@ -1,28 +1,48 @@
-//! WAL record codec — **B-light framing** (header-CRC only, no payload CRC).
+//! WAL record codec — header CRC + **optional** payload CRC framing.
 //!
-//! Wire layout of one record (header is little-endian, [`HEADER_LEN`] = 33 bytes):
+//! Wire layout of one record (header is little-endian, [`HEADER_LEN`] = 38 bytes):
 //!
 //! ```text
 //! u32  len            // payload length
-//! u32  header_crc32c   // crc32c over [lsn, kind, stream_id, stream_offset, len]
+//! u32  header_crc32c   // crc32c over [lsn, kind, stream_id, stream_offset, len, flags, payload_crc]
 //! u64  lsn            // monotonic within the shard
 //! u8   kind           // 1=Append 2=StreamCreate 3=StreamClose 4=StreamDelete
 //! u64  stream_id      // stable per-stream id
 //! u64  stream_offset  // logical Stream-Next-Offset before this append
+//! u8   flags          // bit 0 = PAYLOAD_CHECKSUMMED; other bits reserved (0)
+//! u32  payload_crc32c  // crc32c over the payload, valid iff PAYLOAD_CHECKSUMMED set
 //! [len bytes payload]
 //! ```
 //!
 //! **Torn-tail detection** (design spec §4): a record is complete iff its
-//! `header_crc` validates **and** the segment holds `len` payload bytes after
-//! the header. The first failure ends the durable log. There is deliberately no
-//! payload CRC — same integrity as today's per-stream files. The header CRC
-//! also doubles as a torn-header detector: a partially-written header almost
-//! always fails the CRC, and an all-zero (`fallocate`'d, never-written) header
-//! is treated as the clean end of the log, not a torn record.
+//! `header_crc` validates, the segment holds `len` payload bytes after the
+//! header, **and** — when `PAYLOAD_CHECKSUMMED` is set — the payload's crc32c
+//! matches `payload_crc`. The first failure ends the durable log.
+//!
+//! The payload CRC closes Bug #1 (torn-payload-zeros): WAL segments are
+//! `fallocate`'d to full size, so "the payload bytes are physically present" is
+//! trivially true even when a crash left a valid header over a zeroed,
+//! never-fully-written payload. The buffered (default) path has the payload in
+//! userspace and always checksums it, so such a torn record now fails decode.
+//! The `--zero-copy` splice path deliberately never reads the payload into
+//! userspace, so it writes its header with `PAYLOAD_CHECKSUMMED` clear and keeps
+//! the old "bytes present = complete" behavior (its residual exposure to Bug #1
+//! is documented, not fixed here).
+//!
+//! The header CRC also doubles as a torn-header detector: a partially-written
+//! header almost always fails the CRC, and an all-zero (`fallocate`'d,
+//! never-written) header is treated as the clean end of the log, not a torn
+//! record.
 
 /// Length of the fixed record header in bytes:
-/// `u32 len + u32 header_crc + u64 lsn + u8 kind + u64 stream_id + u64 stream_offset`.
-pub const HEADER_LEN: usize = 33;
+/// `u32 len + u32 header_crc + u64 lsn + u8 kind + u64 stream_id + u64 stream_offset
+/// + u8 flags + u32 payload_crc`.
+pub const HEADER_LEN: usize = 38;
+
+/// `flags` bit 0: the record's `payload_crc` field is a valid crc32c over the
+/// payload and MUST be verified on decode. The buffered path sets this; the
+/// zero-copy splice path leaves it clear (it cannot checksum the spliced bytes).
+pub const PAYLOAD_CHECKSUMMED: u8 = 0b0000_0001;
 
 /// Record kind discriminant. The numeric values are the on-disk encoding and
 /// MUST remain stable across versions.
@@ -84,27 +104,42 @@ pub enum Decoded {
 }
 
 /// Compute the header CRC over the logical field tuple
-/// `[lsn, kind, stream_id, stream_offset, len]` (little-endian), matching the
-/// order the spec specifies (NOT the on-disk byte order, which interleaves the
-/// CRC). Used by both [`encode_into`] and [`decode_at`] so they cannot diverge.
+/// `[lsn, kind, stream_id, stream_offset, len, flags, payload_crc]`
+/// (little-endian), matching the order the spec specifies (NOT the on-disk byte
+/// order, which interleaves the CRC). `flags` and `payload_crc` are covered so a
+/// torn/garbled flags byte or payload-CRC field fails the header CRC. Used by
+/// both [`encode_header_into`] and [`decode_at`] so they cannot diverge.
 #[inline]
-fn header_crc(lsn: u64, kind: u8, stream_id: u64, stream_offset: u64, len: u32) -> u32 {
-    let mut f = [0u8; 8 + 1 + 8 + 8 + 4];
+fn header_crc(
+    lsn: u64,
+    kind: u8,
+    stream_id: u64,
+    stream_offset: u64,
+    len: u32,
+    flags: u8,
+    payload_crc: u32,
+) -> u32 {
+    let mut f = [0u8; 8 + 1 + 8 + 8 + 4 + 1 + 4];
     f[0..8].copy_from_slice(&lsn.to_le_bytes());
     f[8] = kind;
     f[9..17].copy_from_slice(&stream_id.to_le_bytes());
     f[17..25].copy_from_slice(&stream_offset.to_le_bytes());
     f[25..29].copy_from_slice(&len.to_le_bytes());
+    f[29] = flags;
+    f[30..34].copy_from_slice(&payload_crc.to_le_bytes());
     crc32c::crc32c(&f)
 }
 
-/// Append the 33-byte framed **header only** (no payload) to `buf`.
+/// Append the 38-byte framed **header only** (no payload) to `buf`.
 ///
 /// This is the single canonical source of the header byte layout — both
 /// [`encode_into`] and [`Shard::reserve_for_splice`] call it so the framing
 /// cannot diverge between the two reservation paths.
 ///
-/// `len` is the payload length in bytes (the on-disk `u32` field).
+/// `len` is the payload length in bytes (the on-disk `u32` field). `flags`
+/// carries [`PAYLOAD_CHECKSUMMED`] (set by the buffered path, clear for
+/// zero-copy splice) and `payload_crc` is the crc32c over the payload (0 when
+/// `PAYLOAD_CHECKSUMMED` is clear).
 pub(crate) fn encode_header_into(
     buf: &mut Vec<u8>,
     lsn: u64,
@@ -112,9 +147,11 @@ pub(crate) fn encode_header_into(
     stream_id: u64,
     stream_offset: u64,
     len: u32,
+    flags: u8,
+    payload_crc: u32,
 ) {
     let kind_byte = kind as u8;
-    let crc = header_crc(lsn, kind_byte, stream_id, stream_offset, len);
+    let crc = header_crc(lsn, kind_byte, stream_id, stream_offset, len, flags, payload_crc);
     buf.reserve(HEADER_LEN);
     buf.extend_from_slice(&len.to_le_bytes()); // [0..4)
     buf.extend_from_slice(&crc.to_le_bytes()); // [4..8)
@@ -122,12 +159,26 @@ pub(crate) fn encode_header_into(
     buf.push(kind_byte); // [16]
     buf.extend_from_slice(&stream_id.to_le_bytes()); // [17..25)
     buf.extend_from_slice(&stream_offset.to_le_bytes()); // [25..33)
+    buf.push(flags); // [33]
+    buf.extend_from_slice(&payload_crc.to_le_bytes()); // [34..38)
 }
 
-/// Append a framed record (header + payload) to `buf`.
+/// Append a framed record (header + payload) to `buf`. This is the buffered
+/// (default) path: the payload is in userspace, so it is checksummed and the
+/// header carries [`PAYLOAD_CHECKSUMMED`] — closing Bug #1 for this path.
 pub fn encode_into(buf: &mut Vec<u8>, r: &Record) {
-    encode_header_into(buf, r.lsn, r.kind, r.stream_id, r.stream_offset, r.payload.len() as u32);
-    buf.extend_from_slice(r.payload); // [33..33+len)
+    let payload_crc = crc32c::crc32c(r.payload);
+    encode_header_into(
+        buf,
+        r.lsn,
+        r.kind,
+        r.stream_id,
+        r.stream_offset,
+        r.payload.len() as u32,
+        PAYLOAD_CHECKSUMMED,
+        payload_crc,
+    );
+    buf.extend_from_slice(r.payload); // [38..38+len)
 }
 
 /// Decode the record starting at byte `off` in segment `seg`.
@@ -150,9 +201,12 @@ pub fn decode_at(seg: &[u8], off: usize) -> Decoded {
     let kind_byte = hdr[16];
     let stream_id = u64::from_le_bytes(hdr[17..25].try_into().unwrap());
     let stream_offset = u64::from_le_bytes(hdr[25..33].try_into().unwrap());
+    let flags = hdr[33];
+    let payload_crc = u32::from_le_bytes(hdr[34..38].try_into().unwrap());
 
-    // Validate the header CRC. A torn/partially-written header fails here.
-    if header_crc(lsn, kind_byte, stream_id, stream_offset, len) != crc {
+    // Validate the header CRC. A torn/partially-written header fails here. The
+    // CRC covers flags + payload_crc too, so a garbled flag/CRC field is caught.
+    if header_crc(lsn, kind_byte, stream_id, stream_offset, len, flags, payload_crc) != crc {
         return Decoded::Torn;
     }
 
@@ -170,6 +224,16 @@ pub fn decode_at(seg: &[u8], off: usize) -> Decoded {
         return Decoded::Torn;
     }
 
+    // Bug #1 fix: if the writer checksummed the payload (buffered path), verify
+    // it. A torn/zeroed payload under a valid header (the fallocate'd-tail case)
+    // fails here and is rejected as Torn. Zero-copy records leave the flag clear
+    // and keep the "bytes present = complete" behavior (documented residual).
+    if flags & PAYLOAD_CHECKSUMMED != 0
+        && crc32c::crc32c(&seg[payload_off..payload_off + len]) != payload_crc
+    {
+        return Decoded::Torn;
+    }
+
     Decoded::Record {
         lsn,
         kind,
@@ -184,6 +248,89 @@ pub fn decode_at(seg: &[u8], off: usize) -> Decoded {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Bug #1 regression (wal-dst-bugs.md): a record with a VALID header and
+    // a CHECKSUMMED payload (PAYLOAD_CHECKSUMMED set, payload_crc over the FULL
+    // len) but a TORN payload on disk (partially written, zero-tail from a
+    // fallocate'd segment) MUST now decode as `Torn` — the payload CRC over the
+    // present bytes no longer matches the header's stored CRC for the full
+    // record. Previously this was wrongly accepted as a complete `Record` with a
+    // zero-padded (garbage) payload because completeness was only "bytes
+    // present" (trivially true on a fallocate'd full-size segment).
+    #[test]
+    fn bug1_torn_checksummed_payload_rejected() {
+        let len: usize = 8192; // > 1 page, so a partial page writeback can tear it
+        let prefix: usize = 4096; // bytes that "made it" before the crash
+        // The CRC the writer would have stamped is over the FULL intended payload
+        // (all 0xAB), but only `prefix` real bytes made it before the crash.
+        let full_payload = vec![0xABu8; len];
+        let payload_crc = crc32c::crc32c(&full_payload);
+
+        let mut seg = Vec::new();
+        encode_header_into(
+            &mut seg,
+            1,
+            RecordKind::Append,
+            42,
+            0,
+            len as u32,
+            PAYLOAD_CHECKSUMMED,
+            payload_crc,
+        );
+        seg.extend(std::iter::repeat(0xAB).take(prefix)); // written payload prefix
+        seg.extend(std::iter::repeat(0u8).take(len - prefix)); // torn (fallocate zeros)
+        seg.extend(std::iter::repeat(0u8).take(1 << 20)); // rest of fallocate'd segment
+
+        assert!(
+            matches!(decode_at(&seg, 0), Decoded::Torn),
+            "Bug #1 fixed: a torn checksummed payload must decode as Torn, not a \
+             zero-padded Record"
+        );
+    }
+
+    // Companion: a COMPLETE checksummed record (the normal buffered path) still
+    // decodes cleanly as `Record` and yields the exact payload.
+    #[test]
+    fn complete_checksummed_payload_decodes_as_record() {
+        let mut b = Vec::new();
+        let r = Record {
+            lsn: 5,
+            kind: RecordKind::Append,
+            stream_id: 9,
+            stream_offset: 12,
+            payload: b"checksummed-payload",
+        };
+        encode_into(&mut b, &r); // sets PAYLOAD_CHECKSUMMED + correct payload_crc
+        b.extend(std::iter::repeat(0u8).take(64)); // fallocate'd tail
+        match decode_at(&b, 0) {
+            Decoded::Record { payload_off, len, .. } => {
+                assert_eq!(&b[payload_off..payload_off + len], b"checksummed-payload");
+            }
+            other => panic!("expected Record, got {other:?}"),
+        }
+    }
+
+    // Companion (documents the residual): an UNchecksummed record (the zero-copy
+    // splice path — PAYLOAD_CHECKSUMMED clear, payload_crc=0) with a torn,
+    // zeroed payload tail STILL decodes as `Record`. Zero-copy opts out of the
+    // payload CRC, so Bug #1 is not closed for it (out of scope here).
+    #[test]
+    fn unchecksummed_torn_payload_still_accepted_residual() {
+        let len: usize = 8192;
+        let prefix: usize = 4096;
+        let mut seg = Vec::new();
+        // flags=0, payload_crc=0 (exactly what commit_splice_header writes).
+        encode_header_into(&mut seg, 1, RecordKind::Append, 42, 0, len as u32, 0, 0);
+        seg.extend(std::iter::repeat(0xAB).take(prefix));
+        seg.extend(std::iter::repeat(0u8).take(len - prefix));
+        seg.extend(std::iter::repeat(0u8).take(1 << 20));
+
+        assert!(
+            matches!(decode_at(&seg, 0), Decoded::Record { .. }),
+            "zero-copy (unchecksummed) records keep the legacy bytes-present \
+             behavior — Bug #1 residual is documented, not fixed"
+        );
+    }
 
     #[test]
     fn encode_decode_roundtrip_and_torn() {

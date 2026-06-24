@@ -668,6 +668,108 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Bug #1 regression at the recovery level: an un-acked **buffered**
+    /// (checksummed) record whose payload is TORN on disk — a valid header with
+    /// `PAYLOAD_CHECKSUMMED` set and a `payload_crc` over the FULL intended
+    /// length, but only a prefix of real bytes followed by `fallocate`'d zeros —
+    /// must NOT be recovered. Before the payload-CRC fix `decode_at` accepted it
+    /// as a complete `Record` (bytes physically present), advancing the durable
+    /// frontier over a torn, never-acked record and replaying zero-padded
+    /// garbage. Now the payload CRC mismatch makes `decode_at` return `Torn`, the
+    /// scan stops after the prior whole record, and the per-stream file is
+    /// reconciled to the durable frontier.
+    #[tokio::test]
+    async fn wal_recovery_rejects_torn_checksummed_payload_bug1() {
+        use crate::wal::codec::{encode_header_into, PAYLOAD_CHECKSUMMED};
+
+        let dir = tmp("torn-checksummed");
+
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+
+        // r1 is a whole, durable record. r2 is the un-acked torn record.
+        let r1 = b"durable-prefix".as_slice();
+        let r2_len: usize = 4096; // intended payload length
+        let r2_written: usize = 1024; // bytes that made it before the crash
+        let durable_len = r1.len();
+
+        let st = match store.create("s", cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let id = st.id;
+        let st_file_path = st.file_path.clone();
+
+        // The per-stream file as a crash would leave it: r1 (durable) plus the
+        // torn r2 page-cache tail (its written prefix) past the durable frontier.
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new().write(true).open(&st.file_path).unwrap();
+            f.write_all(r1).unwrap();
+            f.write_all(&vec![0xCDu8; r2_written]).unwrap();
+            f.sync_all().unwrap();
+        }
+
+        // Build the WAL segment: r1 whole, then a CHECKSUMMED header for r2 whose
+        // payload_crc is over the FULL intended payload, but only `r2_written`
+        // real bytes follow (the rest is the fallocate'd zero tail).
+        let mut seg = Vec::new();
+        append_record(&mut seg, 1, id, 0, r1);
+        let r2_full = vec![0xCDu8; r2_len];
+        let r2_crc = crc32c::crc32c(&r2_full);
+        encode_header_into(
+            &mut seg,
+            2,
+            RecordKind::Append,
+            id,
+            r1.len() as u64,
+            r2_len as u32,
+            PAYLOAD_CHECKSUMMED,
+            r2_crc,
+        );
+        seg.extend_from_slice(&vec![0xCDu8; r2_written]); // written prefix
+        // (No more payload bytes: the segment is fallocate'd zeros from here.)
+
+        let seg_file = seg_path(&dir.join("wal").join("0"), 1);
+        std::fs::write(&seg_file, &seg).unwrap();
+        write_meta_sync(&st, true).unwrap();
+
+        drop(st);
+        drop(store);
+        drop(wal);
+
+        // --- Reopen: sidecar pass + WAL recovery. ---
+        let wal = WalSet::open(&dir, Some(1), 1).unwrap();
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        store.wal.set(std::sync::Arc::clone(&wal)).ok();
+        let store = std::sync::Arc::new(store);
+
+        recover(&store, &wal).unwrap();
+
+        // The torn r2 is gone: the file ends at r1, and the in-memory frontier did
+        // NOT advance over the torn checksummed record.
+        assert_eq!(
+            std::fs::metadata(&st_file_path).unwrap().len() as usize,
+            durable_len,
+            "file reconciled to the r1 durable frontier; torn checksummed r2 discarded"
+        );
+        assert_eq!(
+            std::fs::read(&st_file_path).unwrap(),
+            r1,
+            "on-disk bytes are exactly r1 (no zero-padded torn r2)"
+        );
+        let st = store.streams.iter().find(|e| e.value().id == id).unwrap().value().clone();
+        assert_eq!(
+            st.shared.read().unwrap().tail,
+            durable_len as u64,
+            "Shared.tail == durable frontier (did not advance over torn r2)"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Drive a real shard so the committer makes records durable. Used by the 11b
     /// tests to checkpoint (recording per-stream durable tails) and roll/recycle.
     fn spawn_committer(shard: &std::sync::Arc<crate::wal::shard::Shard>) -> tokio::task::JoinHandle<()> {

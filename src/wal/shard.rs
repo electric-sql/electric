@@ -588,8 +588,21 @@ impl Shard {
             ));
         }
 
+        // Zero-copy splice: the payload was never in userspace, so we cannot
+        // checksum it. Write the header with PAYLOAD_CHECKSUMMED clear (flags=0)
+        // and payload_crc=0 — decode keeps the "bytes present = complete"
+        // behavior for this record (Bug #1 residual is documented, not fixed).
         let mut hdr = Vec::with_capacity(super::codec::HEADER_LEN);
-        encode_header_into(&mut hdr, lsn, kind, stream_id, stream_offset, payload_len as u32);
+        encode_header_into(
+            &mut hdr,
+            lsn,
+            kind,
+            stream_id,
+            stream_offset,
+            payload_len as u32,
+            0,
+            0,
+        );
         seg.write_at(header_off, &hdr)
     }
 
@@ -1356,7 +1369,7 @@ mod tests {
         let dir = tmp("roll-boundary");
         // Choose a segment size that's an exact multiple of one framed record so a
         // record can exactly fill it. Framed size = HEADER_LEN + payload.
-        let payload = vec![b'q'; 31]; // total = 33 + 31 = 64
+        let payload = vec![b'q'; 26]; // total = HEADER_LEN(38) + 26 = 64
         let total = (crate::wal::codec::HEADER_LEN + payload.len()) as u64;
         assert_eq!(total, 64);
         const SEG: u64 = 128; // exactly 2 records per segment
@@ -1385,7 +1398,7 @@ mod tests {
         let mut got = 0usize;
         sh.replay_from_checkpoint(0, |_, _, off, payload| {
             assert_eq!(off, got as u64);
-            assert_eq!(payload.len(), 31);
+            assert_eq!(payload.len(), 26);
             got += 1;
         })
         .unwrap();
