@@ -260,4 +260,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
 
   @impl Electric.Postgres.Inspector
   def clean(_, _), do: :ok
+
+  @impl Electric.Postgres.Inspector
+  def reset(_), do: :ok
 end

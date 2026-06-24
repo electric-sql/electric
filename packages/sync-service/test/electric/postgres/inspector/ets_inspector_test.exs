@@ -209,6 +209,41 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
   end
 
+  describe "reset/1" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup :with_items_oid
+
+    test "drops the entire ETS cache", %{
+      opts: opts,
+      pg_inspector_table: pg_inspector_table
+    } do
+      assert {:ok, {_oid, _}} = EtsInspector.load_relation_oid({"public", "items"}, opts)
+      refute :ets.tab2list(pg_inspector_table) == []
+
+      assert :ok = EtsInspector.reset(opts)
+      assert :ets.tab2list(pg_inspector_table) == []
+    end
+
+    test "does not restore the cleared cache on a restart", %{opts: opts, db_conn: conn} = ctx do
+      assert {:ok, {_oid, _}} = EtsInspector.load_relation_oid({"public", "items"}, opts)
+      assert :ok = EtsInspector.reset(opts)
+
+      stop_supervised!(EtsInspector)
+
+      # Drop the table so that, if a stale cache were restored, the lookup would
+      # succeed from cache rather than report the table as missing.
+      Postgrex.query!(conn, "DROP TABLE items", [])
+
+      %{inspector: {EtsInspector, opts}} = with_inspector(ctx)
+
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "items"}, opts)
+    end
+  end
+
   describe "load_column_info/2" do
     setup :with_shared_db
     setup :in_transaction

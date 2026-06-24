@@ -6,8 +6,11 @@ defmodule Electric.Connection.ConnectionManagerTest do
   import Support.DbSetup
 
   alias Electric.Replication.ShapeLogCollector
+  alias Electric.Replication.PersistentReplicationState
   alias Electric.Connection
   alias Electric.StatusMonitor
+  alias Electric.Postgres.Inspector.EtsInspector
+  alias Electric.Timeline
 
   @moduletag :tmp_dir
 
@@ -310,6 +313,32 @@ defmodule Electric.Connection.ConnectionManagerTest do
       Process.exit(shape_cache_pid, {:error, :reason})
 
       refute_receive {:DOWN, ^ref, :process, ^manager_pid, _reason}, 300
+    end
+  end
+
+  describe "purging replication metadata on shape purge" do
+    # Pre-seed replication metadata caches and a non-matching timeline so that the
+    # connection manager purges all shapes on startup (here via a timeline change; the
+    # new-slot / temporary-slot path purges through the same shared block in
+    # Connection.Manager). Both the persisted relation tracking and the inspector cache
+    # must be reset as part of that purge, otherwise stale pre-restart metadata would be
+    # read back even though WAL continuity was lost.
+    setup [:seed_stale_replication_metadata, :start_connection_manager]
+
+    test "resets tracked relations and the inspector cache", %{
+      stack_id: stack_id,
+      persistent_kv: persistent_kv,
+      pg_inspector_table: pg_inspector_table
+    } do
+      wait_until_active(stack_id)
+
+      assert :ets.tab2list(pg_inspector_table) == []
+
+      assert %{table_to_id: %{}, id_to_table_info: %{}} =
+               PersistentReplicationState.get_tracked_relations(
+                 stack_id: stack_id,
+                 persistent_kv: persistent_kv
+               )
     end
   end
 
@@ -716,6 +745,30 @@ defmodule Electric.Connection.ConnectionManagerTest do
       # so the lock breaker should not terminate any backends
       refute log =~ "Terminated a stuck backend"
     end
+  end
+
+  defp seed_stale_replication_metadata(%{
+         stack_id: stack_id,
+         persistent_kv: persistent_kv,
+         inspector: {EtsInspector, inspector_opts},
+         pg_inspector_table: pg_inspector_table
+       }) do
+    # Populate the inspector cache (supported features needs no table) ...
+    assert {:ok, _features} = EtsInspector.load_supported_features(inspector_opts)
+    refute :ets.tab2list(pg_inspector_table) == []
+
+    # ... and the persisted relation tracking.
+    PersistentReplicationState.set_tracked_relations(
+      %{table_to_id: %{{"public", "items"} => 1}, id_to_table_info: %{}},
+      stack_id: stack_id,
+      persistent_kv: persistent_kv
+    )
+
+    # Store a timeline with a Postgres ID that cannot match the real one, forcing a
+    # timeline change (and therefore a full shape purge) on the next connection.
+    Timeline.store_timeline({0, 1}, stack_id: stack_id, persistent_kv: persistent_kv)
+
+    :ok
   end
 
   defp wait_until_active(stack_id) do
