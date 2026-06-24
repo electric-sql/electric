@@ -490,6 +490,151 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
     Ok(())
 }
 
+/// Move exactly `len` bytes from `src` to `dst` through an anonymous pipe, in-kernel.
+///
+/// `*_off = None` uses the fd's own file offset (sockets); `Some(off)` is a
+/// positioned transfer (regular files) and is advanced as bytes move.
+// consumed by the zero-copy append path (wired in a later task)
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+mod zerocopy {
+    use std::io;
+    use std::os::fd::RawFd;
+
+    /// Move exactly `len` bytes src → dst through an anonymous pipe, in-kernel.
+    /// `*_off = None` uses the fd's own offset (sockets); `Some(off)` is a
+    /// positioned transfer (regular files) and is advanced as bytes move.
+    // consumed by the zero-copy append path (wired in a later task)
+    #[allow(dead_code)]
+    pub fn splice_all(
+        src: RawFd,
+        mut src_off: Option<&mut i64>,
+        dst: RawFd,
+        mut dst_off: Option<&mut i64>,
+        mut len: usize,
+    ) -> io::Result<()> {
+        let mut fds = [0i32; 2];
+        // SAFETY: fds is a 2-element array; pipe2 fills both on success.
+        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let (pr, pw) = (fds[0], fds[1]);
+        let res = (|| {
+            while len > 0 {
+                // src → pipe
+                let in_off = src_off.as_deref_mut().map_or(std::ptr::null_mut(), |p| p as *mut i64);
+                // SAFETY: in_off is either null (use fd offset) or a valid &mut i64 cast
+                // to *mut i64. pw is the write end of a valid pipe. splice does not alias
+                // any Rust references and is called with valid fds only.
+                let n = unsafe {
+                    libc::splice(
+                        src,
+                        in_off,
+                        pw,
+                        std::ptr::null_mut(),
+                        len,
+                        (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                    )
+                };
+                if n < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if n == 0 {
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "splice src EOF"));
+                }
+                // pipe → dst (drain exactly n bytes)
+                let mut moved = 0usize;
+                while moved < n as usize {
+                    let out_off = dst_off
+                        .as_deref_mut()
+                        .map_or(std::ptr::null_mut(), |p| p as *mut i64);
+                    // SAFETY: out_off is either null (use fd offset) or a valid &mut i64
+                    // cast to *mut i64. pr is the read end of the same pipe. We drain
+                    // exactly the bytes placed in the pipe by the src splice above.
+                    let m = unsafe {
+                        libc::splice(
+                            pr,
+                            std::ptr::null_mut(),
+                            dst,
+                            out_off,
+                            (n as usize) - moved,
+                            (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                        )
+                    };
+                    if m <= 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    moved += m as usize;
+                }
+                len -= n as usize;
+            }
+            Ok(())
+        })();
+        // SAFETY: close both pipe ends regardless of outcome; the fds are valid
+        // (pipe2 succeeded) and not used elsewhere after this point.
+        unsafe {
+            libc::close(pr);
+            libc::close(pw);
+        }
+        res
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod zerocopy_tests {
+    use super::zerocopy::splice_all;
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::os::fd::AsRawFd;
+
+    #[test]
+    fn splice_all_file_to_file_copies_exact_bytes() {
+        // Use temp_dir() files — no tempfile dev-dep needed.
+        let dir = std::env::temp_dir();
+        let src_path = dir.join("splice_all_src_test");
+        let dst_path = dir.join("splice_all_dst_test");
+
+        let mut src = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&src_path)
+            .unwrap();
+        let dst = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&dst_path)
+            .unwrap();
+
+        // > 64 KiB to exercise the loop past one pipe capacity.
+        let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+        src.write_all(&data).unwrap();
+
+        let mut soff = 0i64;
+        let mut doff = 0i64;
+        splice_all(
+            src.as_raw_fd(),
+            Some(&mut soff),
+            dst.as_raw_fd(),
+            Some(&mut doff),
+            data.len(),
+        )
+        .unwrap();
+
+        let mut got = Vec::new();
+        let mut dst2 = dst;
+        dst2.seek(SeekFrom::Start(0)).unwrap();
+        dst2.read_to_end(&mut got).unwrap();
+        assert_eq!(got, data);
+
+        // Cleanup — best-effort, ignore errors.
+        let _ = std::fs::remove_file(&src_path);
+        let _ = std::fs::remove_file(&dst_path);
+    }
+}
+
 /// Portable fallback: positioned reads through a reusable buffer.
 #[cfg(not(target_os = "linux"))]
 async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result<()> {
