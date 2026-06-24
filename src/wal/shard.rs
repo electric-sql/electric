@@ -36,7 +36,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{watch, Notify};
 
-use super::codec::{encode_into, Record, RecordKind};
+use super::codec::{encode_header_into, encode_into, Record, RecordKind};
 use super::segment::{seg_path, FileSegment, SegmentWriter, SEGMENT_BYTES};
 use super::telemetry::{ShardStats, StatsSnapshot};
 use crate::store::StreamState;
@@ -403,6 +403,93 @@ impl Shard {
         }
         self.notify.notify_one();
         Ok(lsn)
+    }
+
+    /// Reserve an lsn + segment range for a zero-copy (splice) append, write the
+    /// 33-byte framed **header only** at the reserved offset, and return
+    /// `(lsn, seg, payload_off)` where `payload_off = off + HEADER_LEN` is the byte
+    /// offset at which the caller must splice (or pwrite, in tests) the payload.
+    ///
+    /// This is Phase 1 of the splice path — the mirror of [`reserve_and_stage`]'s
+    /// Phase 1 (same segment-roll logic, same `next_lsn`/`write_pos` handling).
+    /// After the payload bytes land at `payload_off`, the caller MUST call
+    /// [`mark_staged`] to advance the contiguous-written watermark and notify the
+    /// committer.
+    ///
+    /// The watermark is NOT advanced here; the permanent gap from a never-called
+    /// `mark_staged` has the same durability semantics as a failed `write_at` in
+    /// `reserve_and_stage` — the committer never crosses it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if the framed record size exceeds `segment_size`, or
+    /// the underlying header `write_at` fails.
+    pub fn reserve_for_splice(
+        &self,
+        kind: RecordKind,
+        stream_id: u64,
+        stream_offset: u64,
+        payload_len: usize,
+    ) -> io::Result<(u64, Arc<FileSegment>, u64)> {
+        let total = (super::codec::HEADER_LEN + payload_len) as u64;
+
+        // A single record can never exceed a whole segment (mirrors reserve_and_stage).
+        if total > self.segment_size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "WAL record framed size {total} exceeds segment_size {} — cannot fit in a segment",
+                    self.segment_size
+                ),
+            ));
+        }
+
+        // --- Phase 1: (maybe roll, then) reserve under the short lock. ---
+        // Mirrors reserve_and_stage's phase-1 EXACTLY: same roll condition, same
+        // sealed_pending bookkeeping, same next_lsn / write_pos update.
+        let (lsn, off, seg) = {
+            let mut g = self.inner.lock().unwrap();
+
+            // Segment roll: identical to reserve_and_stage.
+            if g.write_pos + total > self.segment_size {
+                g.active.seal_to(g.write_pos)?;
+                let next_lsn = g.next_lsn;
+                let sealed = Arc::clone(&g.active);
+                g.sealed_pending.push((next_lsn - 1, sealed));
+                let new_seg = Arc::new(FileSegment::create(
+                    seg_path(&self.dir, next_lsn),
+                    self.segment_size,
+                )?);
+                g.active = new_seg;
+                g.seg_start_lsn = next_lsn;
+                g.write_pos = 0;
+            }
+
+            let lsn = g.next_lsn;
+            g.next_lsn += 1;
+            let off = g.write_pos;
+            g.write_pos += total;
+            let seg = Arc::clone(&g.active);
+            (lsn, off, seg)
+        };
+
+        // Write ONLY the framed header; the payload is spliced in by the caller.
+        let mut hdr = Vec::with_capacity(super::codec::HEADER_LEN);
+        encode_header_into(&mut hdr, lsn, kind, stream_id, stream_offset, payload_len as u32);
+        seg.write_at(off, &hdr)?;
+
+        Ok((lsn, seg, off + super::codec::HEADER_LEN as u64))
+    }
+
+    /// Advance the contiguous-written watermark for a previously reserved splice lsn
+    /// and notify the committer. Must be called AFTER the payload has been spliced
+    /// into the segment at the offset returned by [`reserve_for_splice`].
+    pub fn mark_staged(&self, lsn: u64) {
+        {
+            let mut g = self.inner.lock().unwrap();
+            g.mark_written(lsn);
+        }
+        self.notify.notify_one();
     }
 
     /// Register a touched stream's `Arc<StreamState>` into this shard's dirty set
@@ -1567,6 +1654,43 @@ mod tests {
 
         // The stream remains dirty after the stage (checkpoint hasn't run yet).
         assert!(sh.is_dirty(stream_id), "stream stays dirty until checkpoint drains it");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// TDD: write the failing host test first.
+    ///
+    /// The splice seam:  reserve_for_splice → write payload at payload_off (standing
+    /// in for the kernel splice) → mark_staged → decode must yield a valid record.
+    #[test]
+    fn reserve_for_splice_then_payload_decodes_as_valid_record() {
+        let dir = tmp("reserve-splice");
+        let sh = Shard::open(dir.clone()).unwrap();
+        let payload = b"zero-copy-payload-bytes";
+
+        let (lsn, seg, payload_off) = sh
+            .reserve_for_splice(RecordKind::Append, 7, 100, payload.len())
+            .unwrap();
+
+        // Stand in for the splice: write the payload at the reserved offset.
+        seg.write_at(payload_off, payload).unwrap();
+        sh.mark_staged(lsn);
+
+        // Read the segment bytes so we can run decode_at (which operates on &[u8]).
+        let seg_path = crate::wal::segment::seg_path(&dir, 1);
+        let raw = std::fs::read(&seg_path).unwrap();
+        let header_off = (payload_off - crate::wal::codec::HEADER_LEN as u64) as usize;
+
+        match decode_at(&raw, header_off) {
+            Decoded::Record { lsn: l, stream_id, stream_offset, payload_off: poff, len, .. } => {
+                assert_eq!(l, lsn);
+                assert_eq!(stream_id, 7);
+                assert_eq!(stream_offset, 100);
+                assert_eq!(len, payload.len());
+                assert_eq!(&raw[poff..poff + len], payload as &[u8]);
+            }
+            other => panic!("expected a valid Record, got {other:?}"),
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }

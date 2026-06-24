@@ -98,18 +98,35 @@ fn header_crc(lsn: u64, kind: u8, stream_id: u64, stream_offset: u64, len: u32) 
     crc32c::crc32c(&f)
 }
 
-/// Append a framed record (header + payload) to `buf`.
-pub fn encode_into(buf: &mut Vec<u8>, r: &Record) {
-    let len = r.payload.len() as u32;
-    let kind = r.kind as u8;
-    let crc = header_crc(r.lsn, kind, r.stream_id, r.stream_offset, len);
-    buf.reserve(HEADER_LEN + r.payload.len());
+/// Append the 33-byte framed **header only** (no payload) to `buf`.
+///
+/// This is the single canonical source of the header byte layout — both
+/// [`encode_into`] and [`Shard::reserve_for_splice`] call it so the framing
+/// cannot diverge between the two reservation paths.
+///
+/// `len` is the payload length in bytes (the on-disk `u32` field).
+pub fn encode_header_into(
+    buf: &mut Vec<u8>,
+    lsn: u64,
+    kind: RecordKind,
+    stream_id: u64,
+    stream_offset: u64,
+    len: u32,
+) {
+    let kind_byte = kind as u8;
+    let crc = header_crc(lsn, kind_byte, stream_id, stream_offset, len);
+    buf.reserve(HEADER_LEN);
     buf.extend_from_slice(&len.to_le_bytes()); // [0..4)
     buf.extend_from_slice(&crc.to_le_bytes()); // [4..8)
-    buf.extend_from_slice(&r.lsn.to_le_bytes()); // [8..16)
-    buf.push(kind); // [16]
-    buf.extend_from_slice(&r.stream_id.to_le_bytes()); // [17..25)
-    buf.extend_from_slice(&r.stream_offset.to_le_bytes()); // [25..33)
+    buf.extend_from_slice(&lsn.to_le_bytes()); // [8..16)
+    buf.push(kind_byte); // [16]
+    buf.extend_from_slice(&stream_id.to_le_bytes()); // [17..25)
+    buf.extend_from_slice(&stream_offset.to_le_bytes()); // [25..33)
+}
+
+/// Append a framed record (header + payload) to `buf`.
+pub fn encode_into(buf: &mut Vec<u8>, r: &Record) {
+    encode_header_into(buf, r.lsn, r.kind, r.stream_id, r.stream_offset, r.payload.len() as u32);
     buf.extend_from_slice(r.payload); // [33..33+len)
 }
 

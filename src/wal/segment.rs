@@ -42,6 +42,15 @@ pub trait SegmentWriter: Send + Sync {
     /// file is `fallocate`'d, no metadata flush is required — `fdatasync`
     /// suffices (spec §4).
     fn fdatasync(&self) -> io::Result<()>;
+
+    /// Return the writable file descriptor for this segment so the caller can
+    /// `splice(2)` the payload directly into the pre-reserved byte range without
+    /// a copy through userspace.
+    ///
+    /// Only available on Linux (where `splice(2)` exists). The returned `RawFd`
+    /// is valid for the lifetime of the segment — the caller must not close it.
+    #[cfg(target_os = "linux")]
+    fn splice_payload_fd(&self) -> std::os::fd::RawFd;
 }
 
 /// A WAL segment backed by an ordinary file, `fallocate`'d to full size.
@@ -176,6 +185,16 @@ impl SegmentWriter for FileSegment {
                 Err(io::Error::last_os_error())
             }
         }
+    }
+
+    /// Return the writable fd for kernel-`splice(2)` of the payload.
+    ///
+    /// The fd belongs to `self.file` and is valid for the lifetime of this
+    /// `FileSegment`. The caller must not close it.
+    #[cfg(target_os = "linux")]
+    fn splice_payload_fd(&self) -> std::os::fd::RawFd {
+        use std::os::fd::AsRawFd;
+        self.file.as_raw_fd()
     }
 }
 
