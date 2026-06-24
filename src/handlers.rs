@@ -1242,6 +1242,48 @@ where
     };
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
 
+    // Shared response builder: captures `st`, `producer` by ref. Used both by
+    // the memory early-return below and the WAL-path ack at the end, so the
+    // two responses cannot drift.
+    let make_ok = || {
+        let t = st.tail();
+        let status = if producer.is_some() { 200 } else { 204 };
+        let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(t.bytes));
+        if let Some(p) = &producer {
+            b = b
+                .h(H_PRODUCER_EPOCH, p.epoch.to_string())
+                .h(H_PRODUCER_SEQ, p.seq.to_string());
+        }
+        if t.closed {
+            b = b.hs(H_CLOSED, "true");
+        }
+        ZeroCopyOutcome::Done(b.body(empty()))
+    };
+
+    // memory mode: the per-stream file write IS the durable-enough ack (no WAL,
+    // no fsync — durability comes from replication). Skip the whole WAL relay.
+    if durability() == DurabilityMode::Memory {
+        // Commit producer/seq dedup state under the appender lock — mirrors the
+        // same block in the WAL path (after mark_staged) so a concurrent
+        // same-producer request cannot double-accept.
+        {
+            let mut s = st.shared.write().unwrap();
+            if let Some(p) = &producer {
+                s.producers.insert(
+                    p.id.clone(),
+                    ProducerState { epoch: p.epoch, last_seq: p.seq },
+                );
+            }
+            if let Some(seq) = &seq_header {
+                s.last_seq_header = Some(seq.clone());
+            }
+        }
+        drop(ap); // critical section ends
+        st.schedule_meta_flush();
+        maybe_seal_bg(&store, &st);
+        return make_ok();
+    }
+
     // ---- WAL: reserve header → splice file→WAL → mark staged → wait durable ----
     let wal = store.wal.get().expect("WAL must be attached before serving");
     let shard = wal.shard_for(st.id);
@@ -1326,18 +1368,7 @@ where
     st.schedule_meta_flush();
     maybe_seal_bg(&store, &st);
 
-    let t = st.tail();
-    let status = if producer.is_some() { 200 } else { 204 };
-    let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(t.bytes));
-    if let Some(p) = &producer {
-        b = b
-            .h(H_PRODUCER_EPOCH, p.epoch.to_string())
-            .h(H_PRODUCER_SEQ, p.seq.to_string());
-    }
-    if t.closed {
-        b = b.hs(H_CLOSED, "true");
-    }
-    ZeroCopyOutcome::Done(b.body(empty()))
+    make_ok()
 }
 
 // ---------- reading bodies from the data file ----------

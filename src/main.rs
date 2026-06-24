@@ -208,7 +208,7 @@ fn main() {
                 eprintln!("--durability memory disables the resident tail cache");
             }
             store::set_tail_cache_bytes(0);
-            // (Task 2 adds: engine_raw::set_zero_copy(true) so binary appends splice.)
+            engine_raw::set_zero_copy(true); // binary appends take the splice intercept
         }
     }
 
