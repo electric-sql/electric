@@ -70,6 +70,39 @@ pub fn durability() -> DurabilityMode {
     }
 }
 
+/// Test-only: serialization lock + RAII guard so parallel tests never race on
+/// `DURABILITY_MODE`. Every test that drives the real append path acquires this
+/// guard for its entire body; two such tests are then mutually exclusive.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{set_durability, DurabilityMode};
+    use std::sync::{Mutex, MutexGuard};
+
+    static MODE_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(crate) struct DurabilityGuard(#[allow(dead_code)] MutexGuard<'static, ()>);
+
+    impl DurabilityGuard {
+        pub(crate) fn wal() -> Self {
+            let g = MODE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            set_durability(DurabilityMode::Wal);
+            DurabilityGuard(g)
+        }
+
+        pub(crate) fn memory() -> Self {
+            let g = MODE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            set_durability(DurabilityMode::Memory);
+            DurabilityGuard(g)
+        }
+    }
+
+    impl Drop for DurabilityGuard {
+        fn drop(&mut self) {
+            set_durability(DurabilityMode::Wal);
+        }
+    }
+}
+
 fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
@@ -2184,12 +2217,12 @@ mod memory_mode_tests {
 
     #[tokio::test]
     async fn memory_mode_append_acks_without_wal() {
+        let _guard = crate::handlers::test_support::DurabilityGuard::memory();
         let dir = tmp("mem-append");
         let store = Arc::new(
             Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap(),
         );
         // NOTE: no WAL attached (store.wal not set) — memory mode must not touch it.
-        set_durability(DurabilityMode::Memory);
 
         // Create the stream (PUT).
         let resp = handle(Arc::clone(&store), put_req("m/s", "application/octet-stream")).await;
@@ -2219,8 +2252,6 @@ mod memory_mode_tests {
             "per-stream file must hold the appended bytes"
         );
 
-        // Restore global state for other tests.
-        set_durability(DurabilityMode::Wal);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

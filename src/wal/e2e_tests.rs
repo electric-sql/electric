@@ -22,6 +22,7 @@ use tokio::task::JoinHandle;
 
 use crate::api::{Method, Req};
 use crate::handlers;
+use crate::handlers::test_support::DurabilityGuard;
 use crate::store::Store;
 use crate::tier::TierConfig;
 use crate::wal::walset::WalSet;
@@ -179,6 +180,7 @@ fn fork_offset(bytes: u64) -> String {
 /// (staged but its committer never advanced `durable_lsn`) must be ABSENT.
 #[tokio::test]
 async fn e2e_no_loss_two_shards_acked_records_survive_crash() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("noloss");
 
     // 4 shards so a handful of streams reliably spreads across ≥2 of them.
@@ -245,6 +247,7 @@ async fn e2e_no_loss_two_shards_acked_records_survive_crash() {
 /// un-acked bytes are gone, the genuinely-acked prefix is fully restored.
 #[tokio::test]
 async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
+    let _guard = DurabilityGuard::wal();
     use crate::wal::codec::HEADER_LEN;
 
     let dir = tmp("noloss-unacked");
@@ -318,6 +321,7 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
 /// whole, valid JSON values.
 #[tokio::test]
 async fn e2e_no_torn_json_tail_repaired_to_whole_records() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("torn-json");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -375,6 +379,7 @@ async fn e2e_no_torn_json_tail_repaired_to_whole_records() {
 /// must still compute the frontier and truncate the torn tail.
 #[tokio::test]
 async fn e2e_no_torn_tail_when_last_durable_record_below_checkpoint() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("torn-below-ckpt");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -422,6 +427,7 @@ async fn e2e_no_torn_tail_when_last_durable_record_below_checkpoint() {
 /// spread the streams across ≥2 shards (else the test is vacuous).
 #[tokio::test]
 async fn e2e_sharding_parallel_recovery_across_shards() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("sharding");
 
     let h = Harness::boot(&dir, Some(4), 4).unwrap();
@@ -470,6 +476,7 @@ async fn e2e_sharding_parallel_recovery_across_shards() {
 /// file holds only the in-range record; the below-frontier record is not applied.
 #[tokio::test]
 async fn e2e_sharding_below_file_base_record_skipped() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("below-base");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -556,6 +563,7 @@ async fn e2e_sharding_below_file_base_record_skipped() {
 /// (the `is_err()` the brief calls out — main.rs maps it to exit 2).
 #[tokio::test]
 async fn e2e_n_stability_shard_resolution_ignores_core_count() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("n-stability");
 
     // Persist N = 4, seeded with default_n = 4.
@@ -611,6 +619,7 @@ async fn e2e_n_stability_shard_resolution_ignores_core_count() {
 /// delays WAL recycling, it never backpressures the ack path).
 #[tokio::test]
 async fn e2e_checkpoint_non_blocking_appends_ack_and_wal_grows() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("ckpt-nonblock");
 
     let h = Harness::boot(&dir, Some(1), 1).unwrap();
@@ -660,6 +669,7 @@ async fn e2e_checkpoint_non_blocking_appends_ack_and_wal_grows() {
 /// inversion, over the real wire.
 #[tokio::test]
 async fn e2e_forked_stream_full_http_path_recovers_correctly() {
+    let _guard = DurabilityGuard::wal();
     let dir = tmp("forked-http");
 
     let h = Harness::boot(&dir, Some(2), 2).unwrap();
@@ -721,6 +731,7 @@ async fn e2e_forked_stream_full_http_path_recovers_correctly() {
 /// WAL is made unconditional in main.rs.
 #[tokio::test]
 async fn strict_created_dir_reopens_wal_only_without_data_loss() {
+    let _guard = DurabilityGuard::wal();
     use std::io::Write;
     let dir = tmp("strict-compat");
 
@@ -840,6 +851,7 @@ mod zero_copy_torn_tail {
 
     #[tokio::test]
     async fn zero_copy_torn_tail_recovered_by_replay() {
+        let _guard = DurabilityGuard::wal();
         let dir = tmp("zero-copy-torn");
 
         // Boot a 1-shard WAL server and create a binary (non-JSON) stream.
@@ -969,6 +981,7 @@ mod zero_copy_torn_tail {
     /// truncated back to the durable frontier (the zero payload is never exposed).
     #[tokio::test]
     async fn zero_copy_orphan_payload_not_recovered_after_segment_fdatasync() {
+        let _guard = DurabilityGuard::wal();
         use crate::wal::segment::SegmentWriter;
 
         let dir = tmp("zero-copy-orphan-payload");
