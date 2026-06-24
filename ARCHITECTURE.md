@@ -27,8 +27,9 @@ Two things fall out of that choice:
 
 - A **read is a `pread`/byte-range** of the file → it is served with `sendfile(2)`
   on Linux (kernel page cache → socket, zero-copy), positioned reads elsewhere.
-- An **append is a `write` + an `fsync`** → durability cost is dominated by the
-  fsync, which we amortize across concurrent writers.
+- An **append is a `write` + an `fsync`** (in `wal` mode; `memory` mode omits
+  the fsync — see [Durability modes](#durability-modes)) → durability cost is
+  dominated by the fsync, which we amortize across concurrent writers.
 
 The HTTP layer is a single hand-rolled HTTP/1.1 loop (`engine_raw`) — no
 framework — so it owns the socket and can serve reads zero-copy.
@@ -46,9 +47,9 @@ flowchart LR
     W3 --> W4[["per-stream appender mutex"]]
     W4 --> W5["write_all → data file<br/>(lands in page cache)"]
     W5 --> W6["update tail + resident cache"]
-    W6 --> W7["group-commit fsync<br/>(WAL shard committer)"]
-    W7 --> W8["publish tail<br/>(watch channel)"]
-    W8 --> W9["204 / 200 — only after durable"]
+    W6 --> W8["publish tail<br/>(watch channel)"]
+    W8 --> W7["group-commit fsync<br/>(WAL shard committer)"]
+    W7 --> W9["204 / 200 — only after durable"]
   end
 
   subgraph READ["READ  ·  GET"]
@@ -61,7 +62,7 @@ flowchart LR
     R5 --> RB
     R6 --> RB
     RB --> R7{"resident in<br/>tail cache?"}
-    R7 -->|"yes (≤256 KB)"| R8["Body::Full<br/>(from memory)"]
+    R7 -->|"yes (configurable cache)"| R8["Body::Full<br/>(from memory)"]
     R7 -->|"no / large / cold"| R9["Body::FileRange<br/>(sendfile)"]
     R8 --> R10(["socket"])
     R9 --> R10
@@ -95,10 +96,14 @@ Everything else is independent.
    the **resident tail cache**, then **publish the new tail** on the `watch`
    channel. Note the order: the cache is populated _before_ the wake, so a woken
    subscriber reliably hits it.
-5. **Durability** — the append is staged into the stream's assigned WAL shard, and the
-   response returns only after the shard's group-commit committer `fdatasync`s the segment
-   covering this record. See [Durability](#durability) below. Everything above and the
-   entire read path are identical regardless of workload.
+5. **Durability** — in `wal` mode the append is staged into the stream's assigned WAL
+   shard, and the response returns only after the shard's group-commit committer
+   `fdatasync`s the segment covering this record. See [Durability](#durability) below.
+   In `wal` mode everything above and the entire read path are identical regardless of
+   workload. In `memory` mode binary appends take a separate socket→file splice path
+   (zero-copy `splice(2)`, no WAL, no `fdatasync`) that bypasses `handle_append` /
+   `encode_wire` via the engine zero-copy intercept and acks immediately after the
+   page-cache write.
 
 Visibility vs durability are deliberately decoupled: the bytes are in the page
 cache (and the tail is published) before durability resolves, so a live reader
@@ -202,8 +207,8 @@ flowchart TB
   end
 
   A3 ==> PC[("OS page cache<br/>— the hot tier")]
-  A3 ==> RC["resident tail cache<br/>(last chunk, ≤256 KB, in heap)"]
-  A4 -.-> TW[/"tail watch channel<br/>(one notify per append)"/]
+  A3 ==> RC["resident tail cache<br/>(last chunk, configurable via --tail-cache-bytes,<br/>in heap)"]
+  A3 -.-> TW[/"tail watch channel<br/>(one notify per append — before fsync)"/]
 
   subgraph FAN["② Fan-out"]
     direction TB
@@ -247,7 +252,7 @@ The techniques, each with its mechanism and payoff:
    **`--read-offload`** strategy keeps a cold backfill's disk fault off the async
    workers so one slow read can't stall unrelated requests.
 8. **Bounded memory everywhere.** Large reads stream in fixed chunks (the resident
-   cache is capped at 256 KB; cold reads stream in windows) so serving a multi-GB
+   cache is configurable via `--tail-cache-bytes`; cold reads stream in windows) so serving a multi-GB
    backfill costs ~a chunk of RAM, not the read size.
 
 ## Where the time goes
@@ -333,9 +338,10 @@ Key properties:
   `Cache-Control: immutable` and a long max-age — the CDN absorbs repeat cold reads
   before they reach the origin or the object store.
 
-Caveat (current): a cold read materializes its segments into memory (`Body::Full`)
-rather than streaming chunk-by-chunk (`Body::Channel`) — fine for moderate segment
-sizes, a planned follow-up for very large cold ranges.
+A cold or mixed (local + remote) read is streamed chunk-by-chunk as a `Body::Channel`,
+materializing one window at a time, so memory stays bounded regardless of how large the
+cold range is. Fully-local reads still use the zero-copy `Body::FileRange`/`sendfile`
+path; only the resident tail cache returns a small `Body::Full` from memory.
 
 ## Optional fast paths & observability
 
