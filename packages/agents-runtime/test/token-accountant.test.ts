@@ -3,6 +3,8 @@ import {
   CONTEXT_USAGE_BACKGROUND_START,
   CONTEXT_USAGE_HARD_CEILING,
   computeContextUsage,
+  computeContextBreakdown,
+  parseContextBreakdown,
   contextUsageLevel,
   formatContextUsagePercent,
   formatContextBudgetNotice,
@@ -12,6 +14,69 @@ import {
   truncateOversizedToolResults,
 } from '../src/token-accountant'
 import type { LLMMessage } from '../src/types'
+
+describe(`computeContextBreakdown`, () => {
+  const usage = { usedTokens: 50_000, contextWindow: 100_000, ratio: 0.5 }
+
+  it(`splits into system / tools / messages / free that sum to the window`, () => {
+    const segs = computeContextBreakdown(usage, {
+      systemTokens: 5_000,
+      toolsTokens: 15_000,
+    })
+    expect(segs.map((s) => [s.key, s.tokens])).toEqual([
+      [`system`, 5_000],
+      [`tools`, 15_000],
+      [`messages`, 30_000], // used (50k) − system − tools
+      [`free`, 50_000], // window − used
+    ])
+    // Used segments sum to usedTokens; all four sum to the window.
+    expect(segs.slice(0, 3).reduce((n, s) => n + s.tokens, 0)).toBe(50_000)
+    expect(segs.reduce((n, s) => n + s.tokens, 0)).toBe(100_000)
+    expect(segs[2].ratio).toBeCloseTo(0.3)
+  })
+
+  it(`defaults missing parts to zero (messages absorbs the whole used total)`, () => {
+    const segs = computeContextBreakdown(usage)
+    expect(segs.find((s) => s.key === `messages`)?.tokens).toBe(50_000)
+    expect(segs.find((s) => s.key === `system`)?.tokens).toBe(0)
+  })
+
+  it(`never produces negative messages when estimates exceed the real total`, () => {
+    const segs = computeContextBreakdown(
+      { usedTokens: 1_000, contextWindow: 100_000, ratio: 0.01 },
+      { systemTokens: 5_000, toolsTokens: 15_000 }
+    )
+    // System is capped at used; tools/messages can't go below zero.
+    expect(segs.find((s) => s.key === `messages`)?.tokens).toBe(0)
+    expect(segs.every((s) => s.tokens >= 0)).toBe(true)
+  })
+
+  it(`clamps usedTokens to the window when the step is over the window`, () => {
+    const segs = computeContextBreakdown(
+      // A step can report usage above the window; the breakdown clamps `used` so
+      // the segments still sum to the window and `free` can't go negative.
+      { usedTokens: 120_000, contextWindow: 100_000, ratio: 1 },
+      { systemTokens: 5_000, toolsTokens: 15_000 }
+    )
+    const tokens = Object.fromEntries(segs.map((s) => [s.key, s.tokens]))
+    expect(tokens).toEqual({
+      system: 5_000,
+      tools: 15_000,
+      messages: 80_000, // window (100k) − system − tools
+      free: 0,
+    })
+    expect(segs.reduce((n, s) => n + s.tokens, 0)).toBe(100_000)
+  })
+
+  it(`parseContextBreakdown reads persisted JSON and tolerates junk`, () => {
+    expect(parseContextBreakdown(`{"system":12,"tools":34}`)).toEqual({
+      systemTokens: 12,
+      toolsTokens: 34,
+    })
+    expect(parseContextBreakdown(undefined)).toEqual({})
+    expect(parseContextBreakdown(`not json`)).toEqual({})
+  })
+})
 
 describe(`computeContextUsage`, () => {
   it(`sums input + output against the window`, () => {

@@ -15,13 +15,20 @@
   color: inherit;
 }
 
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
+.ring {
+  display: block;
   flex-shrink: 0;
+  overflow: visible;
+}
+
+.ringTrack {
+  stroke: currentColor;
+  opacity: 0.22;
+}
+
+.ringProgress {
+  stroke: currentColor;
+  transition: stroke-dasharray 0.3s ease;
 }
 
 /* Levels mirror the compaction thresholds: warning once background
