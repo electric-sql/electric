@@ -5,6 +5,11 @@
   "license": "Apache-2.0",
   "type": "module",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/server-rust"
+  },
   "scripts": {
     "test:conformance": "vitest run --config conformance/vitest.config.ts",
     "sync-version": "node scripts/sync-cargo-version.mjs"
