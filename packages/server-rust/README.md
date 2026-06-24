@@ -13,7 +13,7 @@ Three ways to get the server (Linux/macOS, x64/arm64):
 cargo install durable-streams
 
 # 2. npm (downloads a prebuilt binary for your platform)
-npm install -g @durable-streams/server-rust
+npm install -g @electric-ax/durable-streams-server-rust
 
 # 3. prebuilt tarball — download from the GitHub Releases page
 #    (tag server-rust-vX.Y.Z), verify the .sha256, extract durable-streams-server
@@ -193,7 +193,7 @@ git push origin server-rust-v0.1.0
 - **GitHub Releases** — `durable-streams-server` tarballs (+ SHA-256) for linux
   and macOS (x86_64 + arm64).
 - **crates.io** — the `durable-streams` crate (`cargo install durable-streams`).
-- **npm** — `@durable-streams/server-rust` plus its four platform packages.
+- **npm** — `@electric-ax/durable-streams-server-rust` plus its four platform packages.
 
 Both registries authenticate via OIDC trusted publishing, so the workflow stores
 no registry tokens. A one-time manual bootstrap is required before the first

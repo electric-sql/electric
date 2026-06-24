@@ -1,9 +1,9 @@
-# @durable-streams/server-rust
+# @electric-ax/durable-streams-server-rust
 
 The [Durable Streams](https://github.com/durable-streams/durable-streams) server — a single self-contained Rust binary — distributed via npm.
 
 ```bash
-npm install -g @durable-streams/server-rust
+npm install -g @electric-ax/durable-streams-server-rust
 durable-streams-server --port 4438 --data-dir ./data
 ```
 

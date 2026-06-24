@@ -1,7 +1,7 @@
 {
   "name": "",
   "version": "0.0.0",
-  "description": "Durable Streams server (Rust) — prebuilt binary for one platform. Installed automatically by @durable-streams/server-rust.",
+  "description": "Durable Streams server (Rust) — prebuilt binary for one platform. Installed automatically by @electric-ax/durable-streams-server-rust.",
   "license": "Apache-2.0",
   "homepage": "https://electric-sql.com/primitives/durable-streams",
   "repository": {

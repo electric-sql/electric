@@ -1,5 +1,5 @@
 {
-  "name": "@durable-streams/server-rust",
+  "name": "@electric-ax/durable-streams-server-rust",
   "version": "0.0.0",
   "description": "High-performance Durable Streams server (Rust) — native binary distributed via npm.",
   "license": "Apache-2.0",
