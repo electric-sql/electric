@@ -14,7 +14,7 @@
 // zero-copy page-cache → socket transfer, but a fault parks a pool thread
 // instead. ReadOffload picks where each read runs; see set_read_offload.
 
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
@@ -57,6 +57,21 @@ impl ReadOffload {
 }
 
 static READ_OFFLOAD: AtomicU8 = AtomicU8::new(ReadOffload::Tail as u8);
+
+/// Process-global `--zero-copy` toggle. When on (Linux only), eligible binary
+/// appends are served via the splice page-cache relay and the tail cache is off.
+static ZERO_COPY: AtomicBool = AtomicBool::new(false);
+
+/// Enable/disable the zero-copy append path (process-global).
+pub fn set_zero_copy(on: bool) {
+    ZERO_COPY.store(on, Ordering::Relaxed);
+}
+
+/// Whether the zero-copy append path is active.
+#[inline]
+pub fn zero_copy() -> bool {
+    ZERO_COPY.load(Ordering::Relaxed)
+}
 
 /// Set the read-offload strategy (process-global). Called once at startup.
 pub fn set_read_offload(mode: ReadOffload) {
