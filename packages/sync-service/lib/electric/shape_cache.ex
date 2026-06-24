@@ -338,7 +338,21 @@ defmodule Electric.ShapeCache do
         is_nil(Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle)) do
       case restore_shape_and_dependencies(handle, shape, opts) do
         {:ok, _pid} ->
-          _ = Electric.Shapes.Consumer.await_snapshot_start(state.stack_id, handle)
+          # await_snapshot_start/2 is a GenServer.call into the just-started
+          # consumer. If that consumer dies before/during the call it exits,
+          # which would otherwise propagate out of handle_continue and crash
+          # ShapeCache before mark_as_ready — turning a single shape that
+          # reliably fails its snapshot into a stack-wide restart loop. Mirror
+          # the materializer (materializer.ex) and catch :exit so one bad
+          # subquery shape can't take down or stall restore for the whole stack.
+          try do
+            _ = Electric.Shapes.Consumer.await_snapshot_start(state.stack_id, handle)
+          catch
+            :exit, reason ->
+              Logger.warning(
+                "Eager subquery consumer await failed for #{handle}: #{inspect(reason)}"
+              )
+          end
 
         _ ->
           :ok
