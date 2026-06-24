@@ -2507,14 +2507,24 @@ defmodule Electric.Plug.RouterTest do
     test "return 400 if same subquery is used with both positive and negative polarity", %{
       opts: opts
     } do
-      assert %{status: 400} =
-               conn("GET", "/v1/shape", %{
-                 table: "outer_table",
-                 offset: "-1",
-                 where:
-                   "inner_id IN (SELECT id FROM inner_table) OR NOT inner_id IN (SELECT id FROM inner_table)"
-               })
-               |> Router.call(opts)
+      conn =
+        conn("GET", "/v1/shape", %{
+          table: "outer_table",
+          offset: "-1",
+          where:
+            "inner_id IN (SELECT id FROM inner_table) OR NOT inner_id IN (SELECT id FROM inner_table)"
+        })
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert %{
+               "errors" => %{
+                 "where" => [
+                   "a subquery dependency cannot be used with both positive and negative polarity in the same filter"
+                 ]
+               }
+             } = Jason.decode!(conn.resp_body)
     end
 
     @tag with_sql: [
@@ -2580,8 +2590,7 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
-        |> Base.encode16(case: :lower)
+        value_tag(stack_id, req.handle, "v:1")
 
       assert %{"id" => "1", "inner_id" => "1", "value" => "10"} = data["value"]
       assert %{"operation" => "insert", "tags" => [^tag]} = data["headers"]
@@ -2598,8 +2607,7 @@ defmodule Electric.Plug.RouterTest do
         )
 
       tag2 =
-        :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
-        |> Base.encode16(case: :lower)
+        value_tag(stack_id, req.handle, "v:2")
 
       assert {_, 200,
               [
@@ -2648,8 +2656,7 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, opts)
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
-        |> Base.encode16(case: :lower)
+        value_tag(stack_id, req.handle, "v:1")
 
       # Now set inner row 1 to excluded = true.
       # This moves it into the subquery result and forces outer row 1 out.
@@ -2688,8 +2695,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "UPDATE inner_table SET excluded = false WHERE id = 1", [])
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
-        |> Base.encode16(case: :lower)
+        value_tag(stack_id, req.handle, "v:1")
 
       assert {_req, 200,
               [
@@ -2848,8 +2854,7 @@ defmodule Electric.Plug.RouterTest do
       assert length(response) == 2
 
       tag =
-        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
-        |> Base.encode16(case: :lower)
+        value_tag(opts[:stack_id], req.handle, "v:1")
 
       assert %{
                "value" => %{"id" => "1"},
@@ -2897,8 +2902,7 @@ defmodule Electric.Plug.RouterTest do
       assert length(response) == 2
 
       tag =
-        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
-        |> Base.encode16(case: :lower)
+        value_tag(opts[:stack_id], req.handle, "v:1")
 
       assert %{
                "value" => %{"id" => "1"},
@@ -3011,8 +3015,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2")
-        |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "v:2")
 
       assert {req, 200,
               [
@@ -3089,8 +3092,7 @@ defmodule Electric.Plug.RouterTest do
       )
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:v:2" <> "team_id:v:2")
-        |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "user_id:v:2" <> "team_id:v:2")
 
       assert {req, 200,
               [
@@ -3161,8 +3163,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
       tag_hash =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
-        |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "v:20")
 
       # DNF tags: "subquery_hash/row_predicate_slot"
       tag = "#{tag_hash}/1"
@@ -3196,7 +3197,7 @@ defmodule Electric.Plug.RouterTest do
       assert length(response) == 2
 
       tag_hash =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "v:1")
 
       # DNF tags: "subquery_hash/row_predicate_slot"
       tag = "#{tag_hash}/1"
@@ -3313,10 +3314,10 @@ defmodule Electric.Plug.RouterTest do
       Process.sleep(1000)
 
       tag2 =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2") |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "v:2")
 
       tag3 =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:3") |> Base.encode16(case: :lower)
+        value_tag(ctx.stack_id, req.handle, "v:3")
 
       # The reduced move queue keeps the first move-in/move-out pair for
       # dependency row 2, then drops the later move-in/move-out oscillation
@@ -3991,6 +3992,15 @@ defmodule Electric.Plug.RouterTest do
     opts
     |> Map.new()
     |> Map.put(:table, table)
+  end
+
+  # Independently computes the expected subquery row tag (mirrors
+  # Electric.Shapes.SubqueryTags.make_value_hash_raw/3) so assertions document the
+  # wire format rather than reusing the code under test. `namespaced_value` is the
+  # already-prefixed tag value, e.g. "v:1".
+  defp value_tag(stack_id, handle, namespaced_value) do
+    :crypto.hash(:md5, stack_id <> handle <> namespaced_value)
+    |> Base.encode16(case: :lower)
   end
 
   defp shape_req(orig_base, router_opts, opts \\ []) do

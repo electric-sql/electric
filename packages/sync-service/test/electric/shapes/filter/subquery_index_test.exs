@@ -226,8 +226,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         0 => %{
           ast: ast,
           sql: "fake",
-          is_subquery: true,
-          negated: polarity == :negated,
+          subquery?: true,
+          negated?: polarity == :negated,
           dependency_index: dep_index,
           subquery_ref: subquery_ref,
           tag_columns: [field]

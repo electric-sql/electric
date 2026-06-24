@@ -42,8 +42,8 @@ defmodule Electric.Shapes.DnfPlanTest do
       # Single position, which is a subquery
       assert map_size(plan.positions) == 1
       pos0 = plan.positions[0]
-      assert pos0.is_subquery == true
-      assert pos0.negated == false
+      assert pos0.subquery? == true
+      assert pos0.negated? == false
       assert pos0.dependency_index == 0
       assert pos0.subquery_ref == ["$sublink", "0"]
       assert pos0.tag_columns == ["x"]
@@ -70,13 +70,13 @@ defmodule Electric.Shapes.DnfPlanTest do
 
       # Position 0: x IN sq1
       pos0 = plan.positions[0]
-      assert pos0.is_subquery == true
+      assert pos0.subquery? == true
       assert pos0.dependency_index == 0
       assert pos0.tag_columns == ["x"]
 
       # Position 1: y IN sq2
       pos1 = plan.positions[1]
-      assert pos1.is_subquery == true
+      assert pos1.subquery? == true
       assert pos1.dependency_index == 1
       assert pos1.tag_columns == ["y"]
 
@@ -102,7 +102,7 @@ defmodule Electric.Shapes.DnfPlanTest do
       # Find the subquery positions
       subquery_positions =
         plan.positions
-        |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+        |> Enum.filter(fn {_pos, info} -> info.subquery? end)
         |> Enum.sort_by(fn {_pos, info} -> info.dependency_index end)
 
       assert length(subquery_positions) == 2
@@ -116,11 +116,11 @@ defmodule Electric.Shapes.DnfPlanTest do
       # Find the row predicate position
       row_positions =
         plan.positions
-        |> Enum.filter(fn {_pos, info} -> not info.is_subquery end)
+        |> Enum.filter(fn {_pos, info} -> not info.subquery? end)
 
       assert [{row_pos, row_info}] = row_positions
       assert row_info.sql =~ "status"
-      assert row_info.is_subquery == false
+      assert row_info.subquery? == false
       assert row_info.dependency_index == nil
 
       # Disjunct 0 should contain sq1 + row predicate, disjunct 1 should contain sq2
@@ -176,7 +176,7 @@ defmodule Electric.Shapes.DnfPlanTest do
 
       assert plan.position_count == 1
       pos0 = plan.positions[0]
-      assert pos0.is_subquery == true
+      assert pos0.subquery? == true
       assert pos0.tag_columns == {:hash_together, ["x", "y"]}
     end
   end
@@ -190,8 +190,8 @@ defmodule Electric.Shapes.DnfPlanTest do
       assert {:ok, plan} = DnfPlan.compile(shape)
 
       pos0 = plan.positions[0]
-      assert pos0.is_subquery == true
-      assert pos0.negated == true
+      assert pos0.subquery? == true
+      assert pos0.negated? == true
       assert plan.dependency_polarities == %{0 => :negated}
     end
 

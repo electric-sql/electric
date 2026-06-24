@@ -47,16 +47,23 @@ defmodule Electric.Shapes.Consumer.TransactionConverter do
           {:halt, {:error, {:truncate, txn.xid}}}
 
         _ ->
+          # Accumulate in reverse, flattening each conversion as we go so the head
+          # of the accumulator is always the last emitted change.
           converted = Shape.convert_change(shape, change, opts)
-          {:cont, [converted | acc]}
+          {:cont, Enum.reduce(converted, acc, &[&1 | &2])}
       end
     end)
     |> case do
       {:error, {:truncate, _xid}} = error ->
         error
 
-      converted ->
-        {:ok, converted |> Enum.reverse() |> List.flatten() |> mark_last_change()}
+      # Mark the last change before reversing, avoiding a separate pass to find
+      # and rebuild the tail.
+      [] ->
+        {:ok, []}
+
+      [last | rest] ->
+        {:ok, Enum.reverse([%{last | last?: true} | rest])}
     end
   end
 
@@ -64,12 +71,5 @@ defmodule Electric.Shapes.Consumer.TransactionConverter do
 
   defp append_effects(xid, changes) do
     [%Effects.AppendChanges{changes: changes, xid: xid}]
-  end
-
-  defp mark_last_change([]), do: []
-
-  defp mark_last_change(changes) do
-    {last, rest} = List.pop_at(changes, -1)
-    rest ++ [%{last | last?: true}]
   end
 end

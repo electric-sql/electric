@@ -28,8 +28,8 @@ defmodule Electric.Shapes.DnfPlan do
   @type position_info :: %{
           ast: term(),
           sql: String.t(),
-          is_subquery: boolean(),
-          negated: boolean(),
+          subquery?: boolean(),
+          negated?: boolean(),
           dependency_index: non_neg_integer() | nil,
           subquery_ref: [String.t()] | nil,
           tag_columns: tag_columns() | nil
@@ -87,7 +87,7 @@ defmodule Electric.Shapes.DnfPlan do
   defp enrich_positions(subexpressions, shape) do
     Map.new(subexpressions, fn {pos, subexpr} ->
       {dep_index, subquery_ref, tag_columns} =
-        if subexpr.is_subquery do
+        if subexpr.subquery? do
           extract_subquery_info(subexpr.ast)
         else
           {nil, nil, nil}
@@ -96,9 +96,9 @@ defmodule Electric.Shapes.DnfPlan do
       {pos,
        %{
          ast: subexpr.ast,
-         sql: position_sql(subexpr.ast, subexpr.is_subquery, shape),
-         is_subquery: subexpr.is_subquery,
-         negated: subexpr.negated,
+         sql: position_sql(subexpr.ast, subexpr.subquery?, shape),
+         subquery?: subexpr.subquery?,
+         negated?: subexpr.negated?,
          dependency_index: dep_index,
          subquery_ref: subquery_ref,
          tag_columns: tag_columns
@@ -126,7 +126,7 @@ defmodule Electric.Shapes.DnfPlan do
 
   defp build_dependency_positions(positions) do
     positions
-    |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+    |> Enum.filter(fn {_pos, info} -> info.subquery? end)
     |> Enum.group_by(fn {_pos, info} -> info.dependency_index end, fn {pos, _} -> pos end)
     |> Map.new(fn {idx, poses} -> {idx, Enum.sort(poses)} end)
   end
@@ -137,7 +137,7 @@ defmodule Electric.Shapes.DnfPlan do
     |> Enum.reduce(%{}, fn {conj, disjunct_idx}, acc ->
       Enum.reduce(conj, acc, fn {pos, _polarity}, acc ->
         case Map.get(positions, pos) do
-          %{is_subquery: true, dependency_index: idx} when not is_nil(idx) ->
+          %{subquery?: true, dependency_index: idx} when not is_nil(idx) ->
             Map.update(acc, idx, MapSet.new([disjunct_idx]), &MapSet.put(&1, disjunct_idx))
 
           _ ->
@@ -150,10 +150,10 @@ defmodule Electric.Shapes.DnfPlan do
 
   defp build_dependency_polarities(positions) do
     positions
-    |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+    |> Enum.filter(fn {_pos, info} -> info.subquery? end)
     |> Enum.group_by(
       fn {_pos, info} -> info.dependency_index end,
-      fn {_pos, info} -> info.negated end
+      fn {_pos, info} -> info.negated? end
     )
     |> Enum.reduce_while({:ok, %{}}, fn {dep_index, negated_flags}, {:ok, acc} ->
       case Enum.uniq(negated_flags) do

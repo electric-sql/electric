@@ -77,9 +77,9 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndex do
 
     polarities =
       plan.positions
-      |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+      |> Enum.filter(fn {_pos, info} -> info.subquery? end)
       |> Map.new(fn {_pos, info} ->
-        {info.dependency_index, if(info.negated, do: :negated, else: :positive)}
+        {info.dependency_index, if(info.negated?, do: :negated, else: :positive)}
       end)
 
     for {dep_index, polarity} <- polarities do

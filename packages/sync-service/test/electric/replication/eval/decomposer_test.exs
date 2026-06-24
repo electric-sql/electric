@@ -370,7 +370,7 @@ defmodule Electric.Replication.Eval.DecomposerTest do
         |> Enum.filter(fn {_pos, subexpr} -> deparse(subexpr.ast) == ~s|"a" = 1| end)
 
       assert length(a_eq_1_entries) == 2
-      polarities = a_eq_1_entries |> Enum.map(fn {_, s} -> s.negated end) |> Enum.sort()
+      polarities = a_eq_1_entries |> Enum.map(fn {_, s} -> s.negated? end) |> Enum.sort()
       assert polarities == [false, true]
     end
 
