@@ -87,6 +87,12 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     GenServer.call(opts[:server], :list_relations_with_stale_cache, :infinity)
   end
 
+  @impl Inspector
+  @spec reset(opts :: term()) :: :ok
+  def reset(opts) do
+    GenServer.call(opts[:server], :reset, :infinity)
+  end
+
   ## Internal API
 
   @impl GenServer
@@ -169,6 +175,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   def handle_call({:clean, oid}, _from, state) do
     {:reply, :ok, delete_relation_info(state, oid)}
+  end
+
+  def handle_call(:reset, _from, state) do
+    :ets.delete_all_objects(inspector_table(state))
+    # Re-persist so the cleared cache survives a restart instead of restoring stale data.
+    persist_data(state)
+    {:reply, :ok, state}
   end
 
   def handle_call(:list_relations_with_stale_cache, _from, state) do

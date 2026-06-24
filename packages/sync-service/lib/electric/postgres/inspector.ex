@@ -56,6 +56,8 @@ defmodule Electric.Postgres.Inspector do
   @callback list_relations_with_stale_cache(opts :: term()) ::
               {:ok, [Electric.oid_relation()]} | :error
 
+  @callback reset(opts :: term()) :: :ok
+
   @type inspector :: {module(), opts :: term()}
 
   def for_stack(stack_id) do
@@ -162,6 +164,14 @@ defmodule Electric.Postgres.Inspector do
           {:ok, [Electric.oid_relation()]} | :error
   def list_relations_with_stale_cache({module, opts}) do
     module.list_relations_with_stale_cache(opts)
+  end
+
+  @doc """
+  Drop the entire inspector cache. Inspectors without a cache are a no-op.
+  """
+  @spec reset(inspector()) :: :ok
+  def reset({module, opts}) do
+    module.reset(opts)
   end
 
   defp as_atom(type) when is_binary(type), do: String.to_atom(type)

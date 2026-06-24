@@ -124,4 +124,7 @@ defmodule Support.StubInspector do
 
   @impl true
   def clean(_, _), do: :ok
+
+  @impl true
+  def reset(_), do: :ok
 end
