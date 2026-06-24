@@ -21,10 +21,11 @@ app.get(`/api/health`, (_req, res) => {
   res.status(200).json({ status: `ok` })
 })
 
-// Generate a transaction ID
+// Generate a transaction ID for Electric's optimistic write handshake.
 async function generateTxId(tx: any): Promise<number> {
-  // This is specific to postgres and how electricsql works
-  const [{ txid }] = await tx.execute(sql`SELECT txid_current() as txid`)
+  const [{ txid }] = await tx.execute(
+    sql`SELECT pg_current_xact_id()::xid::text AS txid`
+  )
   return Number(txid)
 }
 
@@ -36,8 +37,8 @@ app.post(`/api/todos`, async (req, res) => {
     const todoData = validateInsertTodo(req.body)
 
     const result = await db.transaction(async (tx) => {
-      const txid = await generateTxId(tx)
       const [newTodo] = await tx.insert(todos).values(todoData).returning()
+      const txid = await generateTxId(tx)
       return { todo: newTodo, txid }
     })
 
@@ -58,7 +59,6 @@ app.put(`/api/todos/:id`, async (req, res) => {
     const todoData = validateUpdateTodo(req.body)
 
     const result = await db.transaction(async (tx) => {
-      const txid = await generateTxId(tx)
       const [updatedTodo] = await tx
         .update(todos)
         .set({ ...todoData, updated_at: new Date() })
@@ -68,6 +68,8 @@ app.put(`/api/todos/:id`, async (req, res) => {
       if (!updatedTodo) {
         throw new Error(`Todo not found`)
       }
+
+      const txid = await generateTxId(tx)
       return { todo: updatedTodo, txid }
     })
 
@@ -91,7 +93,6 @@ app.delete(`/api/todos/:id`, async (req, res) => {
     const { id } = req.params
 
     const result = await db.transaction(async (tx) => {
-      const txid = await generateTxId(tx)
       const [deleted] = await tx
         .delete(todos)
         .where(eq(todos.id, Number(id)))
@@ -100,6 +101,8 @@ app.delete(`/api/todos/:id`, async (req, res) => {
       if (!deleted) {
         throw new Error(`Todo not found`)
       }
+
+      const txid = await generateTxId(tx)
       return { success: true, txid }
     })
 
@@ -145,7 +148,7 @@ app.get(`/api/todos`, async (req, res) => {
     }
 
     // Copy headers, excluding problematic ones
-    const headers = {}
+    const headers: Record<string, string> = {}
     response.headers.forEach((value, key) => {
       if (
         key.toLowerCase() !== `content-encoding` &&
@@ -155,11 +158,19 @@ app.get(`/api/todos`, async (req, res) => {
       }
     })
 
+    if (!response.body) {
+      res.writeHead(502, { 'Content-Type': `application/json` })
+      res.end(JSON.stringify({ error: `Electric response body is empty` }))
+      return
+    }
+
     // Set status and headers
     res.writeHead(response.status, response.statusText, headers)
 
     // Convert Web Streams to Node.js stream and pipe
-    const nodeStream = Readable.fromWeb(response.body)
+    const nodeStream = Readable.fromWeb(
+      response.body as unknown as Parameters<typeof Readable.fromWeb>[0]
+    )
 
     // Handle stream errors gracefully
     nodeStream.on(`error`, (err) => {
