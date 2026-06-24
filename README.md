@@ -205,9 +205,7 @@ tag-driven release — see [the bootstrap runbook](./RELEASING.md).
 
 Measured on a dedicated 12-core Xeon (Linux 6.8): the server runs in its own
 cgroup and `wrk` is `taskset`-pinned to disjoint cores (a reserved core keeps
-`sshd` schedulable), CPU governor `performance`, 3 repeats per cell. See
-[BENCHMARKS.md](./BENCHMARKS.md) for the full methodology, run environment, and
-an engine-level comparison against [Ursula](https://github.com/tonbo-io/ursula).
+`sshd` schedulable), CPU governor `performance`, 3 repeats per cell.
 
 **Reads** (8 cores, conn 256):
 
