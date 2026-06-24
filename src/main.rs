@@ -166,6 +166,16 @@ fn main() {
                     zero_copy_requested = true;
                 }
             }
+            "--durability" => {
+                let v = val(args.next(), "--durability");
+                match handlers::parse_durability(&v) {
+                    Some(m) => handlers::set_durability(m),
+                    None => {
+                        eprintln!("--durability must be wal|memory");
+                        std::process::exit(2);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -182,6 +192,24 @@ fn main() {
         }
         store::set_tail_cache_bytes(0);
         engine_raw::set_zero_copy(true);
+    }
+
+    // Apply --durability memory AFTER the arg loop. On non-Linux, reject immediately.
+    // On Linux, force the tail cache off (binary appends will use zero-copy in Task 2).
+    if handlers::durability() == handlers::DurabilityMode::Memory {
+        #[cfg(not(target_os = "linux"))]
+        {
+            eprintln!("--durability memory is Linux-only (zero-copy socket→file)");
+            std::process::exit(2);
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if store::tail_cache_bytes() != 0 {
+                eprintln!("--durability memory disables the resident tail cache");
+            }
+            store::set_tail_cache_bytes(0);
+            // (Task 2 adds: engine_raw::set_zero_copy(true) so binary appends splice.)
+        }
     }
 
     // S3 credentials come from env (never CLI flags), matching the OTEL_*/AWS
@@ -213,7 +241,12 @@ fn main() {
             Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"),
         );
 
-        // ---- WAL wiring (always-on) ----
+        // ---- WAL wiring (Wal mode only) ----
+        //
+        // Skipped entirely in `--durability memory` mode — no WAL is opened,
+        // recovered, or attached, and no committers/ticker spawn. The buffered
+        // append path (`write_wire` → `maybe_sync_on_ack`) acks on the
+        // page-cache file write alone (see `DurabilityMode::Memory` no-op).
         //
         // Order is load-bearing for crash-correctness (spec §9):
         //   1. `WalSet::open` is NON-DESTRUCTIVE — it opens the existing on-disk
@@ -236,34 +269,36 @@ fn main() {
         //      per-shard committers, and start the checkpoint ticker. No append can
         //      run before this point (we have not begun serving yet), so no durable
         //      record is lost and no new append collides with un-recovered WAL data.
-        let open_res = match wal_segment_bytes {
-            Some(sz) => wal::walset::WalSet::open_with_segment_size(
-                &data_dir, wal_shards, workers, sz,
-            ),
-            None => wal::walset::WalSet::open(&data_dir, wal_shards, workers),
-        };
-        let walset = open_res.unwrap_or_else(|e| {
-            eprintln!("error: {e}");
-            std::process::exit(2);
-        });
-        wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
-        walset
-            .reset_after_recovery()
-            .expect("WAL reset after recovery failed");
-        store
-            .wal
-            .set(Arc::clone(&walset))
-            .unwrap_or_else(|_| panic!("WAL already attached"));
-        walset.spawn_committers();
-        // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
-        // shard's touched per-stream files and recycle its WAL below the
-        // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
-        // durable_lsn, never on checkpoint).
-        spawn_checkpoint_ticker(Arc::clone(&walset));
-        // 1 Hz per-shard `WAL_STATS` emitter (spec §11): batch-size
-        // distribution + durability gauges. No-op unless built with
-        // `--features telemetry`; off the hot commit/append path.
-        wal::telemetry::spawn_emitter(Arc::clone(&walset));
+        if handlers::durability() == handlers::DurabilityMode::Wal {
+            let open_res = match wal_segment_bytes {
+                Some(sz) => wal::walset::WalSet::open_with_segment_size(
+                    &data_dir, wal_shards, workers, sz,
+                ),
+                None => wal::walset::WalSet::open(&data_dir, wal_shards, workers),
+            };
+            let walset = open_res.unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(2);
+            });
+            wal::recovery::recover(&store, &walset).expect("WAL recovery failed");
+            walset
+                .reset_after_recovery()
+                .expect("WAL reset after recovery failed");
+            store
+                .wal
+                .set(Arc::clone(&walset))
+                .unwrap_or_else(|_| panic!("WAL already attached"));
+            walset.spawn_committers();
+            // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
+            // shard's touched per-stream files and recycle its WAL below the
+            // checkpoint. Non-blocking w.r.t. acks (those gate on the committer's
+            // durable_lsn, never on checkpoint).
+            spawn_checkpoint_ticker(Arc::clone(&walset));
+            // 1 Hz per-shard `WAL_STATS` emitter (spec §11): batch-size
+            // distribution + durability gauges. No-op unless built with
+            // `--features telemetry`; off the hot commit/append path.
+            wal::telemetry::spawn_emitter(Arc::clone(&walset));
+        }
 
         let addr: SocketAddr = (host, port).into();
         let listener = TcpListener::bind(addr).await.expect("bind failed");

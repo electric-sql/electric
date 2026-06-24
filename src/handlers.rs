@@ -35,6 +35,41 @@ pub fn set_long_poll_timeout(ms: u64) {
     LONG_POLL_TIMEOUT_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
 }
 
+// ---------- durability mode ----------
+
+/// Server durability mode, chosen at startup via `--durability`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DurabilityMode {
+    /// Durable: ack after the record is durable in the sharded WAL (group-commit fsync).
+    #[default]
+    Wal,
+    /// No WAL, no fsync: ack on the page-cache write. Durability comes from replication
+    /// (future). Linux-only (binary appends use zero-copy socket→file).
+    Memory,
+}
+
+static DURABILITY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Parse the `--durability` value. `wal` | `memory`; `None` → usage error.
+pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
+    match s {
+        "wal" => Some(DurabilityMode::Wal),
+        "memory" => Some(DurabilityMode::Memory),
+        _ => None,
+    }
+}
+
+pub fn set_durability(mode: DurabilityMode) {
+    DURABILITY_MODE.store(mode as u8, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn durability() -> DurabilityMode {
+    match DURABILITY_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => DurabilityMode::Memory,
+        _ => DurabilityMode::Wal,
+    }
+}
+
 fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
@@ -584,6 +619,10 @@ async fn maybe_sync_on_ack(
     wire: &Bytes,
     stream_offset: u64,
 ) -> std::io::Result<()> {
+    // memory mode: no WAL — the page-cache file write IS the ack. No fsync, no stage.
+    if durability() == DurabilityMode::Memory {
+        return Ok(());
+    }
     let wal = store.wal.get().expect("WAL must be attached before serving");
     let shard = wal.shard_for(st.id);
     // Register the touched per-stream file into the shard's dirty set
@@ -2100,6 +2139,89 @@ mod bug1_tests {
             run_buffered(Mode::Error).await.is_err(),
             "a cold-read backend error must surface as Err (H4)"
         );
+    }
+}
+
+#[cfg(test)]
+mod memory_mode_tests {
+    //! Tests for `--durability memory` mode: append acks with no WAL attached.
+    use super::*;
+    use crate::api::{Method, Req};
+    use crate::store::Store;
+    use crate::tier::TierConfig;
+    use bytes::Bytes;
+
+    fn tmp(tag: &str) -> std::path::PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let p = std::env::temp_dir().join(format!(
+            "ds-mem-{tag}-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&p);
+        p
+    }
+
+    fn put_req(path: &str, content_type: &str) -> Req {
+        Req {
+            method: Method::Put,
+            path: path.to_string(),
+            query: None,
+            headers: vec![("content-type".to_string(), content_type.to_string())],
+            body: Bytes::new(),
+        }
+    }
+
+    fn post_req(path: &str, content_type: &str, body: &[u8]) -> Req {
+        Req {
+            method: Method::Post,
+            path: path.to_string(),
+            query: None,
+            headers: vec![("content-type".to_string(), content_type.to_string())],
+            body: Bytes::copy_from_slice(body),
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_mode_append_acks_without_wal() {
+        let dir = tmp("mem-append");
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap(),
+        );
+        // NOTE: no WAL attached (store.wal not set) — memory mode must not touch it.
+        set_durability(DurabilityMode::Memory);
+
+        // Create the stream (PUT).
+        let resp = handle(Arc::clone(&store), put_req("m/s", "application/octet-stream")).await;
+        assert!(
+            (200..300).contains(&resp.status),
+            "create stream expected 2xx, got {}",
+            resp.status
+        );
+
+        // Append a record (POST) — must ack without WAL.
+        let resp = handle(
+            Arc::clone(&store),
+            post_req("m/s", "application/octet-stream", b"hello-memory"),
+        )
+        .await;
+        assert!(
+            (200..300).contains(&resp.status),
+            "memory append should ack, got {}",
+            resp.status
+        );
+
+        // Verify the bytes landed in the per-stream file.
+        let st = store.get("m/s").unwrap();
+        assert_eq!(
+            std::fs::read(&st.file_path).unwrap(),
+            b"hello-memory",
+            "per-stream file must hold the appended bytes"
+        );
+
+        // Restore global state for other tests.
+        set_durability(DurabilityMode::Wal);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
