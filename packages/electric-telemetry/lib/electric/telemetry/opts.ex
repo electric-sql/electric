@@ -5,6 +5,10 @@ defmodule ElectricTelemetry.Opts do
       installation_id: [type: :string],
       stack_id: [type: :string],
       storage_dir: [type: :string],
+      # Directory depth (relative to the disk-usage walk root) at which a single
+      # shape's directory sits, used to bucket the per-shape
+      # `electric.storage.dir.bytes` metric. `nil` disables per-shape grouping.
+      shape_dir_group_depth: [type: {:or, [:pos_integer, nil]}, default: nil],
       version: [type: :string, required: true],
       reporters: [
         type: :keyword_list,

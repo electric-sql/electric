@@ -132,6 +132,16 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   # Returns the `n` largest `{name, bytes}` buckets, sorted descending by size.
+  #
+  # Scale tradeoff: the full `%{dir => bytes}` map is materialized for the whole
+  # tree and sorted (O(k log k) in the number of buckets `k`) once per walk
+  # before being trimmed to the top `n`. Only the top `n` are retained in state
+  # and ETS, so steady-state memory stays bounded; the transient cost is the
+  # full map plus one sort per ~60s cycle. This is comfortable at ~10k shapes
+  # per stack and acceptable into the low hundreds of thousands. If a single
+  # stack ever holds enough shapes for that transient sort to cause real GC
+  # pressure, replace this with a running bounded top-N (min-heap) that never
+  # materializes the full sorted list.
   defp top_n(buckets, n) do
     buckets
     |> Enum.sort_by(fn {_name, bytes} -> bytes end, :desc)
