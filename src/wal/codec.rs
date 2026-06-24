@@ -105,7 +105,7 @@ fn header_crc(lsn: u64, kind: u8, stream_id: u64, stream_offset: u64, len: u32) 
 /// cannot diverge between the two reservation paths.
 ///
 /// `len` is the payload length in bytes (the on-disk `u32` field).
-pub fn encode_header_into(
+pub(crate) fn encode_header_into(
     buf: &mut Vec<u8>,
     lsn: u64,
     kind: RecordKind,

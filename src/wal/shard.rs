@@ -424,6 +424,7 @@ impl Shard {
     ///
     /// Returns `InvalidInput` if the framed record size exceeds `segment_size`, or
     /// the underlying header `write_at` fails.
+    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
     pub fn reserve_for_splice(
         &self,
         kind: RecordKind,
@@ -484,6 +485,7 @@ impl Shard {
     /// Advance the contiguous-written watermark for a previously reserved splice lsn
     /// and notify the committer. Must be called AFTER the payload has been spliced
     /// into the segment at the offset returned by [`reserve_for_splice`].
+    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
     pub fn mark_staged(&self, lsn: u64) {
         {
             let mut g = self.inner.lock().unwrap();

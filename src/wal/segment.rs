@@ -50,6 +50,7 @@ pub trait SegmentWriter: Send + Sync {
     /// Only available on Linux (where `splice(2)` exists). The returned `RawFd`
     /// is valid for the lifetime of the segment — the caller must not close it.
     #[cfg(target_os = "linux")]
+    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
     fn splice_payload_fd(&self) -> std::os::fd::RawFd;
 }
 
@@ -192,6 +193,7 @@ impl SegmentWriter for FileSegment {
     /// The fd belongs to `self.file` and is valid for the lifetime of this
     /// `FileSegment`. The caller must not close it.
     #[cfg(target_os = "linux")]
+    #[allow(dead_code)] // consumed by the zero-copy append path (wired in a later task)
     fn splice_payload_fd(&self) -> std::os::fd::RawFd {
         use std::os::fd::AsRawFd;
         self.file.as_raw_fd()
