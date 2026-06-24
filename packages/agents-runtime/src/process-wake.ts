@@ -669,7 +669,47 @@ export async function processWake(
     return left < right ? -1 : 1
   }
 
+  const firstPendingRunnableFreshOffset = (): string | null => {
+    for (const batch of pendingLiveBatches) {
+      const events = toChangeEvents(batch)
+      const cancelledInboxKeys = new Set(
+        events.filter(isInboxCancellationEvent).map(inboxEventKey)
+      )
+      for (const event of events) {
+        if (event.type === `wake`) {
+          return event.headers.offset ?? batch.offset
+        }
+        if (isInboxEvent(event)) {
+          if (cancelledInboxKeys.has(inboxEventKey(event))) continue
+          const value = event.value as
+            | {
+                payload?: unknown
+                mode?: `immediate` | `queued` | `paused` | `steer`
+                status?: `pending` | `processed` | `cancelled`
+              }
+            | undefined
+          if (
+            value?.status !== `cancelled` &&
+            (value?.payload !== undefined ||
+              value?.mode === `queued` ||
+              value?.mode === `steer`)
+          ) {
+            return event.headers.offset ?? batch.offset
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const setSafeAckOffset = (offset: string): void => {
+    const pendingFreshOffset = firstPendingRunnableFreshOffset()
+    if (
+      pendingFreshOffset !== null &&
+      compareOffsets(offset, pendingFreshOffset) >= 0
+    ) {
+      return
+    }
     if (compareOffsets(offset, safeAckOffset) > 0) {
       safeAckOffset = offset
     }
