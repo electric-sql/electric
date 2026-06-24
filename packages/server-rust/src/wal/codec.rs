@@ -142,6 +142,9 @@ fn header_crc(
 /// carries [`PAYLOAD_CHECKSUMMED`] (always set by the buffered WAL path) and
 /// `payload_crc` is the crc32c over the payload (0 when `PAYLOAD_CHECKSUMMED` is
 /// clear).
+// The fields are the wire header layout (one arg per field); grouping them into a
+// struct would just shuffle the same data around the encoder.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_header_into(
     buf: &mut Vec<u8>,
     lsn: u64,
