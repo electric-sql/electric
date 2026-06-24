@@ -117,6 +117,32 @@ S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID`
 | **Bounded local disk with long history**          | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
 | **High fan-out p99 across many streams on Linux** | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
 
+### Run-configuration matrix
+
+The server runs in several configurations — durability (`wal` vs `memory`), the
+resident tail cache on/off, zero-copy, and read-offload. Each is **protocol-equivalent**:
+CI runs the whole conformance suite once per configuration (the `rust-conformance`
+matrix in `.github/workflows/ci.yml`), passing the flags through the `RUST_SERVER_ARGS`
+env var that the test harness forwards to the spawned binary. These are exactly the
+configurations CI guards.
+
+| Config                    | Flags                     | Exercises                                                        | Platform |
+| ------------------------- | ------------------------- | --------------------------------------------------------------- | -------- |
+| `wal-default`             | _(none)_                  | WAL durability, buffered append, resident cache off (Linux)     | all      |
+| `wal-resident-cache`      | `--tail-cache-bytes 65536`| WAL + resident tail cache on                                    | all      |
+| `wal-zero-copy`           | `--zero-copy`             | WAL splice relay (socket→file→WAL), cache forced off            | Linux    |
+| `wal-read-offload-always` | `--read-offload always`   | reads served on the blocking pool                               | Linux    |
+| `memory`                  | `--durability memory`     | no WAL; zero-copy socket→file append; page-cache ack            | Linux    |
+
+Run one configuration's conformance suite locally:
+
+```bash
+RUST_SERVER_ARGS="--durability memory" pnpm vitest run --project server-rust
+```
+
+(The Linux-only configs need a Linux host — e.g. Docker — because zero-copy / `memory`
+exit 2 elsewhere.)
+
 ## What it implements
 
 Core protocol: create / append / read (catch-up, long-poll, SSE), HEAD, DELETE, JSON mode, idempotent producers (`Producer-Id` / `Producer-Epoch` / `Stream-Seq`), close, TTL / expiry, cursors, ETags / 304, security headers, and stream forks.
