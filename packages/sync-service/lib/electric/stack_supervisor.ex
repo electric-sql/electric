@@ -427,7 +427,12 @@ defmodule Electric.StackSupervisor do
         {Electric.MonitoredCoreSupervisor,
          stack_id: stack_id,
          connection_manager_opts: connection_manager_opts,
-         shape_db_opts: config.shape_db_opts}
+         shape_db_opts: config.shape_db_opts,
+         persistent_kv: config.persistent_kv},
+        # ShutdownCoordinator must be the LAST child so it terminates
+        # FIRST on graceful stack shutdown — see the module docstring.
+        {Electric.StackSupervisor.ShutdownCoordinator,
+         stack_id: stack_id, persistent_kv: config.persistent_kv}
       ]
       |> Enum.reject(&is_nil/1)
 
