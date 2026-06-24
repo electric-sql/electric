@@ -46,8 +46,12 @@ const {
   mockInitialManifests,
   mockEntityOnEvent,
   mockEntityOnBatch,
+  mockProducerLastSuccessfulOffset,
 } = vi.hoisted(() => ({
   mockProducerAppend: vi.fn(),
+  mockProducerLastSuccessfulOffset: {
+    current: undefined as string | undefined,
+  },
   mockProducerFlush: vi.fn().mockResolvedValue(undefined),
   mockProducerDetach: vi.fn().mockResolvedValue(undefined),
   mockConstructedProducers: [] as Array<{
@@ -131,6 +135,9 @@ vi.mock(`@durable-streams/client`, async (importOriginal) => {
     append = mockProducerAppend
     flush = mockProducerFlush
     detach = mockProducerDetach
+    get lastSuccessfulOffset() {
+      return mockProducerLastSuccessfulOffset.current
+    }
   }
   return {
     ...actual,
@@ -457,6 +464,7 @@ describe(`processWake`, () => {
     mockSourceEvents.current = []
     mockStreamOffset.value = `10_100`
     mockDbOffset.value = `10_100`
+    mockProducerLastSuccessfulOffset.current = undefined
     mockEntityOnEvent.current = null
     mockEntityOnBatch.current = null
     mockStreamHead.mockResolvedValue({
@@ -1150,6 +1158,85 @@ describe(`processWake`, () => {
     })
 
     await signalAborted
+    await wakePromise
+
+    expect(wakePayloads).toEqual([undefined])
+    const doneCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) =>
+        String(url).includes(`/_electric/wakes/wake-abc`) &&
+        (opts?.body as string | undefined)?.includes(`"done":true`)
+    )
+    const body = JSON.parse(doneCalls.at(-1)![1]!.body as string) as {
+      acks: Array<{ path: string; offset: string }>
+    }
+    expect(body.acks).toEqual([
+      { path: `/streams/entity:agent-1`, offset: `10_500` },
+    ])
+  })
+
+  it(`does not ack a queued inbox when SIGINT cleanup writes advance the stream tail`, async () => {
+    const wakePayloads: Array<unknown> = []
+    let handlerStartedResolve: (() => void) | null = null
+    const handlerStarted = new Promise<void>((resolve) => {
+      handlerStartedResolve = resolve
+    })
+    let signalAbortedResolve: (() => void) | null = null
+    const signalAborted = new Promise<void>((resolve) => {
+      signalAbortedResolve = resolve
+    })
+
+    defineEntity(`test-agent`, {
+      handler: async (ctx, wake) => {
+        wakePayloads.push(wake.payload)
+        handlerStartedResolve?.()
+        await new Promise<void>((resolve) => {
+          ctx.signal.addEventListener(
+            `abort`,
+            () => {
+              signalAbortedResolve?.()
+              resolve()
+            },
+            { once: true }
+          )
+        })
+      },
+    })
+
+    const notification = makeNotification({ triggerEvent: `inbox` })
+    notification.entity!.status = `running`
+    const wakePromise = processWake(notification, BASE_CONFIG)
+    await handlerStarted
+
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `signal`,
+          `sigint-handler`,
+          `insert`,
+          { signal: `SIGINT`, status: `unhandled` },
+          { offset: `10_500` }
+        ),
+      ],
+      offset: `10_500`,
+    })
+    mockEntityOnBatch.current?.({
+      items: [
+        ev(
+          `inbox`,
+          `m-after-sigint`,
+          `insert`,
+          { payload: `should run in a later wake` },
+          { offset: `10_600` }
+        ),
+      ],
+      offset: `10_600`,
+    })
+
+    await signalAborted
+    // Simulate cleanup writes (e.g. signal handled / aborted run rows) being
+    // appended after the queued inbox. Acking this offset would swallow the
+    // unprocessed inbox and prevent Durable Streams from issuing next_wake.
+    mockProducerLastSuccessfulOffset.current = `10_700`
     await wakePromise
 
     expect(wakePayloads).toEqual([undefined])
