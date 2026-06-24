@@ -1063,18 +1063,6 @@ defmodule Electric.Shapes.Consumer do
          opts
        ) do
     Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds, opts)
-  catch
-    # The consumer monitors the materializer; if the materializer died the
-    # :DOWN message is already in our mailbox and handle_materializer_down/2
-    # will run after the current handle_event/handle_call completes.
-    # Treat a `:noproc` (or transient `:normal`/`:shutdown` exit) here as
-    # the same condition: don't crash the consumer (which would route into
-    # the abnormal-shutdown path of handle_writer_termination and remove
-    # the shape from disk).
-    :exit, {:noproc, _} -> :ok
-    :exit, :noproc -> :ok
-    :exit, {:normal, _} -> :ok
-    :exit, {:shutdown, _} -> :ok
   end
 
   defp notify_materializer_of_new_changes(_state, _changes_or_bounds, _opts), do: :ok

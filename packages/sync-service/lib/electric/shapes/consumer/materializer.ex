@@ -171,72 +171,33 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_continue({:read_stream, storage}, state) do
-    state = read_history_up_to_subscribed(state, storage)
+    {:ok, offset, stream} =
+      get_stream_up_to_offset(state.offset, state.subscribed_offset, storage)
+
+    {state, _} =
+      stream
+      |> decode_json_stream()
+      |> apply_changes(state)
+
     write_link_values(state)
-    {:noreply, state}
+
+    {:noreply, %{state | offset: offset}}
   end
 
   @doc """
-  Replay all of the source shape's persisted history (snapshot + log) up to
-  `state.subscribed_offset` so the materializer's value_counts reflect the
-  on-disk state on startup.
+  Get a stream of log entries from storage, bounded by the subscribed offset.
 
-  `Storage.get_log_stream/3` returns at most one chunk per call **for
-  snapshot chunks** — but for the main log it returns the entire requested
-  range `[min_offset, subscribed_offset]` in one call. So we iterate
-  through snapshot chunks using `Storage.get_chunk_end_log_offset/2`,
-  and as soon as the iteration would step into the main log we stop:
-  the previous call already streamed everything up to the subscribed
-  offset. Iterating into the main log would re-read entries already
-  applied, producing duplicate inserts that crash the materializer.
+  The subscribed_offset is the Consumer's latest_offset at the time of subscription.
+  We only read up to this offset to avoid duplicates - any changes after this offset
+  will be delivered via new_changes messages from the Consumer.
   """
-  def read_history_up_to_subscribed(state, storage) do
-    cond do
-      is_nil(state.subscribed_offset) ->
-        state
-
-      is_log_offset_lte(state.subscribed_offset, state.offset) ->
-        state
-
-      true ->
-        stream = Storage.get_log_stream(state.offset, state.subscribed_offset, storage)
-        {state, _} = stream |> decode_json_stream() |> apply_changes(state)
-
-        # If the read just covered the main log (because either the
-        # current offset is already past the snapshot or the next chunk
-        # boundary jumps into real-offset territory), `stream_main_log`
-        # returned the whole range up to `subscribed_offset` in a single
-        # call and we're done.
-        if is_real_offset(state.offset) or is_last_virtual_offset(state.offset) do
-          %{state | offset: state.subscribed_offset}
-        else
-          next_offset = Storage.get_chunk_end_log_offset(state.offset, storage)
-
-          cond do
-            is_nil(next_offset) ->
-              # No further chunks past this offset — we've reached the end.
-              %{state | offset: state.subscribed_offset}
-
-            is_log_offset_lte(next_offset, state.offset) ->
-              # Defensive: chunk_end did not advance. Stop to avoid an
-              # infinite loop. This shouldn't happen in normal operation.
-              %{state | offset: state.subscribed_offset}
-
-            is_log_offset_lte(state.subscribed_offset, next_offset) ->
-              %{state | offset: state.subscribed_offset}
-
-            is_real_offset(next_offset) ->
-              # The next chunk is in the main log, which means the call
-              # we just made (with `state.offset` past the last snapshot
-              # chunk) already streamed the entire main log up to
-              # `subscribed_offset`. Stop — iterating further would
-              # re-read entries we've already applied.
-              %{state | offset: state.subscribed_offset}
-
-            true ->
-              read_history_up_to_subscribed(%{state | offset: next_offset}, storage)
-          end
-        end
+  def get_stream_up_to_offset(min_offset, subscribed_offset, storage) do
+    # If subscribed_offset is nil or at/before min_offset, nothing to read
+    if is_nil(subscribed_offset) or is_log_offset_lte(subscribed_offset, min_offset) do
+      {:ok, min_offset, []}
+    else
+      stream = Storage.get_log_stream(min_offset, subscribed_offset, storage)
+      {:ok, subscribed_offset, stream}
     end
   end
 

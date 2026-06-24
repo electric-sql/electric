@@ -20,16 +20,13 @@ defmodule Electric.MonitoredCoreSupervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    persistent_kv = Keyword.get(opts, :persistent_kv)
-
     children = [
       {Electric.StatusMonitor, stack_id: stack_id},
       {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
        [stack_id: stack_id] ++ Keyword.get(tweaks, :shape_cleaner_opts, [])},
       {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
        Keyword.take(opts, [:stack_id, :shape_db_opts])},
-      {Electric.ShapeCache.ShapeStatusOwner,
-       [stack_id: stack_id, persistent_kv: persistent_kv]},
+      {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
       {Electric.CoreSupervisor, opts}
     ]
 

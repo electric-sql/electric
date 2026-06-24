@@ -164,36 +164,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
-  Stop accepting new replication events and block until every consumer
-  has flushed up to the most recently seen offset.
-
-  Used by `Electric.StackSupervisor.ShutdownCoordinator` to drive a
-  coordinated safe shutdown: callers must first stop the replication
-  client (so no new events arrive) and then call `drain/2`. When this
-  returns `:ok`, every shape's writer has persisted the same
-  `last_persisted_txn_offset`.
-
-  If the timeout expires before all shapes catch up, returns
-  `{:error, :timeout}`. The caller should treat that as a dirty
-  shutdown — no clean-shutdown marker should be written.
-  """
-  @spec drain(Electric.stack_id(), timeout()) :: :ok | {:error, :timeout | :no_collector}
-  def drain(stack_id, timeout) do
-    case GenServer.whereis(name(stack_id)) do
-      nil ->
-        {:error, :no_collector}
-
-      pid ->
-        try do
-          GenServer.call(pid, :drain, timeout)
-        catch
-          :exit, {:timeout, _} -> {:error, :timeout}
-          :exit, {:noproc, _} -> {:error, :no_collector}
-        end
-    end
-  end
-
-  @doc """
   Returns the list of currently active shapes being tracked
   in the shape matching filters.
   """
@@ -412,20 +382,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
   end
 
-  def handle_call(:drain, from, state) do
-    state = Map.put(state, :draining?, true)
-
-    if FlushTracker.empty?(state.flush_tracker) do
-      {:reply, :ok, state}
-    else
-      {:noreply, Map.put(state, :drain_waiter, from)}
-    end
-  end
-
-  def handle_call({:handle_event, _, _}, _from, %{draining?: true} = state) do
-    {:reply, {:error, :draining}, state}
-  end
-
   def handle_call({:handle_event, _, _}, _from, state)
       when not is_ready_to_process(state) do
     {:reply, {:error, :not_ready}, state}
@@ -458,19 +414,9 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
-    state =
-      state
-      |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))
-
-    state =
-      if state[:drain_waiter] && FlushTracker.empty?(state.flush_tracker) do
-        GenServer.reply(state.drain_waiter, :ok)
-        Map.delete(state, :drain_waiter)
-      else
-        state
-      end
-
-    {:noreply, state}
+    {:noreply,
+     state
+     |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
   end
 
   def handle_cast(

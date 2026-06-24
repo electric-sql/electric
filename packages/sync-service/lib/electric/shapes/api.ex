@@ -970,13 +970,6 @@ defmodule Electric.Shapes.Api do
       _ ->
         :no_change
     end
-  rescue
-    # During a stack restart, the per-stack ETS tables this path reads
-    # (shape_meta_table, write_buffer_shapes, …) may be transiently absent
-    # for a held long-poll that wakes up between the old owner dying and
-    # the new owner recreating the table. Treat as no_change rather than
-    # bubbling an ArgumentError up to the request handler.
-    ArgumentError -> :no_change
   end
 
   defp stream_sse_events(%Request{} = request) do
