@@ -225,6 +225,13 @@ defmodule Electric.Shapes.Consumer.Materializer do
             is_log_offset_lte(next_offset, state.offset) ->
               # Defensive: chunk_end did not advance. Stop to avoid an
               # infinite loop. This shouldn't happen in normal operation.
+              Logger.warning(
+                "Materializer chunk iteration did not advance past " <>
+                  "#{inspect(state.offset)} (chunk_end=#{inspect(next_offset)}); " <>
+                  "stopping replay at subscribed_offset to avoid an infinite loop",
+                shape_handle: state.shape_handle
+              )
+
               %{state | offset: state.subscribed_offset}
 
             is_log_offset_lte(state.subscribed_offset, next_offset) ->
