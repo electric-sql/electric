@@ -1176,7 +1176,7 @@ where
     // CQ-1: register-before-stage. `reserve_for_splice` does not register the
     // dirty stream itself, so do it here (mirrors `maybe_sync_on_ack`).
     shard.register_dirty(st.id, Arc::clone(&st));
-    let (lsn, seg, payload_off) = match shard.reserve_for_splice(
+    let (lsn, seg, header_off, payload_off) = match shard.reserve_for_splice(
         crate::wal::codec::RecordKind::Append,
         st.id,
         stream_offset,
@@ -1184,14 +1184,17 @@ where
     ) {
         Ok(r) => r,
         Err(_) => {
-            // Header reserve failed: the bytes are in the stream file but no WAL
-            // record covers them. Release the lock and 500 (not durable).
+            // Reserve failed: the bytes are in the stream file but no WAL record
+            // covers them. Release the lock and 500 (not durable).
             drop(ap);
             return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
         }
     };
     // Step 4: relay the just-written hot file bytes [O, O+content_len) → the WAL
-    // segment after the header. `splice_payload_fd` is the segment's write fd.
+    // segment's reserved payload range (after the not-yet-written header).
+    // `splice_payload_fd` is the segment's write fd. The header is written LAST
+    // (step 5) so a crash here leaves an all-zero header → recovery sees Incomplete
+    // and the orphan payload is never exposed (header-LAST commit-marker invariant).
     {
         use crate::wal::segment::SegmentWriter;
         let mut src_off = file_off as i64;
@@ -1209,7 +1212,24 @@ where
             return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
         }
     }
-    // Step 5: advance the contiguous-written watermark + notify the committer.
+    // Step 5: write the framed header LAST — the commit marker. Only after this
+    // lands is the record recoverable (header present ⟹ payload present).
+    if shard
+        .commit_splice_header(
+            &seg,
+            header_off,
+            lsn,
+            crate::wal::codec::RecordKind::Append,
+            st.id,
+            stream_offset,
+            content_len,
+        )
+        .is_err()
+    {
+        drop(ap);
+        return ZeroCopyOutcome::Done(text_response(500, "fsync failed"));
+    }
+    // Step 6: advance the contiguous-written watermark + notify the committer.
     shard.mark_staged(lsn);
     // Commit the producer/seq dedup state under the appender lock — same as the
     // buffered path, so a concurrent same-producer request can't double-accept in
@@ -1228,7 +1248,7 @@ where
     }
     drop(ap); // critical section ends — both byte writes + WAL stage are done.
 
-    // Step 6: wait for the WAL record to be durable, then ack.
+    // Step 7: wait for the WAL record to be durable, then ack.
     shard.wait_durable(lsn).await;
 
     st.schedule_meta_flush();

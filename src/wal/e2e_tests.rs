@@ -938,4 +938,147 @@ mod zero_copy_torn_tail {
         h2.crash();
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// CRITICAL regression: the header-LAST commit-marker window.
+    ///
+    /// This exercises the EXACT window `zero_copy_torn_tail_recovered_by_replay`
+    /// cannot: a crash AFTER the payload has landed in the WAL segment AND the
+    /// committer has `fdatasync`'d the whole segment (via a concurrent commit on
+    /// the same shard), but BEFORE the commit-marker header is written.
+    ///
+    /// Before the fix the splice path wrote a CRC-valid header FIRST (declaring
+    /// `len = content_len`) and the payload after. A concurrent commit `fdatasync`s
+    /// the WHOLE active segment, so the orphan header could reach disk; a crash
+    /// before the payload + `mark_staged` left a CRC-valid header over the
+    /// `fallocate`'d zeros → `decode_at` returned a `Record` with a ZEROED payload
+    /// → recovery wrote zeros into the per-stream file and advanced the frontier.
+    /// Silent corruption / over-recovery.
+    ///
+    /// The fix writes the header LAST. So we reproduce the post-fix crash here:
+    ///   step 2: payload spliced into the segment's reserved range  ← done
+    ///   committer fdatasync of the WHOLE segment (concurrent commit) ← done
+    ///   CRASH HERE (header — the commit marker — never written)
+    ///   step 3: commit_splice_header ← never happens
+    ///   step 4: mark_staged ← never happens
+    ///
+    /// Because the header is written LAST, the reserved offset stays an all-zero
+    /// (`fallocate`'d) header → `decode_at` → `Incomplete` → the scan stops cleanly,
+    /// the durable frontier does NOT advance over the orphan record, and
+    /// `reconcile_tail` truncates the per-stream file. We assert (a) the frontier
+    /// did not advance over the orphan record and (b) the per-stream file is
+    /// truncated back to the durable frontier (the zero payload is never exposed).
+    #[tokio::test]
+    async fn zero_copy_orphan_payload_not_recovered_after_segment_fdatasync() {
+        use crate::wal::segment::SegmentWriter;
+
+        let dir = tmp("zero-copy-orphan-payload");
+
+        // Boot a 1-shard WAL server and create a binary (non-JSON) stream.
+        let h = Harness::boot(&dir, Some(1), 1).unwrap();
+        create_stream(&h.store, "zc", OCTET).await;
+
+        // Two genuinely-acked records — the durable frontier the orphan must NOT
+        // push past.
+        append_acked(&h.store, "zc", OCTET, b"durable-one|").await;
+        append_acked(&h.store, "zc", OCTET, b"durable-two|").await;
+        let durable: &[u8] = b"durable-one|durable-two|";
+
+        let st = h.store.get("zc").unwrap_or_else(|| panic!("stream zc not found"));
+        let stream_id = st.id;
+        let shard = Arc::clone(h.walset.shard_for(stream_id));
+
+        // The "orphan" append: payload reaches the per-stream FILE (step 3) AND the
+        // WAL segment's reserved payload range, the committer flushes the WHOLE
+        // segment, but the commit-marker header is NEVER written (crash before it).
+        let orphan_payload = b"zero-copy-orphan-no-commit-marker|";
+        let stream_offset = st.shared.read().unwrap().tail;
+
+        // (a) Per-stream file gets the orphan bytes (socket→file splice complete).
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&st.file_path)
+                .unwrap();
+            f.write_all(orphan_payload).unwrap();
+            f.sync_all().unwrap();
+        }
+
+        // (b) Reserve the WAL range (writes NO header — header is LAST), then write
+        //     the PAYLOAD into the reserved range, exactly as the file→WAL splice
+        //     would. The header offset stays all-zero (fallocate'd).
+        let (lsn, seg, header_off, payload_off) = shard
+            .reserve_for_splice(
+                crate::wal::codec::RecordKind::Append,
+                stream_id,
+                stream_offset,
+                orphan_payload.len(),
+            )
+            .unwrap();
+        seg.write_at(payload_off, orphan_payload).unwrap();
+
+        // (c) Simulate the committer flushing the WHOLE segment on a concurrent
+        //     group commit: fdatasync the segment fd. The orphan PAYLOAD (and the
+        //     still-all-zero header region) are now durable on disk — the exact
+        //     state that made the header-FIRST design corrupt on recovery.
+        seg.fdatasync().unwrap();
+
+        // (d) Crash BEFORE the commit-marker header is written: arm the seam so
+        //     commit_splice_header skips the write and errors. mark_staged is never
+        //     reached, so the lsn is a permanent gap and the header stays all-zero.
+        shard.fail_next_commit_header();
+        let commit_res = shard.commit_splice_header(
+            &seg,
+            header_off,
+            lsn,
+            crate::wal::codec::RecordKind::Append,
+            stream_id,
+            stream_offset,
+            orphan_payload.len(),
+        );
+        assert!(
+            commit_res.is_err(),
+            "commit_splice_header must return Err (fault seam fired) — header NOT written"
+        );
+
+        // The orphan bytes are present in the per-stream file pre-recovery.
+        let file_len_before = std::fs::metadata(&st.file_path).unwrap().len();
+        assert_eq!(
+            file_len_before as usize,
+            durable.len() + orphan_payload.len(),
+            "per-stream file has the orphan bytes before recovery"
+        );
+
+        // Crash: abort committers + drop store + walset without graceful shutdown.
+        drop(st);
+        h.crash();
+
+        // --- Reopen with the full startup recovery sequence ---
+        let h2 = Harness::boot(&dir, None, 1).unwrap();
+
+        // (a) The durable frontier did NOT advance over the orphan record: the
+        //     per-stream file is truncated back to the two durable records. The
+        //     zeroed payload an all-zero header would have implied is NEVER exposed.
+        let got = stream_file_bytes(&h2.store, "zc");
+        assert_eq!(
+            got, durable,
+            "zero-copy orphan payload: recovery truncated the per-stream file to the durable \
+             frontier; the orphan (no commit marker) is gone — NO zeros exposed"
+        );
+
+        // (b) The stream tail equals the durable frontier — the orphan record is
+        //     not acked, not visible, not durable.
+        let st2 = h2
+            .store
+            .get("zc")
+            .unwrap_or_else(|| panic!("stream zc not found after recovery"));
+        assert_eq!(
+            st2.tail().bytes,
+            durable.len() as u64,
+            "zero-copy orphan payload: stream tail == durable frontier (orphan not acked)"
+        );
+
+        h2.crash();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

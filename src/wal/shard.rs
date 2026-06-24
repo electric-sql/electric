@@ -141,13 +141,24 @@ pub struct Shard {
     #[cfg(test)]
     fail_next_write: std::sync::atomic::AtomicBool,
     /// Test-only fault injection for the zero-copy splice path: when set, the
-    /// NEXT `reserve_for_splice` call writes the WAL header successfully but then
+    /// NEXT `reserve_for_splice` call reserves the lsn + segment range but then
     /// returns an error (simulating a crash after the socket→file splice completes
-    /// but before the file→WAL payload splice). The lsn stays as a permanent gap
+    /// but before the WAL bytes are written). The lsn stays as a permanent gap
     /// (mark_staged is never called), so the committer cannot advance `durable_lsn`
     /// past it — the torn WAL record scenario. Used by `zero_copy_torn_tail` tests.
     #[cfg(test)]
     fail_next_wal_splice: std::sync::atomic::AtomicBool,
+    /// Test-only fault injection for the zero-copy commit-marker write: when set,
+    /// the NEXT `commit_splice_header` call SKIPS the header write and returns an
+    /// error — simulating a crash AFTER the payload has landed (and the committer
+    /// may have flushed the segment via a concurrent commit) but BEFORE the
+    /// header (the commit marker) is written. Because the header is written LAST,
+    /// the reserved offset stays an all-zero (`fallocate`'d) header → the decoder
+    /// reads `Incomplete` and the durable frontier never advances over the orphan
+    /// payload. Used by `zero_copy_orphan_payload_*` to prove the header-LAST
+    /// invariant (header present ⟹ payload present) closes the torn-header hole.
+    #[cfg(test)]
+    fail_next_commit_header: std::sync::atomic::AtomicBool,
 }
 
 /// Name of the per-shard checkpoint-lsn file: `<shard_dir>/checkpoint` (plain
@@ -226,6 +237,8 @@ impl Shard {
             fail_next_write: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             fail_next_wal_splice: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            fail_next_commit_header: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -415,25 +428,46 @@ impl Shard {
         Ok(lsn)
     }
 
-    /// Reserve an lsn + segment range for a zero-copy (splice) append, write the
-    /// 33-byte framed **header only** at the reserved offset, and return
-    /// `(lsn, seg, payload_off)` where `payload_off = off + HEADER_LEN` is the byte
-    /// offset at which the caller must splice (or pwrite, in tests) the payload.
+    /// Reserve an lsn + segment range for a zero-copy (splice) append **without
+    /// writing any WAL bytes**, returning `(lsn, seg, header_off, payload_off)`
+    /// where `header_off` is the reserved record offset and
+    /// `payload_off = header_off + HEADER_LEN` is where the caller splices (or
+    /// pwrites, in tests) the payload.
+    ///
+    /// # Header-LAST commit-marker ordering (the durability invariant)
+    ///
+    /// The WAL framing is header-CRC-only (no payload checksum) and segments are
+    /// `fallocate`'d to full size, so the reserved range reads as zeros until
+    /// written. The committer `fdatasync`s the **whole** active segment fd on every
+    /// group commit, so a concurrent append to ANY stream on this shard can flush
+    /// our reserved region to disk at any time. If we wrote a CRC-valid header here
+    /// (declaring `len = payload_len`) and then crashed before the payload landed,
+    /// recovery's `decode_at` would see a valid header + the fallocated zeros as a
+    /// complete `Record` with a ZEROED payload — silent corruption / over-recovery.
+    ///
+    /// To preserve the "header present ⟹ payload present" invariant the buffered
+    /// path gets for free (it writes `[header|payload]` in one `write_at`), the
+    /// splice path writes the header **LAST**, as a commit marker:
+    ///
+    /// 1. `reserve_for_splice` — reserve the range, write NOTHING (this method).
+    /// 2. splice the payload into `[payload_off, payload_off + payload_len)`.
+    /// 3. [`commit_splice_header`] — write the framed header at `header_off`.
+    /// 4. [`mark_staged`] — advance the watermark + notify the committer.
+    ///
+    /// A crash before step 3 leaves an all-zero header at `header_off` →
+    /// `decode_at` returns `Incomplete` → the scan stops cleanly → the durable
+    /// frontier does NOT advance over the orphan payload (and `reconcile_tail`
+    /// truncates the per-stream file). The header is the commit point.
     ///
     /// This is Phase 1 of the splice path — the mirror of [`reserve_and_stage`]'s
-    /// Phase 1 (same segment-roll logic, same `next_lsn`/`write_pos` handling).
-    /// After the payload bytes land at `payload_off`, the caller MUST call
-    /// [`mark_staged`] to advance the contiguous-written watermark and notify the
-    /// committer.
-    ///
-    /// The watermark is NOT advanced here; the permanent gap from a never-called
+    /// Phase 1 (same segment-roll logic, same `next_lsn`/`write_pos` handling). The
+    /// watermark is NOT advanced here; the permanent gap from a never-called
     /// `mark_staged` has the same durability semantics as a failed `write_at` in
     /// `reserve_and_stage` — the committer never crosses it.
     ///
     /// # Errors
     ///
-    /// Returns `InvalidInput` if the framed record size exceeds `segment_size`, or
-    /// the underlying header `write_at` fails.
+    /// Returns `InvalidInput` if the framed record size exceeds `segment_size`.
     // Only the Linux zero-copy append path (and the host splice test) call this;
     // on a non-Linux release build it is legitimately unused.
     #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
@@ -443,7 +477,12 @@ impl Shard {
         stream_id: u64,
         stream_offset: u64,
         payload_len: usize,
-    ) -> io::Result<(u64, Arc<FileSegment>, u64)> {
+    ) -> io::Result<(u64, Arc<FileSegment>, u64, u64)> {
+        // `kind`/`stream_id`/`stream_offset` are part of the header written LAST in
+        // `commit_splice_header`; this method writes no header. `stream_id` is still
+        // consumed by the `#[cfg(test)]` CQ-1 seam below (the discard is Copy/no-op).
+        let _ = (kind, stream_id, stream_offset);
+
         // Test-only ordering seam (CQ-1): fires before any lsn is reserved, exactly
         // as in `reserve_and_stage`. The splice path registers the stream dirty
         // before calling this (register-before-stage), so a test can assert the
@@ -498,9 +537,9 @@ impl Shard {
         };
 
         // Test-only fault injection for the zero-copy torn-tail scenario: fire
-        // BEFORE the WAL header write to simulate a crash between step 3 (socket→
-        // file splice, per-stream file has the bytes) and step 4 (file→WAL payload
-        // splice). The lsn is reserved (a gap in the watermark) but no WAL bytes
+        // AFTER reserving but BEFORE any WAL bytes are written, to simulate a crash
+        // between step 3 (socket→file splice, per-stream file has the bytes) and the
+        // WAL write. The lsn is reserved (a gap in the watermark) but no WAL bytes
         // are written — the per-stream file carries the bytes but the WAL has no
         // record, so the durable frontier ends at the last whole record before this
         // lsn. Recovery sees the per-stream file as longer than the frontier and
@@ -510,17 +549,54 @@ impl Shard {
             return Err(io::Error::other("injected WAL splice failure (zero-copy torn-tail test)"));
         }
 
-        // Write ONLY the framed header; the payload is spliced in by the caller.
+        // No WAL bytes are written here — the header is written LAST by
+        // `commit_splice_header` (the commit marker). Return both offsets.
+        Ok((lsn, seg, off, off + super::codec::HEADER_LEN as u64))
+    }
+
+    /// Write the framed WAL **header** at `header_off` for a record previously
+    /// reserved by [`reserve_for_splice`]. This is the **commit marker**: it MUST
+    /// be called only AFTER the payload has fully landed at
+    /// `header_off + HEADER_LEN` (step 2). See [`reserve_for_splice`] for the
+    /// header-LAST durability argument.
+    ///
+    /// After this returns `Ok`, the caller MUST call [`mark_staged`] to advance the
+    /// contiguous-written watermark. On `Err` the header was NOT written (the
+    /// reserved range stays an all-zero header → `Incomplete` on recovery → the
+    /// orphan payload is never exposed); the caller MUST fail the ack and NOT call
+    /// `mark_staged`.
+    #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
+    pub fn commit_splice_header(
+        &self,
+        seg: &Arc<FileSegment>,
+        header_off: u64,
+        lsn: u64,
+        kind: RecordKind,
+        stream_id: u64,
+        stream_offset: u64,
+        payload_len: usize,
+    ) -> io::Result<()> {
+        // Test-only fault injection: simulate a crash AFTER the payload landed (and
+        // possibly after a concurrent commit fdatasync'd the segment) but BEFORE the
+        // commit-marker header is written. Skips the write and returns Err so the
+        // reserved offset stays an all-zero header — the exact window the buffered
+        // path is immune to and the header-LAST reorder closes.
+        #[cfg(test)]
+        if self.fail_next_commit_header.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            return Err(io::Error::other(
+                "injected WAL commit-header failure (zero-copy orphan-payload test)",
+            ));
+        }
+
         let mut hdr = Vec::with_capacity(super::codec::HEADER_LEN);
         encode_header_into(&mut hdr, lsn, kind, stream_id, stream_offset, payload_len as u32);
-        seg.write_at(off, &hdr)?;
-
-        Ok((lsn, seg, off + super::codec::HEADER_LEN as u64))
+        seg.write_at(header_off, &hdr)
     }
 
     /// Advance the contiguous-written watermark for a previously reserved splice lsn
     /// and notify the committer. Must be called AFTER the payload has been spliced
-    /// into the segment at the offset returned by [`reserve_for_splice`].
+    /// into the segment AND [`commit_splice_header`] has written the commit-marker
+    /// header at the offset returned by [`reserve_for_splice`].
     #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
     pub fn mark_staged(&self, lsn: u64) {
         {
@@ -1042,6 +1118,18 @@ impl Shard {
     #[cfg(test)]
     pub fn fail_next_wal_splice(&self) {
         self.fail_next_wal_splice
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Test-only: arm the next `commit_splice_header` to SKIP the header write and
+    /// return an error — simulating a crash after the payload landed (and a
+    /// concurrent commit may have fdatasync'd the segment) but before the
+    /// commit-marker header is written (see `fail_next_commit_header`). Used by the
+    /// zero-copy orphan-payload test to prove the header-LAST reorder closes the
+    /// torn-header recovery hole.
+    #[cfg(test)]
+    pub fn fail_next_commit_header(&self) {
+        self.fail_next_commit_header
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
@@ -1709,26 +1797,30 @@ mod tests {
 
     /// TDD: write the failing host test first.
     ///
-    /// The splice seam:  reserve_for_splice → write payload at payload_off (standing
-    /// in for the kernel splice) → mark_staged → decode must yield a valid record.
+    /// The splice seam (header-LAST):  reserve_for_splice → write payload at
+    /// payload_off (standing in for the kernel splice) → commit_splice_header
+    /// (the commit marker) → mark_staged → decode must yield a valid record.
     #[test]
     fn reserve_for_splice_then_payload_decodes_as_valid_record() {
         let dir = tmp("reserve-splice");
         let sh = Shard::open(dir.clone()).unwrap();
         let payload = b"zero-copy-payload-bytes";
 
-        let (lsn, seg, payload_off) = sh
+        let (lsn, seg, header_off, payload_off) = sh
             .reserve_for_splice(RecordKind::Append, 7, 100, payload.len())
             .unwrap();
 
-        // Stand in for the splice: write the payload at the reserved offset.
+        // Stand in for the splice: write the payload at the reserved offset FIRST,
+        // then write the commit-marker header LAST (the header-LAST invariant).
         seg.write_at(payload_off, payload).unwrap();
+        sh.commit_splice_header(&seg, header_off, lsn, RecordKind::Append, 7, 100, payload.len())
+            .unwrap();
         sh.mark_staged(lsn);
 
         // Read the segment bytes so we can run decode_at (which operates on &[u8]).
         let seg_path = crate::wal::segment::seg_path(&dir, 1);
         let raw = std::fs::read(&seg_path).unwrap();
-        let header_off = (payload_off - crate::wal::codec::HEADER_LEN as u64) as usize;
+        let header_off = header_off as usize;
 
         match decode_at(&raw, header_off) {
             Decoded::Record { lsn: l, stream_id, stream_offset, payload_off: poff, len, .. } => {
