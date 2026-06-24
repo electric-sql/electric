@@ -240,25 +240,49 @@ defmodule Electric.Shapes.Consumer.Effects do
   end
 
   @spec query_move_in_async(pid() | atom(), map(), StartMoveInQuery.t(), pid()) :: :ok
-  def query_move_in_async(
-        supervisor,
-        consumer_state,
-        %StartMoveInQuery{} = request,
-        consumer_pid
-      ) do
+  def query_move_in_async(supervisor, consumer_state, %StartMoveInQuery{} = request, consumer_pid) do
+    %{stack_id: stack_id, shape_handle: shape_handle, shape: shape, storage: storage} =
+      consumer_state
+
     {where, params} =
       Querying.move_in_where_clause(
         request.dnf_plan,
         request.trigger_dep_index,
         request.views_before_move,
         request.views_after_move,
-        consumer_state.shape.where.used_refs
+        shape.where.used_refs
       )
 
-    pool = Manager.pool_name(consumer_state.stack_id, :snapshot)
-    stack_id = consumer_state.stack_id
-    shape = consumer_state.shape
-    shape_handle = consumer_state.shape_handle
+    snapshot_name = Electric.Utils.uuid4()
+
+    query_fn = fn conn, _pg_snapshot, lsn ->
+      task_pid = self()
+
+      Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
+        dnf_plan: request.dnf_plan,
+        views: request.views_after_move
+      )
+      |> Stream.transform(
+        fn -> {0, 0} end,
+        fn [_, _, json] = row, {row_count, row_bytes} ->
+          {[row], {row_count + 1, row_bytes + IO.iodata_length(json)}}
+        end,
+        fn {row_count, row_bytes} ->
+          send(task_pid, {:move_in_snapshot_stats, row_count, row_bytes})
+        end
+      )
+      |> Storage.write_move_in_snapshot!(snapshot_name, storage)
+
+      {row_count, row_bytes} =
+        receive do
+          {:move_in_snapshot_stats, row_count, row_bytes} -> {row_count, row_bytes}
+        end
+
+      send(
+        consumer_pid,
+        {:query_move_in_complete, snapshot_name, row_count, row_bytes, lsn}
+      )
+    end
 
     :telemetry.execute([:electric, :subqueries, :move_in_triggered], %{count: 1}, %{
       stack_id: stack_id
@@ -272,51 +296,31 @@ defmodule Electric.Shapes.Consumer.Effects do
     Task.Supervisor.start_child(supervisor, fn ->
       OpenTelemetry.set_current_context(trace_context)
 
-      snapshot_name = Electric.Utils.uuid4()
-
-      try do
-        SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
-          stack_id: stack_id,
-          query_reason: "move_in_query",
-          snapshot_info_fn: fn _, pg_snapshot, _lsn ->
-            send(consumer_pid, {:pg_snapshot_known, pg_snapshot})
-          end,
-          query_fn: fn conn, _pg_snapshot, lsn ->
-            task_pid = self()
-
-            Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
-              dnf_plan: request.dnf_plan,
-              views: request.views_after_move
-            )
-            |> Stream.transform(
-              fn -> {0, 0} end,
-              fn [_, _, json] = row, {row_count, row_bytes} ->
-                {[row], {row_count + 1, row_bytes + IO.iodata_length(json)}}
-              end,
-              fn {row_count, row_bytes} ->
-                send(task_pid, {:move_in_snapshot_stats, row_count, row_bytes})
-              end
-            )
-            |> Storage.write_move_in_snapshot!(snapshot_name, consumer_state.storage)
-
-            {row_count, row_bytes} =
-              receive do
-                {:move_in_snapshot_stats, row_count, row_bytes} -> {row_count, row_bytes}
-              end
-
-            send(
-              consumer_pid,
-              {:query_move_in_complete, snapshot_name, row_count, row_bytes, lsn}
-            )
-          end
-        )
-      rescue
-        error ->
-          send(consumer_pid, {:query_move_in_error, error, __STACKTRACE__})
-      end
+      OpenTelemetry.with_span(
+        "shape_snapshot.move_in_task",
+        Shape.otel_attrs(shape_handle, shape, query_reason: "move_in_query"),
+        stack_id,
+        fn -> execute_move_in_query(stack_id, shape_handle, shape, consumer_pid, query_fn) end
+      )
     end)
 
     :ok
+  end
+
+  # Synchronous core of query_move_in_async(). Expects the current OTel context to already be set up by the caller.
+  defp execute_move_in_query(stack_id, shape_handle, shape, consumer_pid, query_fn) do
+    pool = Manager.pool_name(stack_id, :snapshot)
+
+    SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
+      stack_id: stack_id,
+      query_reason: "move_in_query",
+      snapshot_info_fn: fn _, pg_snapshot, _lsn ->
+        send(consumer_pid, {:pg_snapshot_known, pg_snapshot})
+      end,
+      query_fn: query_fn
+    )
+  rescue
+    error -> send(consumer_pid, {:query_move_in_error, error, __STACKTRACE__})
   end
 
   defp consider_flushed(state, log_offset) do

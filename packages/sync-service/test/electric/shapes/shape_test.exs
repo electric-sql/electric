@@ -1405,7 +1405,7 @@ defmodule Electric.Shapes.ShapeTest do
 
       row_pred_pos =
         plan.positions
-        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> Enum.find(fn {_pos, info} -> not info.subquery? end)
         |> elem(0)
 
       refute Enum.at(active_conditions, row_pred_pos)
@@ -1471,7 +1471,7 @@ defmodule Electric.Shapes.ShapeTest do
 
       row_pred_pos =
         plan.positions
-        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> Enum.find(fn {_pos, info} -> not info.subquery? end)
         |> elem(0)
 
       assert Enum.at(slots, row_pred_pos) == "1"
@@ -1502,7 +1502,7 @@ defmodule Electric.Shapes.ShapeTest do
 
       row_pred_pos =
         plan.positions
-        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> Enum.find(fn {_pos, info} -> not info.subquery? end)
         |> elem(0)
 
       assert Enum.at(old_ac, row_pred_pos) == true

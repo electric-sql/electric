@@ -901,7 +901,7 @@ defmodule Electric.Shapes.Shape do
           _ -> false
         end
 
-      if info.negated, do: not base_result, else: base_result
+      if info.negated?, do: not base_result, else: base_result
     end)
   end
 
@@ -920,12 +920,12 @@ defmodule Electric.Shapes.Shape do
     end)
   end
 
-  defp compute_tag_slot(%{is_subquery: true, tag_columns: [col]}, record, stack_id, shape_handle) do
+  defp compute_tag_slot(%{subquery?: true, tag_columns: [col]}, record, stack_id, shape_handle) do
     SubqueryTags.make_value_hash(stack_id, shape_handle, Map.get(record, col))
   end
 
   defp compute_tag_slot(
-         %{is_subquery: true, tag_columns: {:hash_together, cols}},
+         %{subquery?: true, tag_columns: {:hash_together, cols}},
          record,
          stack_id,
          shape_handle
@@ -938,7 +938,7 @@ defmodule Electric.Shapes.Shape do
     SubqueryTags.make_value_hash_raw(stack_id, shape_handle, Enum.join(parts))
   end
 
-  defp compute_tag_slot(%{is_subquery: false}, _record, _stack_id, _shape_handle) do
+  defp compute_tag_slot(%{subquery?: false}, _record, _stack_id, _shape_handle) do
     "1"
   end
 
@@ -1165,6 +1165,23 @@ defmodule Electric.Shapes.Shape do
   defp column_info_from_json({"type_kind", kind}), do: {:type_kind, String.to_existing_atom(kind)}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
   defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
+
+  def otel_attrs(handle, shape, extra \\ []) do
+    Keyword.merge(
+      [
+        "shape.handle": handle,
+        "shape.root_table": shape.root_table,
+        "shape.where": if(where = shape.where, do: where.query)
+      ],
+      extra_attrs(extra)
+    )
+  end
+
+  # Mapping function for known attrs to avoid repeatedly concatenating OTel attribute names at runtime.
+  defp extra_attrs([{:query_reason, query_reason} | rest]),
+    do: [{:"shape.query_reason", query_reason} | extra_attrs(rest)]
+
+  defp extra_attrs([]), do: []
 end
 
 defimpl Inspect, for: Electric.Shapes.Shape do

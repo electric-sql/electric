@@ -12,6 +12,14 @@ defmodule Electric.Integration.OraclePropertyTest do
     - MUTATIONS_PER_TXN: Number of mutations per transaction (default: 5)
     - RUN_COUNT: Number of property test iterations (default: 1)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
+    - RESTART_SERVER_EVERY: Stop and restart the sync stack every N batches to
+      test server-side restore-from-file (default: 0, disabled). After each
+      restart, fresh clients reconnect and check_initial_state asserts the
+      restored state matches the oracle.
+    - RESTART_CLIENT_EVERY: Throw away clients (poll cursors, materialized
+      rows) and reconnect every M batches to test that fresh polls correctly
+      assemble snapshot + log (default: 0, disabled). Independent of
+      RESTART_SERVER_EVERY.
   """
 
   use ExUnit.Case, async: false
@@ -35,6 +43,7 @@ defmodule Electric.Integration.OraclePropertyTest do
   @default_mutations_per_txn 5
 
   setup [:with_unique_db]
+  setup :use_persistent_slot
   setup :with_complete_stack
 
   # Use a short long_poll_timeout to speed up tests - shapes with no changes
@@ -55,12 +64,23 @@ defmodule Electric.Integration.OraclePropertyTest do
     ctx
   end
 
+  # The replication slot must survive the StackSupervisor restart used by
+  # RESTART_SERVER_EVERY, otherwise Electric correctly treats the new slot
+  # as a slot-loss event and purges all on-disk shape data — defeating the
+  # restore-from-file scenario. Always run with a persistent slot; the slot
+  # is dropped automatically with the per-test database in `after_suite`.
+  defp use_persistent_slot(_ctx) do
+    %{replication_opts_overrides: [slot_temporary?: false]}
+  end
+
   test "shapes with generated where clauses and mutations", ctx do
     run_count = env_int("RUN_COUNT") || 1
     shape_count = env_int("SHAPE_COUNT") || @default_shape_count
     batch_count = env_int("BATCH_COUNT") || @default_batch_count
     txns_per_batch = env_int("TXNS_PER_BATCH") || @default_txns_per_batch
     mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
+    restart_server_every = env_int("RESTART_SERVER_EVERY") || 0
+    restart_client_every = env_int("RESTART_CLIENT_EVERY") || 0
 
     total_mutations = batch_count * txns_per_batch * mutations_per_txn
 
@@ -69,7 +89,11 @@ defmodule Electric.Integration.OraclePropertyTest do
               max_runs: run_count do
       transactions = Enum.chunk_every(mutations, mutations_per_txn)
       batches = Enum.chunk_every(transactions, txns_per_batch)
-      test_against_oracle(ctx, shapes, batches)
+
+      test_against_oracle(ctx, shapes, batches,
+        restart_server_every: restart_server_every,
+        restart_client_every: restart_client_every
+      )
     end
   end
 end

@@ -1,5 +1,20 @@
 # @electric-ax/agents-server
 
+## 0.6.2
+
+### Patch Changes
+
+- 37b9922: Fix agent wake handling so concurrent sessions do not invalidate each other's claim write tokens, and retry same-stream wakes after the active wake drains instead of dropping pending work.
+- Updated dependencies [9d063e4]
+- Updated dependencies [0418d90]
+- Updated dependencies [ac2391d]
+- Updated dependencies [8f4368d]
+- Updated dependencies [354b01b]
+- Updated dependencies [37b9922]
+- Updated dependencies [ee0da19]
+- Updated dependencies [c14a886]
+  - @electric-ax/agents-runtime@0.6.2
+
 ## 0.6.1
 
 ### Patch Changes

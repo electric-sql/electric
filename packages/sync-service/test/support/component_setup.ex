@@ -432,10 +432,67 @@ defmodule Support.ComponentSetup do
 
     stack_events_registry = Electric.stack_events_registry()
 
-    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
-
     publication_name =
       Map.get(ctx, :publication_name, "electric_test_pub_#{:erlang.phash2(stack_id)}")
+
+    stack_supervisor =
+      start_stack_supervisor!(ctx, stack_id, kv, storage, stack_events_registry, publication_name)
+
+    %{
+      stack_id: stack_id,
+      registry: Electric.StackSupervisor.registry_name(stack_id),
+      stack_events_registry: stack_events_registry,
+      shape_cache: {ShapeCache, [stack_id: stack_id]},
+      persistent_kv: kv,
+      stack_supervisor: stack_supervisor,
+      storage: storage,
+      inspector:
+        {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
+      feature_flags: Electric.Config.get_env(:feature_flags),
+      publication_name: publication_name
+    }
+  end
+
+  @doc """
+  Stops the running `Electric.StackSupervisor` started by `with_complete_stack/1`
+  and starts a fresh one with the same `stack_id`, `persistent_kv`, `storage`,
+  and `publication_name` so the new stack reads back what the old stack
+  persisted to disk.
+
+  Returns a map with the updated `:stack_supervisor` pid. Other ctx keys
+  (stack_id, persistent_kv, storage, registry, etc.) are unchanged.
+  """
+  def restart_complete_stack(ctx) do
+    :ok = stop_supervised(Electric.StackSupervisor)
+
+    stack_supervisor =
+      start_stack_supervisor!(
+        ctx,
+        ctx.stack_id,
+        ctx.persistent_kv,
+        ctx.storage,
+        ctx.stack_events_registry,
+        ctx.publication_name
+      )
+
+    # The :stack_status :ready event fires before the connection pools and
+    # shape metadata are fully online. Polling clients hitting the server in
+    # that window can see spurious 409s. Wait for the StatusMonitor's
+    # :active level which requires all readiness conditions to be met.
+    :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 5000)
+
+    %{stack_supervisor: stack_supervisor}
+  end
+
+  defp start_stack_supervisor!(
+         ctx,
+         stack_id,
+         kv,
+         storage,
+         stack_events_registry,
+         publication_name
+       ) do
+    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
 
     connection_opts =
       Keyword.merge(ctx.pooled_db_config, List.wrap(ctx[:connection_opt_overrides]))
@@ -492,19 +549,7 @@ defmodule Support.ComponentSetup do
     # potential CI slowness, including PG
     assert_receive {:stack_status, ^ref, :ready}, 2000
 
-    %{
-      stack_id: stack_id,
-      registry: Electric.StackSupervisor.registry_name(stack_id),
-      stack_events_registry: stack_events_registry,
-      shape_cache: {ShapeCache, [stack_id: stack_id]},
-      persistent_kv: kv,
-      stack_supervisor: stack_supervisor,
-      storage: storage,
-      inspector:
-        {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
-      feature_flags: Electric.Config.get_env(:feature_flags),
-      publication_name: publication_name
-    }
+    stack_supervisor
   end
 
   def secure_mode(_ctx) do

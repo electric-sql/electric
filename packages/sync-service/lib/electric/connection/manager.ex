@@ -472,14 +472,21 @@ defmodule Electric.Connection.Manager do
       # The ShapeStatusOwner process lives independently of connection or replication
       # supervisor. Purge all shapes from it before starting the replication supervisor.
       Electric.ShapeCache.ShapeStatus.reset(state.stack_id)
-    end
 
-    if timeline_changed? do
+      # Whenever we purge shapes - whether due to a timeline change or because the
+      # replication slot was (re)created (e.g. a temporary slot after restart) - the WAL
+      # continuity that the persisted replication metadata describes is gone. Reset those
+      # caches so we don't read stale relation tracking / inspector state on startup; they
+      # get repopulated from the fresh replication stream and live Postgres.
       Electric.Replication.PersistentReplicationState.reset(
         stack_id: state.stack_id,
         persistent_kv: state.persistent_kv
       )
 
+      Electric.Postgres.Inspector.reset(state.inspector)
+    end
+
+    if timeline_changed? do
       dispatch_stack_event(
         {:warning,
          %{

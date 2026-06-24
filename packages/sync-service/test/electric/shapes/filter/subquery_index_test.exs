@@ -68,10 +68,14 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
       register_node_shape(filter, table, condition_id, "s2")
       register_node_shape(filter, table, condition_id, "s3")
 
+      # Shape handles are interned to integer ids inside the index, so the raw
+      # node_shape rows carry the interned id rather than the handle string. We
+      # assert one positive registration per shape on the node; handle-level
+      # behaviour is checked via the public API (all_shape_ids) below.
       assert [
-               {{:node_shape, {^condition_id, @field}, "s1", []}, {0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}, "s2", []}, {0, :positive, _}},
-               {{:node_shape, {^condition_id, @field}, "s3", []}, {0, :positive, _}}
+               {{:node_shape, {^condition_id, @field}, _sid1, []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, _sid2, []}, {0, :positive, _}},
+               {{:node_shape, {^condition_id, @field}, _sid3, []}, {0, :positive, _}}
              ] =
                Enum.sort(
                  :ets.select(table, [
@@ -222,8 +226,8 @@ defmodule Electric.Shapes.Filter.Indexes.SubqueryIndexTest do
         0 => %{
           ast: ast,
           sql: "fake",
-          is_subquery: true,
-          negated: polarity == :negated,
+          subquery?: true,
+          negated?: polarity == :negated,
           dependency_index: dep_index,
           subquery_ref: subquery_ref,
           tag_columns: [field]

@@ -95,8 +95,8 @@ defmodule Electric.Replication.Eval.Decomposer do
 
   @type subexpression :: %{
           ast: Parser.tree_part(),
-          is_subquery: boolean(),
-          negated: boolean()
+          subquery?: boolean(),
+          negated?: boolean()
         }
 
   @type decomposition :: %{
@@ -268,7 +268,7 @@ defmodule Electric.Replication.Eval.Decomposer do
       term = Enum.find_value(expanded, fn row -> Enum.at(row, pos) end)
       {ref, negated} = ref_and_polarity(term)
       ast = Map.fetch!(ref_subexpressions, ref)
-      {pos, %{ast: ast, is_subquery: is_subquery?(ast), negated: negated}}
+      {pos, %{ast: ast, subquery?: is_subquery?(ast), negated?: negated}}
     end)
   end
 

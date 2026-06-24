@@ -32,7 +32,14 @@ defmodule Electric.ShapeCache.Storage do
            Querying.json_iodata()}
   @type log :: Enumerable.t(Querying.json_iodata())
 
-  @type row :: list()
+  @typedoc """
+  A move-in snapshot row, represented as a 3-element list `[key, tags, json]`:
+
+    * `key` – the row's key
+    * `tags` – the row's tag list
+    * `json` – the encoded log item body
+  """
+  @type row :: [String.t() | [String.t()] | Querying.json_iodata()]
 
   @doc "Validate and initialise storage base configuration from application configuration"
   @callback shared_opts(term()) :: compiled_opts()

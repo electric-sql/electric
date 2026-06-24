@@ -395,7 +395,7 @@ defmodule Electric.Shapes.Querying do
       info = plan.positions[pos]
       base_sql = info.sql
 
-      if info.negated do
+      if info.negated? do
         "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
       else
         "COALESCE((#{base_sql})::boolean, false)"
@@ -414,7 +414,7 @@ defmodule Electric.Shapes.Querying do
           position_to_sql(info, views, used_refs, param_idx)
 
         sql =
-          if info.negated do
+          if info.negated? do
             "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
           else
             "COALESCE((#{base_sql})::boolean, false)"
@@ -491,12 +491,12 @@ defmodule Electric.Shapes.Querying do
     {sql, params, next_pi}
   end
 
-  defp position_to_sql(%{is_subquery: false} = info, _, _, pidx) do
+  defp position_to_sql(%{subquery?: false} = info, _, _, pidx) do
     {info.sql, [], pidx}
   end
 
   defp position_to_sql(
-         %{is_subquery: true} = info,
+         %{subquery?: true} = info,
          views,
          used_refs,
          pidx
@@ -547,14 +547,14 @@ defmodule Electric.Shapes.Querying do
     SqlGenerator.to_sql(testexpr)
   end
 
-  defp tag_slot_sql(%{is_subquery: true, tag_columns: [col]}, stack_id, shape_handle) do
+  defp tag_slot_sql(%{subquery?: true, tag_columns: [col]}, stack_id, shape_handle) do
     col_sql = pg_cast_column_to_text(col)
     namespaced = pg_namespace_value_sql(col_sql)
     ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
   end
 
   defp tag_slot_sql(
-         %{is_subquery: true, tag_columns: {:hash_together, cols}},
+         %{subquery?: true, tag_columns: {:hash_together, cols}},
          stack_id,
          shape_handle
        ) do
@@ -567,7 +567,7 @@ defmodule Electric.Shapes.Querying do
     ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
   end
 
-  defp tag_slot_sql(%{is_subquery: false}, _stack_id, _shape_handle) do
+  defp tag_slot_sql(%{subquery?: false}, _stack_id, _shape_handle) do
     "'1'"
   end
 
