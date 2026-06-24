@@ -1012,7 +1012,13 @@ fn closed_conflict(tail: u64) -> Resp {
 /// mirror of `write_wire` + `maybe_sync_on_ack`.
 #[cfg(target_os = "linux")]
 pub enum ZeroCopyOutcome {
+    /// Append handled; send `resp` and continue keep-alive as normal.
     Done(Resp),
+    /// A splice leg failed mid-append: some body bytes may have already been
+    /// consumed from the socket, so the HTTP framing is desynced. Send `resp`
+    /// (a 500) but then CLOSE the connection — it must NOT be reused as
+    /// keep-alive (a stale partial body would corrupt the next request).
+    DoneClose(Resp),
     Fallback,
 }
 
@@ -1031,14 +1037,24 @@ pub enum ZeroCopyOutcome {
 /// `ZeroCopyOutcome`); the engine then reads the body buffered and runs the
 /// normal handler. No stream state is mutated before the accept decision, so the
 /// fallback re-validates from scratch and is fully idempotent.
+///
+/// `splice_rest` moves the remaining `content_len - prefix.len()` body bytes from
+/// the socket to `(file_fd, offset)` and is `async`: the socket is non-blocking,
+/// so the socket→file splice awaits read-readiness (it may park if the body has
+/// not fully arrived). It is awaited here WHILE the appender `AsyncMutex` is held
+/// — intended per-stream serialization; holding it across `.await` is supported.
 #[cfg(target_os = "linux")]
-pub async fn handle_binary_append_zero_copy(
+pub async fn handle_binary_append_zero_copy<F, Fut>(
     store: Arc<Store>,
     req: &Req,
     prefix: &[u8],
     content_len: usize,
-    splice_rest: impl FnOnce(std::os::fd::RawFd, i64) -> std::io::Result<()>,
-) -> ZeroCopyOutcome {
+    splice_rest: F,
+) -> ZeroCopyOutcome
+where
+    F: FnOnce(std::os::fd::RawFd, i64) -> Fut,
+    Fut: std::future::Future<Output = std::io::Result<()>>,
+{
     use std::os::fd::AsRawFd;
 
     let path = req.path.clone();
@@ -1121,16 +1137,20 @@ pub async fn handle_binary_append_zero_copy(
     let file_fd = splice_file.as_raw_fd();
 
     // Step 3a: write the already-buffered prefix at O (positioned).
+    // On failure the remaining body is still unconsumed on the socket, so the
+    // HTTP framing is desynced → force-close (see DoneClose).
     if !prefix.is_empty() {
         use std::os::unix::fs::FileExt;
         if splice_file.write_all_at(prefix, file_off).is_err() {
-            return ZeroCopyOutcome::Done(text_response(500, "write failed"));
+            return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
         }
     }
-    // Step 3b: relay the rest socket→file at O+prefix.len().
+    // Step 3b: relay the rest socket→file at O+prefix.len() (awaits socket
+    // read-readiness — the socket is non-blocking). On failure some body bytes
+    // may already be consumed from the socket → desynced → force-close.
     let rest_off = (file_off + prefix.len() as u64) as i64;
-    if splice_rest(file_fd, rest_off).is_err() {
-        return ZeroCopyOutcome::Done(text_response(500, "write failed"));
+    if splice_rest(file_fd, rest_off).await.is_err() {
+        return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
     }
     // Make the page-cache bytes visible to the file→WAL splice below: the prefix
     // pwrite + the socket splice both wrote through `splice_file`, which shares

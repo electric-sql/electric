@@ -228,24 +228,27 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
             && !head.chunked
             && head.content_length.is_some_and(|n| n > 0)
         {
-            use std::os::fd::AsRawFd;
             let content_len = head.content_length.unwrap();
             // The bytes the head parser over-read are the body prefix. Take up to
             // `content_len` of them (a tiny pipelined next-request tail must not be
             // counted as body); the rest of the body is still on the socket.
             let take = buf.len().min(content_len);
             let prefix = buf.split_to(take).freeze();
-            let socket_fd = stream.as_raw_fd();
             let remaining = content_len - prefix.len();
-            // splice_rest moves the remaining socket bytes into (file_fd, off).
-            // The socket fd is `Copy` (i32), so capturing it does not borrow the
-            // tokio `TcpStream` the handler is unaware of.
-            let splice_rest = move |file_fd: std::os::fd::RawFd, off: i64| -> std::io::Result<()> {
+            // splice_rest moves the remaining socket bytes into (file_fd, off),
+            // awaiting socket read-readiness — the tokio `TcpStream` is
+            // non-blocking, so a splice that returns EAGAIN (body not fully
+            // arrived) must park on readiness rather than error. It borrows
+            // `stream` immutably (read-readiness only); the borrow lives across
+            // the handler's await while the appender lock is held — fine, the
+            // lock is an AsyncMutex.
+            let stream_ref = &stream;
+            let splice_rest = move |file_fd: std::os::fd::RawFd, off: i64| async move {
                 if remaining == 0 {
                     return Ok(());
                 }
                 let mut o = off;
-                zerocopy::splice_all(socket_fd, None, file_fd, Some(&mut o), remaining)
+                zerocopy::splice_socket_to_file(stream_ref, file_fd, &mut o, remaining).await
             };
             let req = Req {
                 method: head.method,
@@ -254,21 +257,29 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
                 headers: head.headers.clone(),
                 body: Bytes::new(),
             };
-            match handlers::handle_binary_append_zero_copy(
+            let outcome = handlers::handle_binary_append_zero_copy(
                 store.clone(),
                 &req,
                 &prefix,
                 content_len,
                 splice_rest,
             )
-            .await
-            {
+            .await;
+            match outcome {
                 handlers::ZeroCopyOutcome::Done(resp) => {
                     write_response(&mut stream, resp, is_head, keep_alive).await?;
                     if !keep_alive {
                         return Ok(());
                     }
                     continue;
+                }
+                handlers::ZeroCopyOutcome::DoneClose(resp) => {
+                    // A splice leg failed mid-append: body bytes may already be
+                    // consumed from the socket, so the connection is desynced.
+                    // Send the 500 with `connection: close` and drop the
+                    // connection — never reuse it as keep-alive.
+                    write_response(&mut stream, resp, is_head, false).await?;
+                    return Ok(());
                 }
                 handlers::ZeroCopyOutcome::Fallback => {
                     // Put the prefix back at the front of the buffer so the
@@ -562,7 +573,121 @@ async fn write_segment(stream: &mut TcpStream, seg: &Segment) -> std::io::Result
 #[cfg(target_os = "linux")]
 pub(crate) mod zerocopy {
     use std::io;
-    use std::os::fd::RawFd;
+    use std::os::fd::{AsRawFd, RawFd};
+
+    /// Move exactly `len` bytes from a tokio (non-blocking) `TcpStream` into the
+    /// regular file `file_fd` at `*file_off`, in-kernel via an anonymous pipe,
+    /// awaiting socket read-readiness between attempts.
+    ///
+    /// The socket→pipe leg uses `stream.async_io(READABLE, …)`: a `splice(2)`
+    /// that would block (`EAGAIN`/`EWOULDBLOCK` — the body has not fully arrived
+    /// in the socket receive buffer) is reported to tokio as
+    /// `ErrorKind::WouldBlock`, so `async_io` parks on readiness and retries
+    /// instead of erroring. The pipe→file leg drains synchronously: the
+    /// destination is a regular file (positioned write, never `EAGAIN`), so no
+    /// readiness wait is needed and `*file_off` is advanced as bytes land.
+    ///
+    /// A socket `splice` returning 0 (peer closed before `len` bytes arrived) is
+    /// a hard error (`UnexpectedEof`) — and, crucially, NOT `WouldBlock`, so
+    /// `async_io` propagates it rather than spinning. Holding the appender
+    /// `AsyncMutex` across this await is intentional (per-stream serialization).
+    pub async fn splice_socket_to_file(
+        stream: &tokio::net::TcpStream,
+        file_fd: RawFd,
+        file_off: &mut i64,
+        mut len: usize,
+    ) -> io::Result<()> {
+        if len == 0 {
+            return Ok(());
+        }
+        let socket_fd = stream.as_raw_fd();
+        // One pipe for the whole transfer (re-created per call, not per retry):
+        // bytes spliced socket→pipe are drained pipe→file before the next
+        // readiness wait, so the pipe is empty across awaits.
+        let mut fds = [0i32; 2];
+        // SAFETY: fds is a 2-element array; pipe2 fills both on success.
+        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let (pr, pw) = (fds[0], fds[1]);
+        let res = async {
+            while len > 0 {
+                // socket → pipe, awaiting readiness. async_io retries ONLY on
+                // WouldBlock; any other error (incl. our EOF below) propagates.
+                let moved = stream
+                    .async_io(tokio::io::Interest::READABLE, || {
+                        // SAFETY: pw is the write end of a valid pipe; socket_fd
+                        // is the stream's fd. splice aliases no Rust references.
+                        let n = unsafe {
+                            libc::splice(
+                                socket_fd,
+                                std::ptr::null_mut(),
+                                pw,
+                                std::ptr::null_mut(),
+                                len,
+                                (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                            )
+                        };
+                        if n < 0 {
+                            let err = io::Error::last_os_error();
+                            // EAGAIN == EWOULDBLOCK on Linux: body not fully in
+                            // the socket buffer yet. Map to WouldBlock so async_io
+                            // parks on readiness and retries.
+                            return match err.raw_os_error() {
+                                Some(libc::EAGAIN) => Err(io::ErrorKind::WouldBlock.into()),
+                                _ => Err(err),
+                            };
+                        }
+                        if n == 0 {
+                            // Peer closed before all `len` bytes arrived. NOT
+                            // WouldBlock, so this propagates out of async_io.
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "socket EOF before full append body",
+                            ));
+                        }
+                        Ok(n as usize)
+                    })
+                    .await?;
+                // pipe → file (drain exactly `moved` bytes; regular file, no EAGAIN).
+                let mut drained = 0usize;
+                while drained < moved {
+                    // SAFETY: pr is the read end of the same pipe; file_fd is the
+                    // splice file; *file_off is a valid &mut i64 cast to *mut i64.
+                    let m = unsafe {
+                        libc::splice(
+                            pr,
+                            std::ptr::null_mut(),
+                            file_fd,
+                            file_off as *mut i64,
+                            moved - drained,
+                            (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                        )
+                    };
+                    if m < 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    if m == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "splice pipe drain returned 0",
+                        ));
+                    }
+                    drained += m as usize;
+                }
+                len -= moved;
+            }
+            Ok(())
+        }
+        .await;
+        // SAFETY: close both pipe ends regardless of outcome; valid (pipe2
+        // succeeded) and unused after this point.
+        unsafe {
+            libc::close(pr);
+            libc::close(pw);
+        }
+        res
+    }
 
     /// Move exactly `len` bytes from `src` to `dst` through an anonymous pipe, in-kernel.
     ///
