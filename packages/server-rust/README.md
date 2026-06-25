@@ -201,8 +201,9 @@ fans out to publish all three channels at that version:
   `server_rust_dockerhub_image.yml`.
 
 Both registries authenticate via OIDC trusted publishing, so CI stores no registry
-tokens. A one-time manual bootstrap is required before the first release (claim the
-`durable-streams` crate + configure trusted publishers on the npm packages).
+tokens. The `durable-streams` crate is reserved and its crates.io Trusted Publishing
+is configured. The npm trusted publishers still need configuring before npm
+publishing is re-enabled.
 
 ---
 

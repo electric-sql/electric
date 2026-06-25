@@ -130,8 +130,8 @@ jobs:
   publish-server-rust:
     needs: changesets
     # Publishes the `durable-streams` crate (crates.io); the npm packages are
-    # disabled inside server_rust_publish.yml. Requires crates.io Trusted
-    # Publishing to be configured for the crate first.
+    # disabled inside server_rust_publish.yml. crates.io Trusted Publishing is
+    # configured for the crate.
     if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
     uses: ./.github/workflows/server_rust_publish.yml
     secrets: inherit
