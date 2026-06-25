@@ -627,7 +627,7 @@ pub(crate) mod zerocopy {
                                 pw,
                                 std::ptr::null_mut(),
                                 len,
-                                (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                                libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE,
                             )
                         };
                         if n < 0 {
@@ -663,7 +663,7 @@ pub(crate) mod zerocopy {
                             file_fd,
                             file_off as *mut i64,
                             moved - drained,
-                            (libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE) as u32,
+                            libc::SPLICE_F_MOVE | libc::SPLICE_F_MORE,
                         )
                     };
                     if m < 0 {
