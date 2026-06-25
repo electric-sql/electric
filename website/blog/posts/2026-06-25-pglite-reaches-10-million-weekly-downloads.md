@@ -287,7 +287,7 @@ The biggest single category is local development for managed Postgres products. 
   </div>
 </figure>
 
-These are very different products solving the same problem: how to give a developer a database the second they install, behaving close enough to the managed Postgres they'll eventually ship to.
+These are very different products solving the same problem: how to give a developer a database the second they install, using the same Postgres features and behaviour they'll eventually ship to.
 
 ### Local AI and search
 
@@ -311,7 +311,7 @@ It also shows up in [Hugging Face's Transformers.js](https://huggingface.co/docs
 
 Inference, embeddings and vector search can all sit next to the application — in the browser or in the app — instead of being a separate service a round trip away.
 
-### Tests with real Postgres semantics
+### Tests against real, but tiny, Postgres
 
 Test suites want databases that come up fast, stay isolated between tests, and don't leave anything behind when they finish. PGlite gives you that inside the test process — without dropping to a mock or a different SQL dialect.
 
@@ -411,7 +411,7 @@ Embedded Postgres is much more useful when developers don't have to throw away t
 
 PGlite also runs Postgres in places a database server couldn't — inside browser products, docs, demos, and even research papers.
 
-Supabase built [`database.build`](https://database.build/) on top of PGlite: an AI-assisted database design tool that runs entirely in the browser. [Supabase Studio](https://supabase.com/dashboard) uses it as a sandbox for testing RLS policies without touching the real database. The [Key Joins proposal](https://keyjoin.org/) goes further and embeds a custom PGlite build into the paper itself, so readers can run the proposed SQL syntax inline as they read.
+Supabase built [`database.build`](https://database.build/) on top of PGlite: an AI-assisted database design tool that runs entirely in the browser. [Supabase Studio](https://supabase.com/dashboard) uses it as a sandbox for testing RLS policies without touching the real database. The [Key Joins proposal](https://keyjoin.org/) goes further and embeds a custom PGlite build into the paper itself, so readers can run the proposed SQL syntax inline as they read. And in AI app builders like [Bolt.new](https://bolt.new), PGlite can put [a real database inside the sandbox](/blog/2025/06/05/database-in-the-sandbox), so generated apps can run without provisioning external Postgres first.
 
 Smaller tools wrap PGlite for interactive code playgrounds: [LiveCodes](https://livecodes.io/) and [Codapi](https://codapi.org/) both let authors embed runnable Postgres snippets directly in their docs.
 
@@ -446,13 +446,13 @@ None of these work the same way with a conventional Postgres server. With PGlite
 
 ## Postgres is showing up in smaller places
 
-All these different settings share one underlying need: a database that runs close to the application. Local emulators, test suites, browser sandboxes, AI runtimes — they all want Postgres behaviour without having to run a Postgres server.
+All these different settings share one underlying need: a database that runs close to the application. Local emulators, test suites, browser sandboxes, AI runtimes — they all want real Postgres close to the application, without operating a separate Postgres server.
 
 It helps when development, testing, local state and production all use the same database. Fewer translations between environments, fewer bugs that only show up in one of them.
 
 AI coding agents writing code inside sandboxes make this trade-off sharper. The sandbox needs to look enough like production that the agent's work is meaningful, but it also has to stay cheap, fast and throwaway. A full Postgres server is too much; a different local database is too different.
 
-[PGlite](/sync/pglite) is the in-between: Postgres semantics in places that need something smaller than a database server, including the things people reach for as projects grow — types, indexes, constraints, full-text search, `pgvector`, PostGIS and other extensions.
+[PGlite](/sync/pglite) is real Postgres packaged for places that need something smaller and more embeddable than a database server. It runs in single-user mode today, but it still brings the parts people reach for as projects grow — types, indexes, constraints, full-text search, `pgvector`, PostGIS and other extensions.
 
 ## How PGlite got here
 
@@ -501,7 +501,7 @@ const pg = new PGlite({
 await pg.exec('CREATE EXTENSION IF NOT EXISTS postgis;')
 ```
 
-Community contributors have brought extensions like Apache AGE, `pg_uuidv7`, `pgTAP`, `pg_hashids`, `pgcrypto` and PostGIS to PGlite.
+Community contributors have brought extensions like Apache AGE, `pg_uuidv7`, `pgTAP`, `pg_hashids`, `pgcrypto` and PostGIS to PGlite. Our [extensions catalog](https://pglite.dev/extensions/) contains the currently supported extensions, and the docs include a [walkthrough for building Postgres extensions](https://pglite.dev/extensions/development#building-postgres-extensions) if you want to contribute a new one.
 
 That brings the Postgres extension model into embedded environments, so the parts of Postgres people reach for in production are reachable locally too.
 
@@ -529,11 +529,11 @@ Running Postgres in the browser also changes what docs and demos can do. Instead
 
 No single killer app got PGlite to 10M downloads. It's been a steady accumulation of teams from very different starting points all reaching for Postgres they can run wherever the application is — inside a CLI, inside a test, inside the browser tab, inside an AI agent — without giving up the behaviour they'd get from the managed Postgres they'll eventually deploy against.
 
-Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remote Postgres data syncs into a local PGlite that still behaves like Postgres, instead of being translated into a different local data model on the way down.
+Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remote Postgres data syncs into a local PGlite that is still Postgres, instead of being translated into a different local data model on the way down.
 
 ## Where PGlite goes next
 
-We want PGlite to feel less like "Postgres squeezed into WASM" and more like embedded Postgres.
+We want PGlite to keep moving from a clever Postgres-in-WASM port toward a first-class embedded Postgres.
 
 Recent architecture work has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
 
