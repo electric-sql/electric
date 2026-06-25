@@ -364,7 +364,9 @@ test('insert via db.execute + select via db.execute', async () => {
   </div>
 </figure>
 
-Tests run fast enough for CI and behave close enough to production that the bugs surface in tests, not later.
+Like this, tests and data remain completely constrained to the JS engine and behave very close to production.
+
+PGlite also make it trivial to [clone](https://pglite.dev/docs/api#clone) an existing instance, which is very handy when your thousand of tests need db access without interfering with each other. In practice, it also gives you almost instant database branching.
 
 ### ORMs and frameworks
 
@@ -452,7 +454,7 @@ It helps when development, testing, local state and production all use the same 
 
 AI coding agents writing code inside sandboxes make this trade-off sharper. The sandbox needs to look enough like production that the agent's work is meaningful, but it also has to stay cheap, fast and throwaway. A full Postgres server is too much; a different local database is too different.
 
-[PGlite](/sync/pglite) is real Postgres packaged for places that need something smaller and more embeddable than a database server. It runs in single-user mode today, but it still brings the parts people reach for as projects grow — types, indexes, constraints, full-text search, `pgvector`, PostGIS and other extensions.
+[PGlite](/sync/pglite) is Postgres packaged for places that need something lighter and more embeddable than a full database deployment. It runs in single-user mode today, but it still brings most of the parts people reach for as projects grow — types, indexes, constraints, persistence, full-text search, pgvector, PostGIS and other extensions.
 
 ## How PGlite got here
 
@@ -536,6 +538,8 @@ Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remot
 We want PGlite to keep moving from a clever Postgres-in-WASM port toward a first-class embedded Postgres, and we're excited about the next pieces we are working on and aiming to ship soon.
 
 Recent architecture work made by Tudor has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
+
+It's been only a few full moons since we've released [pglite-icu-full](https://www.npmjs.com/package/@electric-sql/pglite-icu-full), a build of [ICU](https://github.com/unicode-org/icu) for PGlite that can power multi language applications.
 
 More extensions. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem — and the more of it runs in PGlite, the more useful PGlite gets. We've got our eyes on time-series extensions such as [TimescaleDB](https://github.com/timescale/timescaledb) and we're keen on supporting Rust based ones such as [ParadeDB](https://github.com/paradedb/paradedb) by [Tiger Data](https://www.tigerdata.com). But there are many, many more that we'd like to bring in!
 
