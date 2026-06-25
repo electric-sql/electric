@@ -603,6 +603,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #mode: LogMode
   #onError?: ShapeStreamErrorHandler
   #requestAbortController?: AbortController
+  #restartAbortControllers = new WeakSet<AbortController>()
   #refreshCount = 0
   #snapshotCounter = 0
 
@@ -970,9 +971,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       })
     } catch (e) {
       const abortReason = requestAbortController.signal.reason
+      const isMarkedRestartAbort = this.#restartAbortControllers.delete(
+        requestAbortController
+      )
       const isRestartAbort =
         requestAbortController.signal.aborted &&
-        (abortReason === FORCE_DISCONNECT_AND_REFRESH ||
+        (isMarkedRestartAbort ||
+          abortReason === FORCE_DISCONNECT_AND_REFRESH ||
           abortReason === SYSTEM_WAKE)
 
       if (
@@ -1772,13 +1777,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async forceDisconnectAndRefresh(): Promise<void> {
     this.#refreshCount++
     try {
+      const requestAbortController = this.#requestAbortController
       if (
         this.#syncState.isUpToDate &&
-        !this.#requestAbortController?.signal.aborted
+        requestAbortController &&
+        !requestAbortController.signal.aborted
       ) {
         // If we are "up to date", any current request will be a "live" request
-        // and needs to be aborted
-        this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
+        // and needs to be aborted. Track restart intent ourselves instead of
+        // relying only on AbortSignal.reason, which is missing in some React
+        // Native runtimes.
+        this.#restartAbortControllers.add(requestAbortController)
+        requestAbortController.abort(FORCE_DISCONNECT_AND_REFRESH)
       }
       await this.#nextTick()
     } finally {
@@ -1887,6 +1897,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
         if (!this.#pauseLock.isPaused && this.#requestAbortController) {
           this.#refreshCount++
+          // Track restart intent ourselves instead of relying only on
+          // AbortSignal.reason, which is missing in some React Native runtimes.
+          this.#restartAbortControllers.add(this.#requestAbortController)
           this.#requestAbortController.abort(SYSTEM_WAKE)
           // Wake handler is synchronous (setInterval callback) so we can't
           // use try/finally + await like forceDisconnectAndRefresh. Instead,
