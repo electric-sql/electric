@@ -88,7 +88,19 @@ const PGliteReplDemo = defineClientComponent(
 }
 </style>
 
-PGlite has reached 10&nbsp;million weekly npm downloads. We want to mark the milestone by looking back at how a small Postgres-in-WASM experiment became a widely used embedded Postgres project, and by sharing where we want to take it next.
+PGlite has reached [10&nbsp;million weekly npm downloads](https://www.npmjs.com/package/@electric-sql/pglite). We want to mark the milestone by looking back at how a small Postgres-in-WASM experiment became a widely used embedded Postgres project, and by sharing where we want to take it next.
+
+<figure>
+  <div class="img-row">
+    <div class="img-border">
+      <a href="/img/blog/pglite-reaches-10-million-weekly-downloads/npm-downloads.png">
+        <img src="/img/blog/pglite-reaches-10-million-weekly-downloads/npm-downloads.png"
+            alt="npm weekly downloads graph for pglite.dev showing 10,048,112 weekly downloads"
+        />
+      </a>
+    </div>
+  </div>
+</figure>
 
 > [!WARNING] 🪧&nbsp; Quicklinks
 > [PGlite](https://pglite.dev/) is Postgres compiled to WASM, packaged for JavaScript environments including browsers, Node.js, Bun, and Deno.
@@ -225,19 +237,7 @@ The project became more interesting each time someone used it somewhere we had n
 
 ## What 10 million downloads looks like
 
-PGlite passed 1&nbsp;million weekly downloads a little over a year ago. It has now reached 10&nbsp;million weekly npm downloads.
-
-<figure>
-  <div class="img-row">
-    <div class="img-border">
-      <a href="/img/blog/pglite-reaches-10-million-weekly-downloads/npm-downloads.png">
-        <img src="/img/blog/pglite-reaches-10-million-weekly-downloads/npm-downloads.png"
-            alt="npm weekly downloads graph for pglite.dev showing 10,048,112 weekly downloads"
-        />
-      </a>
-    </div>
-  </div>
-</figure>
+PGlite passed 1&nbsp;million weekly downloads a little over a year ago. It has now reached [10&nbsp;million weekly npm downloads](https://www.npmjs.com/package/@electric-sql/pglite).
 
 That growth came from several directions: developer CLIs, CI pipelines, browser apps, AI sandboxes, local-first apps, and sync use cases. Prisma helped bring PGlite into everyday local development flows. Supabase `database.build` showed what browser-native Postgres can enable for AI-assisted database design.
 
