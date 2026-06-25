@@ -286,6 +286,14 @@ defmodule Electric.ShapeCache do
 
     Electric.Replication.PublicationManager.wait_for_restore(state.stack_id)
 
+    # Subquery shapes' consumers must be fully initialized before
+    # ShapeLogCollector starts dispatching events. If events flow first,
+    # the materializer can advance past the outer shape's on-disk storage;
+    # the outer consumer's later init would then seed `state.views` from
+    # the advanced materializer view and a subsequent move-in event for
+    # a value already in that seeded view would be dropped as redundant.
+    eagerly_start_subquery_shape_consumers(state)
+
     # Let ShapeLogCollector that it can start processing after finishing this function so that
     # we're subscribed to the producer before it starts forwarding its demand.
     ShapeLogCollector.mark_as_ready(state.stack_id)
@@ -303,6 +311,61 @@ defmodule Electric.ShapeCache do
     )
 
     {:noreply, state}
+  end
+
+  # Shapes whose where clause contains a subquery (`shape_dependencies != []`)
+  # rely on their materializer subscription to be notified of dependency-side
+  # changes. The router only delivers events for a shape when its own
+  # `root_table` changes, so a subquery dependent stays dormant after a
+  # restart until something writes to its own table — movements driven by
+  # the dependency (e.g. parent rows becoming active) never reach its
+  # on-disk view. Restoring it here re-establishes the materializer
+  # subscription so dependency updates flow in.
+  #
+  # `await_snapshot_start/2` is queued *after* the consumer's
+  # `:initialize_shape` info message, so by the time it returns
+  # `EventHandlerBuilder.build` has run and `state.views` is seeded.
+  defp eagerly_start_subquery_shape_consumers(state) do
+    opts = %{
+      stack_id: state.stack_id,
+      action: :restore,
+      otel_ctx: nil,
+      feature_flags: state.feature_flags
+    }
+
+    for {handle, %Shape{shape_dependencies: [_ | _]} = shape} <-
+          ShapeStatus.list_shapes(state.stack_id),
+        is_nil(Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle)) do
+      case restore_shape_and_dependencies(handle, shape, opts) do
+        {:ok, _pid} ->
+          # await_snapshot_start/2 is a GenServer.call into the just-started
+          # consumer. If that consumer dies before/during the call it exits;
+          # left unguarded that would propagate out of handle_continue and
+          # crash ShapeCache before mark_as_ready — turning a single shape
+          # that reliably fails its snapshot into a stack-wide restart loop.
+          # A call timeout (the consumer is alive but wedged) exits the same
+          # way. In either case we can't confirm the shape's consumer came up
+          # subscribed-and-correct, and the eager start exists precisely to
+          # guarantee that consistency. Leaving the shape alive-but-unconfirmed
+          # would silently reintroduce the divergence this restore path fixes,
+          # so we purge it (mirroring restore_shape_and_dependencies' own
+          # clean_shape-on-failure) and let the client refetch from scratch.
+          try do
+            _ = Electric.Shapes.Consumer.await_snapshot_start(state.stack_id, handle)
+          catch
+            :exit, reason ->
+              Logger.warning(
+                "Eager subquery consumer await failed for #{handle}: #{inspect(reason)}; " <>
+                  "purging shape to force a clean refetch"
+              )
+
+              clean_shape(handle, state.stack_id)
+          end
+
+        _ ->
+          :ok
+      end
+    end
   end
 
   @impl GenServer
