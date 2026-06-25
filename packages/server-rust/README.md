@@ -179,10 +179,11 @@ The core protocol suite passes.
 
 ## Releasing
 
-> **Publishing is currently disabled** — the npm/crate/Docker publish jobs in
-> `changesets_release.yml` and the Docker image's merge trigger are gated off
-> (search `DISABLED:` in the workflows). Builds and tests still run. Re-enable when
-> ready to ship (remove the `false &&` guards / restore the `push` trigger).
+> **npm publishing is currently disabled.** A release publishes the crate
+> (crates.io) and the Docker image, but **not** the npm packages — the `npm-publish`
+> job in `server_rust_publish.yml` is gated off (search `DISABLED:`). Re-enable it
+> when ready to ship the npm packages. (The merge-time canary Docker build is also
+> off; the release image still publishes.)
 
 Released via Changesets, like the rest of the monorepo. The version lives in this
 package's `package.json` (the `@electric-ax/durable-streams-server-rust` anchor,

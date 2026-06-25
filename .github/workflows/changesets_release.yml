@@ -129,9 +129,10 @@ jobs:
 
   publish-server-rust:
     needs: changesets
-    # DISABLED: not publishing the npm packages / crate yet. Re-enable by removing
-    # the `false &&` prefix.
-    if: ${{ false && needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
+    # Publishes the `durable-streams` crate (crates.io); the npm packages are
+    # disabled inside server_rust_publish.yml. Requires crates.io Trusted
+    # Publishing to be configured for the crate first.
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
     uses: ./.github/workflows/server_rust_publish.yml
     secrets: inherit
     with:
@@ -139,9 +140,7 @@ jobs:
 
   publish-server-rust-to-dockerhub:
     needs: [changesets, publish-server-rust]
-    # DISABLED: not publishing the Docker image yet. Re-enable by removing the
-    # `false &&` prefix.
-    if: ${{ false && needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
     uses: ./.github/workflows/server_rust_dockerhub_image.yml
     secrets: inherit
     with:

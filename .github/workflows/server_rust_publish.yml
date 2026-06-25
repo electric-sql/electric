@@ -105,6 +105,9 @@ jobs:
 
   npm-publish:
     needs: build
+    # DISABLED: not publishing the npm packages yet (the crate + Docker image still
+    # publish). Re-enable by removing this `if: false`.
+    if: ${{ false }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
