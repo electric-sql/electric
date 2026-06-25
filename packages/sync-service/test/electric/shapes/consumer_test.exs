@@ -2760,6 +2760,64 @@ defmodule Electric.Shapes.ConsumerTest do
       # After cleanup, the shape's rows should be removed from the index
       refute SubqueryIndex.has_positions?(index, shape_handle)
     end
+
+    test "dependency consumer survives a :noproc from its materializer without removing the shape",
+         ctx do
+      # Bug 6 cascade route: during a stack restart's shutdown, the dependency
+      # consumer's inline call into its materializer can race the
+      # materializer's death and exit with :noproc. Without the catch in
+      # notify_materializer_of_new_changes/3, that crashes the consumer with a
+      # non-shutdown reason, which routes through handle_writer_termination and
+      # removes the shape from disk — mid stack-shutdown that leaves the shape
+      # half-removed and 409s on the next poll after restart. The catch must
+      # absorb the exit so the pending :DOWN can drive a clean stop instead.
+
+      # Make the dependency consumer's notification call into the materializer
+      # exit exactly as a GenServer.call to an already-dead process would.
+      Repatch.patch(Consumer.Materializer, :new_changes, [mode: :shared], fn _, _, _ ->
+        exit({:noproc, {GenServer, :call, [:materializer, :new_changes, 5000]}})
+      end)
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      # If the bug were present the consumer would crash and remove the shape;
+      # assert remove_shape is never called.
+      patch_shape_status(
+        remove_shape: fn _, handle ->
+          raise "Unexpected remove_shape for #{handle}"
+        end
+      )
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [dep_handle] = shape.shape_dependencies_handles
+
+      dep_consumer = Consumer.whereis(ctx.stack_id, dep_handle)
+      assert is_pid(dep_consumer)
+      ref = Process.monitor(dep_consumer)
+
+      # A change to the dependency table makes the dependency consumer notify
+      # its materializer — hitting the patched, exiting call.
+      ShapeLogCollector.handle_event(
+        complete_txn_fragment(100, Lsn.from_integer(50), [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(Lsn.from_integer(50), 0)
+          }
+        ]),
+        ctx.stack_id
+      )
+
+      # With the catch, the dependency consumer absorbs the :noproc and stays
+      # alive; the shape is not removed.
+      refute_receive {:DOWN, ^ref, :process, _, _}, 500
+      assert Consumer.whereis(ctx.stack_id, dep_handle) == dep_consumer
+    end
   end
 
   defp refute_storage_calls_for_txn_fragment(shape_handle) do
