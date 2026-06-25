@@ -1,0 +1,32 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title>Durable Streams server — high-level data flow, durability and tiered storage</title>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect width="680" height="300" fill="#FBFAF7"/>
+<line x1="164" y1="140" x2="224" y2="140" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="194" y="133" text-anchor="middle" font-size="12" fill="#5F5E5A">append</text>
+<line x1="224" y1="168" x2="164" y2="168" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="194" y="182" text-anchor="middle" font-size="12" fill="#5F5E5A">read · sendfile</text>
+<line x1="300" y1="188" x2="300" y2="214" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="308" y="205" text-anchor="start" font-size="12" fill="#5F5E5A">fsync</text>
+<line x1="376" y1="134" x2="440" y2="84" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="398" y="108" text-anchor="start" font-size="12" fill="#5F5E5A">hot data</text>
+<line x1="548" y1="110" x2="548" y2="196" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="556" y="156" text-anchor="start" font-size="12" fill="#5F5E5A">seal + offload</text>
+<line x1="376" y1="170" x2="440" y2="208" stroke="#73726c" stroke-width="1.5" marker-end="url(#ar)"/>
+<text x="372" y="205" text-anchor="end" font-size="12" fill="#5F5E5A">cold read · CDN</text>
+<rect x="24" y="116" width="140" height="72" rx="10" fill="#F0EFEA" stroke="#73726c" stroke-width="0.75"/>
+<text x="94.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#2C2C2A">Clients</text>
+<text x="94.0" y="163.0" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#73726c">writers · live readers</text>
+<rect x="224" y="116" width="152" height="72" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.75"/>
+<text x="300.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#26215C">HTTP server</text>
+<text x="300.0" y="163.0" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#534AB7">requests in & out</text>
+<rect x="224" y="214" width="152" height="46" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"/>
+<text x="300.0" y="231.0" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#4A1B0C">WAL</text>
+<text x="300.0" y="248.0" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#993C1D">durable commit</text>
+<rect x="440" y="44" width="216" height="66" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.75"/>
+<text x="548.0" y="70.0" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#042C53">Hot storage</text>
+<text x="548.0" y="88.0" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#185FA5">file system · page cache</text>
+<rect x="440" y="196" width="216" height="66" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.75"/>
+<text x="548.0" y="222.0" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600" fill="#04342C">Cold storage</text>
+<text x="548.0" y="240.0" text-anchor="middle" dominant-baseline="central" font-size="11.5" fill="#0F6E56">sealed chunks · CDN</text>
+</svg>
