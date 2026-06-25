@@ -1,5 +1,13 @@
 # @electric-ax/example-deep-survey
 
+## 0.1.30
+
+### Patch Changes
+
+- Updated dependencies [886c423]
+- Updated dependencies [7139c53]
+  - @electric-ax/agents-runtime@0.6.3
+
 ## 0.1.29
 
 ### Patch Changes

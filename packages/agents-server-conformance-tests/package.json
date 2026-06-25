@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@durable-streams/client": "^0.2.6",
-    "@electric-sql/client": "^1.5.21",
+    "@electric-sql/client": "^1.5.22",
     "fast-check": "^4.6.0",
     "vitest": "^4.1.0"
   },
