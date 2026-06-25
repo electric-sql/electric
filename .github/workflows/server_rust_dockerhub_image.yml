@@ -2,10 +2,12 @@ name: Publish durable-streams-server-rust image to Docker Hub
 
 # If you change the triggers, also update the conditional logic in derive_build_vars.
 on:
-  push:
-    branches: ['main']
-    paths:
-      - 'packages/server-rust/**'
+  # DISABLED: auto-publishing a canary image on merge to main is off until we're
+  # ready to publish. Re-enable by restoring this push trigger:
+  #   push:
+  #     branches: ['main']
+  #     paths:
+  #       - 'packages/server-rust/**'
   # Called by the Changesets release workflow after a version bump.
   workflow_call:
     inputs:
