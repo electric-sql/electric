@@ -1492,6 +1492,57 @@ defmodule Electric.ShapeCacheTest do
       # have called start_shape_consumer for the simple shape.
       refute_receive {:start_shape_consumer_called, _}, 200
     end
+
+    test "purges the shape when the eager consumer await fails", ctx do
+      %{stack_id: stack_id} = ctx
+      test_pid = self()
+
+      {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, @shape_with_subquery)
+
+      # Make the consumer start succeed so restore_shape_and_dependencies
+      # returns {:ok, pid} and the eager-start reaches await_snapshot_start.
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_materializer,
+        [mode: :shared],
+        fn _stack_id, _config -> {:ok, self()} end
+      )
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn _stack_id, _config -> {:ok, self()} end
+      )
+
+      # ...then make the await fail (consumer died, or timed out while
+      # wedged) so the catch fires. We can't confirm the shape came up
+      # subscribed-and-correct, so it must be purged rather than left alive.
+      Repatch.patch(
+        Electric.Shapes.Consumer,
+        :await_snapshot_start,
+        [mode: :shared],
+        fn _stack_id, _handle -> exit(:test_consumer_died) end
+      )
+
+      # clean_shape goes through ShapeCleaner.remove_shape; capture the call
+      # to prove the failed shape is purged so a client refetches from scratch.
+      Repatch.patch(
+        Electric.ShapeCache.ShapeCleaner,
+        :remove_shape,
+        [mode: :shared],
+        fn _stack_id, handle ->
+          send(test_pid, {:remove_shape_called, handle})
+          :ok
+        end
+      )
+
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      assert_receive {:remove_shape_called, ^shape_handle}, 5_000
+    end
   end
 
   describe "start_consumer_for_handle/2" do
