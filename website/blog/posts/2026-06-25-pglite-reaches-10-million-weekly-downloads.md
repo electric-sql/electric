@@ -130,9 +130,19 @@ AI apps need somewhere to keep embeddings, metadata, conversation history and do
 
 A particularly clear recent example is [GBrain](https://github.com/garrytan/gbrain), the personal-AI brain that Garry Tan (President of Y Combinator) built to run his own agents. GBrain [recently made PGlite its default engine](https://x.com/garrytan/status/2042920191303258192) for personal brains — "database ready in 2 seconds, no server" — using hybrid HNSW + BM25 retrieval over `pgvector` to run brains of up to ~50K pages on a developer's own machine.
 
-It also shows up in Hugging Face's Transformers.js semantic search demos, in Obsidian Smart Composer and Infio Copilot, in ElizaOS, in a number of agent-memory packages, and in experiments like local semantic search over your starred GitHub repos.
+<figure>
+  <div class="img-row">
+    <div class="img-border">
+      <a href="https://x.com/garrytan/status/2042920191303258192">
+        <img src="/img/blog/pglite-reaches-10-million-weekly-downloads/garry-tan-gbrain-tweet.png"
+            alt="Garry Tan announcing PGlite as the default engine for GBrain on X: 'PGLite (embeddable WASM Postgres with vector support) is the default engine now, so no fumbling with API keys to get it going.'"
+        />
+      </a>
+    </div>
+  </div>
+</figure>
 
-<!-- TODO: add a screenshot or short demo from GBrain or another agent memory app. -->
+It also shows up in Hugging Face's Transformers.js semantic search demos, in Obsidian Smart Composer and Infio Copilot, in ElizaOS, in a number of agent-memory packages, and in experiments like local semantic search over your starred GitHub repos.
 
 Inference, embeddings and vector search can all sit next to the application — in the browser or in the app — instead of being a separate service a round trip away.
 
@@ -168,11 +178,11 @@ None of these could work with a Postgres server. With PGlite the database is par
 
 ## Postgres is showing up in smaller places
 
-The reason the same database keeps appearing in such different settings is that all of them need it closer to the application. Local emulators, test suites, browser sandboxes, AI runtimes — what they want in common is Postgres behaviour without a Postgres server in the way.
+All these different settings share one underlying need: a database that runs close to the application. Local emulators, test suites, browser sandboxes, AI runtimes — they all want Postgres behaviour without having to run a Postgres server.
 
 It helps when development, testing, local state and production all use the same database. Fewer translations between environments, fewer bugs that only show up in one of them.
 
-AI coding agents writing code inside sandboxes make the gap sharper. The sandbox needs to look enough like production that the agent's work is meaningful, but it also has to stay cheap, fast and throwaway. A full Postgres server is too much; a different local database is too different.
+AI coding agents writing code inside sandboxes make this trade-off sharper. The sandbox needs to look enough like production that the agent's work is meaningful, but it also has to stay cheap, fast and throwaway. A full Postgres server is too much; a different local database is too different.
 
 [PGlite](/sync/pglite) is the in-between: Postgres semantics in places that need something smaller than a database server, including the things people reach for as projects grow — types, indexes, constraints, full-text search, `pgvector`, PostGIS and other extensions.
 
@@ -198,7 +208,7 @@ We picked that up in February 2024 and had something working by the end of the m
 
 The early version could run queries, but using it from JavaScript still didn't feel much like working with Postgres.
 
-Implementing the wire protocol changed that. Parameterised queries, type metadata, the connection lifecycle people expect from Postgres clients — all of it became possible once PGlite spoke the same protocol everything else does. Pulling `Asyncify` out of the main loop on the way made queries much faster on top.
+Implementing the wire protocol changed that. Parameterised queries, type metadata, the connection lifecycle people expect from Postgres clients — all of it became possible once PGlite spoke the same protocol as every other Postgres client. Pulling `Asyncify` out of the main loop on the way made queries much faster on top.
 
 Beyond querying, `pg_notify` unlocked local live queries: SQL queries that re-run reactively when their underlying tables change. Extension support pulled PGlite closer to being Postgres rather than just SQL-in-WASM — first with contrib extensions and `pgvector`, then PostGIS and a growing set of community-built extensions.
 
@@ -225,7 +235,7 @@ await pg.exec('CREATE EXTENSION IF NOT EXISTS postgis;')
 
 Community contributors have brought extensions like Apache AGE, `pg_uuidv7`, `pgTAP`, `pg_hashids`, `pgcrypto` and PostGIS to PGlite.
 
-What that gives you is the Postgres extension model in an embedded environment, so the parts of Postgres people reach for in production are also reachable locally.
+That brings the Postgres extension model into embedded environments, so the parts of Postgres people reach for in production are reachable locally too.
 
 ### Postgres in the browser
 
@@ -249,9 +259,9 @@ Running Postgres in the browser also changes what docs and demos can do. Instead
 
 ## What the pattern means
 
-PGlite started as an Electric experiment, but it changed once people began pulling it into workflows we couldn't have planned for. No single project drove it to 10M. What the adopters share is a deployment shape Postgres didn't really have before: embedded, disposable, local, sometimes in the browser, and still close enough to production that you don't need to translate between environments.
+No single killer app got PGlite to 10M downloads. It's been a steady accumulation of teams from very different starting points all reaching for Postgres they can run wherever the application is — inside a CLI, inside a test, inside the browser tab, inside an AI agent — without giving up the behaviour they'd get from the managed Postgres they'll eventually deploy against.
 
-Electric's own [PGlite sync adapter](/sync/pglite) sits in that picture too: remote Postgres data syncs into a local PGlite that still behaves like Postgres, instead of being translated into a different local data model on the way down.
+Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remote Postgres data syncs into a local PGlite that still behaves like Postgres, instead of being translated into a different local data model on the way down.
 
 ## Where PGlite goes next
 
@@ -259,7 +269,7 @@ We want PGlite to feel less like "Postgres squeezed into WASM" and more like emb
 
 Recent architecture work has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
 
-Extensions are a big part of where the project still needs to go. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem, and PGlite needs to make extension authoring and porting easier than it currently is.
+More extensions. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem — and the more of it runs in PGlite, the more useful PGlite gets.
 
 Multi-connection support is the next piece. PGlite still works around Postgres single-user mode under the hood; getting past that — through multi-instance or multi-threaded approaches — would let multiple connections work against the same database the way they do in a normal Postgres deployment. Logical replication is on the same list. Replicating in and out of PGlite would let it sit inside a Postgres topology rather than next to one.
 
