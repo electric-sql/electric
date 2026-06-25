@@ -533,13 +533,23 @@ Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remot
 
 ## Where PGlite goes next
 
-We want PGlite to keep moving from a clever Postgres-in-WASM port toward a first-class embedded Postgres.
+We want PGlite to keep moving from a clever Postgres-in-WASM port toward a first-class embedded Postgres, and we're excited about the next pieces we are working on and aiming to ship soon.
 
 Recent architecture work has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
 
 More extensions. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem — and the more of it runs in PGlite, the more useful PGlite gets.
 
-Multi-connection support is the next piece. PGlite still works around Postgres single-user mode under the hood; getting past that — through multi-instance or multi-threaded approaches — would let multiple connections work against the same database the way they do in a normal Postgres deployment. Logical replication is on the same list. Replicating in and out of PGlite would let it sit inside a Postgres topology rather than next to one.
+Multi-connection support is the next big piece we want to land. Postgres normally gets that by forking a backend process per connection; WASM does not give us `fork`, so PGlite currently works through Postgres single-user mode. We are working on emulating enough of that backend model in WASM to let multiple connections talk to the same embedded database, without making developers leave the JavaScript runtime or start a separate server.
+
+There is also a more experimental, much wilder path we are excited to keep pushing on: making Postgres itself threaded. Sam has been exploring this in a [multithreaded Postgres branch](https://github.com/samwillis/multithreaded-postgres), asking whether PostgreSQL can keep the compatibility and isolation properties of its process-per-backend model while also supporting many more concurrent client sessions. That matters for PGlite because multi-session Postgres in WASM is much easier if Postgres can separate logical database sessions from OS processes and run those sessions inside one address space.
+
+<figure style="background: none">
+  <div style="max-width: 550px; margin: 0 auto">
+    <Tweet tweet-id="2069147163255312392" conversation="none" theme="dark" width="550" />
+  </div>
+</figure>
+
+Logical replication is on the same list, and we're excited to make progress there too. Replicating in and out of PGlite would let it sit inside a Postgres topology rather than next to one.
 
 The longer-term ambition is `libpglite`: a native, embeddable Postgres library for mobile, desktop and other non-JavaScript environments. The aim is for Postgres to be embeddable as broadly as SQLite, with the full Postgres feature set and tooling along for the ride.
 
