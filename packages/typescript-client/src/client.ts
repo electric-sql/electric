@@ -1895,12 +1895,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       lastTickTime = now
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
-        if (!this.#pauseLock.isPaused && this.#requestAbortController) {
+        const requestAbortController = this.#requestAbortController
+        if (
+          !this.#pauseLock.isPaused &&
+          requestAbortController &&
+          !requestAbortController.signal.aborted
+        ) {
           this.#refreshCount++
           // Track restart intent ourselves instead of relying only on
           // AbortSignal.reason, which is missing in some React Native runtimes.
-          this.#restartAbortControllers.add(this.#requestAbortController)
-          this.#requestAbortController.abort(SYSTEM_WAKE)
+          this.#restartAbortControllers.add(requestAbortController)
+          requestAbortController.abort(SYSTEM_WAKE)
           // Wake handler is synchronous (setInterval callback) so we can't
           // use try/finally + await like forceDisconnectAndRefresh. Instead,
           // decrement via queueMicrotask — safe because the abort triggers
