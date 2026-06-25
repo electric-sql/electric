@@ -442,6 +442,14 @@ The video below shows the kind of browser-native database workflow that PGlite m
   </div>
 </figure>
 
+And with bolt.new 
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="ooWaPVvljlU" title="I gave AI full control over my database (postgres.new)" />
+  </div>
+</figure>
+
 None of these work the same way with a conventional Postgres server. With PGlite the database is part of the document or the application, not something you point at over a network.
 
 ## Postgres is showing up in smaller places
@@ -535,9 +543,9 @@ Electric's own [PGlite sync adapter](/sync/pglite) is in that picture too: remot
 
 We want PGlite to keep moving from a clever Postgres-in-WASM port toward a first-class embedded Postgres, and we're excited about the next pieces we are working on and aiming to ship soon.
 
-Recent architecture work has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
+Recent architecture work made by Tudor has cut down the amount of custom Postgres code PGlite carries. That makes upstream upgrades less painful, gives contributors a more approachable codebase to land in, and makes PGlite a more realistic candidate for porting to other targets.
 
-More extensions. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem — and the more of it runs in PGlite, the more useful PGlite gets.
+More extensions. The thing that makes Postgres what it is, more than anything else, is its extension ecosystem — and the more of it runs in PGlite, the more useful PGlite gets. We've got our eyes on time-series extensions such as [TimescaleDB](https://github.com/timescale/timescaledb) and we're keen on supporting Rust based extensions such as [ParadeDB](https://github.com/paradedb/paradedb). But there are many, many more!
 
 Multi-connection support is the next big piece we want to land. Postgres normally gets that by forking a backend process per connection; WASM does not give us `fork`, so PGlite currently works through Postgres single-user mode. We are working on emulating enough of that backend model in WASM to let multiple connections talk to the same embedded database, without making developers leave the JavaScript runtime or start a separate server.
 
