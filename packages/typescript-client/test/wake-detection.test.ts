@@ -118,6 +118,59 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  it(`should restart after system wake even when AbortSignal.reason is not preserved`, async () => {
+    vi.useFakeTimers()
+
+    const originalAbort = AbortController.prototype.abort
+    vi.spyOn(AbortController.prototype, `abort`).mockImplementation(function (
+      this: AbortController
+    ) {
+      // Simulate React Native AbortController implementations that drop the
+      // abort reason instead of preserving abort(`system-wake`).
+      return originalAbort.call(this)
+    })
+
+    const fetchSignals: AbortSignal[] = []
+    let fetchCallCount = 0
+
+    const fetchWrapper = (
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      const signal = args[1]?.signal
+      if (signal) fetchSignals.push(signal)
+      fetchCallCount++
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    const initialFetchCount = fetchCallCount
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(fetchSignals[0]?.aborted).toBe(true)
+    expect(fetchSignals[0]?.reason).not.toBe(`system-wake`)
+    expect(fetchCallCount).toBeGreaterThan(initialFetchCount)
+
+    unsub()
+    aborter.abort()
+  })
+
   it(`should re-arm wake detection after snapshot pause and resume`, async () => {
     vi.useFakeTimers()
 
