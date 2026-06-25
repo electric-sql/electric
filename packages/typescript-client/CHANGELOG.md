@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.22
+
+### Patch Changes
+
+- 4f604bb: Fix ShapeStream wake reconnects in runtimes that do not preserve `AbortSignal.reason`, such as some React Native fetch/AbortController implementations.
+
 ## 1.5.21
 
 ### Patch Changes

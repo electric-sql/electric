@@ -1019,7 +1019,7 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.5.21
+        specifier: 1.5.22
         version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
@@ -1601,7 +1601,7 @@ importers:
   packages/agents-desktop:
     dependencies:
       '@electric-sql/client':
-        specifier: ^1.5.21
+        specifier: ^1.5.22
         version: link:../typescript-client
       '@mixmark-io/domino':
         specifier: ^2.2.0
@@ -1935,7 +1935,7 @@ importers:
         specifier: workspace:*
         version: link:../agents-runtime
       '@electric-sql/client':
-        specifier: ^1.5.21
+        specifier: ^1.5.22
         version: link:../typescript-client
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
@@ -2020,7 +2020,7 @@ importers:
         specifier: ^0.2.6
         version: 0.2.6
       '@electric-sql/client':
-        specifier: ^1.5.21
+        specifier: ^1.5.22
         version: link:../typescript-client
       fast-check:
         specifier: ^4.6.0
@@ -2169,7 +2169,7 @@ importers:
         specifier: workspace:*
         version: link:../agents-runtime
       '@electric-sql/client':
-        specifier: ^1.5.21
+        specifier: ^1.5.22
         version: link:../typescript-client
       '@tanstack/db':
         specifier: ^0.6.6
