@@ -88,7 +88,7 @@ const PGliteReplDemo = defineClientComponent(
 }
 </style>
 
-PGlite has reached 10&nbsp;million weekly npm downloads. We want to mark the milestone by looking back at how a small Postgres-in-WASM experiment became a widely used embedded Postgres project, and by sharing where we want to take it next.
+PGlite has reached [10&nbsp;million weekly npm downloads](https://www.npmjs.com/package/@electric-sql/pglite). We want to mark the milestone by looking back at how a small Postgres-in-WASM experiment became a widely used embedded Postgres project, and by sharing where we want to take it next.
 
 > [!WARNING] 🪧&nbsp; Quicklinks
 > [PGlite](https://pglite.dev/) is Postgres compiled to WASM, packaged for JavaScript environments including browsers, Node.js, Bun, and Deno.
