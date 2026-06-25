@@ -106,6 +106,11 @@ const PGliteReplDemo = defineClientComponent(
   grid-template-columns: repeat(4, minmax(0, 1fr));
   justify-items: center;
 }
+.logo-strip-nowrap {
+  flex-wrap: nowrap;
+  gap: 20px;
+  justify-content: space-between;
+}
 .logo-strip-item {
   display: flex;
   align-items: center;
@@ -159,6 +164,10 @@ const PGliteReplDemo = defineClientComponent(
   height: 60px;
   max-width: 180px;
 }
+.logo-strip-item img.logo-database-build {
+  height: 40px;
+  max-width: 225px;
+}
 .logo-strip-label {
   color: var(--vp-c-text-1);
   font-size: 16px;
@@ -174,6 +183,11 @@ const PGliteReplDemo = defineClientComponent(
   }
   .logo-strip-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .logo-strip-nowrap {
+    flex-wrap: wrap;
+    gap: 18px 22px;
+    justify-content: space-around;
   }
   .logo-strip-item {
     height: 34px;
@@ -213,6 +227,10 @@ const PGliteReplDemo = defineClientComponent(
   .logo-strip-item img.logo-supabase {
     height: 46px;
     max-width: 138px;
+  }
+  .logo-strip-item img.logo-database-build {
+    height: 32px;
+    max-width: 180px;
   }
   .logo-strip-label {
     font-size: 14px;
@@ -297,7 +315,7 @@ Inference, embeddings and vector search can all sit next to the application — 
 
 Test suites want databases that come up fast, stay isolated between tests, and don't leave anything behind when they finish. PGlite gives you that inside the test process — without dropping to a mock or a different SQL dialect.
 
-[Drizzle](https://orm.drizzle.team) uses PGlite in its integration tests. [Supabase](https://supabase.com) pulls it into local mocks and test harnesses. [Prisma](https://www.prisma.io) provides tooling for running tests against PGlite, giving projects a fast, throwaway database that still talks the same SQL as production.
+[Drizzle](https://orm.drizzle.team) uses PGlite in its integration tests. [Supabase](https://supabase.com) pulls it into local mocks and test harnesses. Prisma projects can use PGlite through the [PGlite Prisma adapter](https://www.npmjs.com/package/pglite-prisma-adapter), giving them a fast, throwaway database that still talks the same SQL as production.
 
 The useful part is that tests can exercise real Postgres behavior, not just adapter wiring. Drizzle's own [PGlite integration tests](https://github.com/drizzle-team/drizzle-orm/blob/48e54060/integration-tests/tests/pg/pglite.test.ts) spin up PGlite, reset the schema, then assert against real query results:
 
@@ -398,7 +416,13 @@ Supabase built [`database.build`](https://database.build/) on top of PGlite: an 
 Smaller tools wrap PGlite for interactive code playgrounds: [LiveCodes](https://livecodes.io/) and [Codapi](https://codapi.org/) both let authors embed runnable Postgres snippets directly in their docs.
 
 <figure class="logo-strip">
-  <div class="logo-strip-row">
+  <div class="logo-strip-row logo-strip-nowrap">
+    <a class="logo-strip-item" href="https://database.build/">
+      <img class="logo-database-build" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/database-build.svg" alt="database.build" />
+    </a>
+    <a class="logo-strip-item" href="https://supabase.com/">
+      <img class="logo-supabase" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/supabase-dark.svg" alt="Supabase" />
+    </a>
     <a class="logo-strip-item" href="https://livecodes.io/">
       <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/livecodes.svg" alt="" />
       <span class="logo-strip-label">LiveCodes</span>
@@ -418,7 +442,7 @@ The video below shows the kind of browser-native database workflow that PGlite m
   </div>
 </figure>
 
-None of these could work with a Postgres server. With PGlite the database is part of the document or the application, not something you point at over a network.
+None of these work the same way with a conventional Postgres server. With PGlite the database is part of the document or the application, not something you point at over a network.
 
 ## Postgres is showing up in smaller places
 
