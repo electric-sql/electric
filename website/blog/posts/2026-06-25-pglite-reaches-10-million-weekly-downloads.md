@@ -86,6 +86,138 @@ const PGliteReplDemo = defineClientComponent(
   font-size: 13px;
   background: var(--vp-code-block-bg, #161618);
 }
+
+.logo-strip {
+  margin: 28px 0 8px;
+}
+.logo-strip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-around;
+  gap: 22px 32px;
+  padding: 26px 28px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-elv);
+}
+.logo-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-items: center;
+}
+.logo-strip-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  text-decoration: none;
+  color: var(--vp-c-text-1);
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+.logo-strip-item:hover {
+  opacity: 1;
+}
+.logo-strip-item img {
+  height: 32px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+  display: block;
+}
+.logo-strip-item img.logo-icon {
+  height: 28px;
+  max-width: 32px;
+}
+.logo-strip-item img.logo-compact {
+  height: 28px;
+  max-width: 82px;
+}
+.logo-strip-item img.logo-wide {
+  height: 28px;
+  max-width: 150px;
+}
+.logo-strip-item img.logo-tall-wordmark {
+  height: 44px;
+  max-width: 130px;
+}
+.logo-strip-item img.logo-firebase {
+  height: 58px;
+  max-width: 174px;
+}
+.logo-strip-item img.logo-netlify {
+  height: 52px;
+  max-width: 156px;
+}
+.logo-strip-item img.logo-aws {
+  height: 42px;
+  max-width: 123px;
+}
+.logo-strip-item img.logo-supabase {
+  height: 60px;
+  max-width: 180px;
+}
+.logo-strip-label {
+  color: var(--vp-c-text-1);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+@media (max-width: 559px) {
+  .logo-strip-row {
+    gap: 18px 22px;
+    padding: 20px;
+  }
+  .logo-strip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .logo-strip-item {
+    height: 34px;
+  }
+  .logo-strip-item img {
+    height: 28px;
+    max-width: 130px;
+  }
+  .logo-strip-item img.logo-icon {
+    height: 24px;
+    max-width: 28px;
+  }
+  .logo-strip-item img.logo-compact {
+    height: 26px;
+    max-width: 72px;
+  }
+  .logo-strip-item img.logo-wide {
+    height: 26px;
+    max-width: 140px;
+  }
+  .logo-strip-item img.logo-tall-wordmark {
+    height: 34px;
+    max-width: 110px;
+  }
+  .logo-strip-item img.logo-firebase {
+    height: 44px;
+    max-width: 132px;
+  }
+  .logo-strip-item img.logo-netlify {
+    height: 40px;
+    max-width: 120px;
+  }
+  .logo-strip-item img.logo-aws {
+    height: 34px;
+    max-width: 100px;
+  }
+  .logo-strip-item img.logo-supabase {
+    height: 46px;
+    max-width: 138px;
+  }
+  .logo-strip-label {
+    font-size: 14px;
+  }
+}
 </style>
 
 PGlite has reached [10&nbsp;million weekly npm downloads](https://www.npmjs.com/package/@electric-sql/pglite). We want to mark the milestone by sharing what people are building with PGlite, how a small Postgres-in-WASM experiment got here, and where we want to take it next.
@@ -118,9 +250,24 @@ PGlite passed 1&nbsp;million weekly downloads just over a year ago. We always sa
 
 The biggest single category is local development for managed Postgres products. PGlite lets a CLI hand a developer a database the moment they install, then transparently swap in a cloud Postgres later without changing the application's connection code.
 
-[Prisma](https://www.prisma.io/docs/postgres/database/local-development) bundles PGlite as the local engine for Prisma Postgres. Firebase runs it under SQL Data Connect for local prototyping. Netlify uses it to give developers an instant database when they spin up Netlify Database. And [AWS Blocks](https://docs.aws.amazon.com/blocks/latest/devguide/bb-data-storage.html) ships PGlite as the local implementation of `Database` and `DistributedDatabase`, mapping those same APIs to Aurora Serverless v2 and Aurora DSQL when the app deploys.
+[Prisma](https://www.prisma.io/docs/postgres/database/local-development) bundles PGlite as the local engine for Prisma Postgres. Firebase runs it under [SQL Data Connect](https://firebase.google.com/docs/data-connect) for local prototyping. Netlify uses it to give developers an instant database when they spin up [Netlify Database](https://docs.netlify.com/build/data-and-storage/netlify-database/local-development/). And [AWS Blocks](https://docs.aws.amazon.com/blocks/latest/devguide/bb-data-storage.html) ships PGlite as the local implementation of `Database` and `DistributedDatabase`, mapping those same APIs to Aurora Serverless v2 and Aurora DSQL when the app deploys.
 
-<!-- TODO: add logo row for Prisma, Firebase, Netlify, AWS Blocks, NuxtHub, and Backstage. -->
+<figure class="logo-strip">
+  <div class="logo-strip-row">
+    <a class="logo-strip-item" href="https://www.prisma.io/docs/postgres/database/local-development">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/prisma-dark.svg" alt="Prisma" />
+    </a>
+    <a class="logo-strip-item" href="https://firebase.google.com/docs/data-connect">
+      <img class="logo-firebase" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/firebase-dark.svg" alt="Firebase" />
+    </a>
+    <a class="logo-strip-item" href="https://docs.netlify.com/build/data-and-storage/netlify-database/local-development/">
+      <img class="logo-netlify" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/netlify-dark.svg" alt="Netlify" />
+    </a>
+    <a class="logo-strip-item" href="https://docs.aws.amazon.com/blocks/latest/devguide/bb-data-storage.html">
+      <img class="logo-aws" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/aws.svg" alt="AWS" />
+    </a>
+  </div>
+</figure>
 
 These are very different products solving the same problem: how to give a developer a database the second they install, behaving close enough to the managed Postgres they'll eventually ship to.
 
@@ -142,7 +289,7 @@ A particularly clear recent example is [GBrain](https://github.com/garrytan/gbra
   </div>
 </figure>
 
-It also shows up in Hugging Face's Transformers.js semantic search demos, in Obsidian Smart Composer and Infio Copilot, in ElizaOS, in a number of agent-memory packages, and in experiments like local semantic search over your starred GitHub repos.
+It also shows up in [Hugging Face's Transformers.js](https://huggingface.co/docs/transformers.js) semantic search demos, in [Obsidian Smart Composer](https://github.com/glowingjade/obsidian-smart-composer) and [Infio Copilot](https://github.com/infiolab/infio-copilot), in [ElizaOS](https://github.com/elizaOS/eliza), in a number of agent-memory packages, and in experiments like local semantic search over your starred GitHub repos.
 
 Inference, embeddings and vector search can all sit next to the application — in the browser or in the app — instead of being a separate service a round trip away.
 
@@ -150,9 +297,54 @@ Inference, embeddings and vector search can all sit next to the application — 
 
 Test suites want databases that come up fast, stay isolated between tests, and don't leave anything behind when they finish. PGlite gives you that inside the test process — without dropping to a mock or a different SQL dialect.
 
-Drizzle uses PGlite in its integration tests. Supabase pulls it into local mocks and test harnesses. The Prisma + Vitest community has converged on it as the default way to get a fast, throwaway database that still talks the same SQL as production.
+[Drizzle](https://orm.drizzle.team) uses PGlite in its integration tests. [Supabase](https://supabase.com) pulls it into local mocks and test harnesses. [Prisma](https://www.prisma.io) provides tooling for running tests against PGlite, giving projects a fast, throwaway database that still talks the same SQL as production.
 
-<!-- TODO: add one stronger anchor example here, ideally a screenshot or short code excerpt from Drizzle, Supabase, or Prisma/Vitest. -->
+The useful part is that tests can exercise real Postgres behavior, not just adapter wiring. Drizzle's own [PGlite integration tests](https://github.com/drizzle-team/drizzle-orm/blob/48e54060/integration-tests/tests/pg/pglite.test.ts) spin up PGlite, reset the schema, then assert against real query results:
+
+```ts
+import { PGlite } from '@electric-sql/pglite'
+import { sql } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/pglite'
+import { beforeAll, beforeEach, expect, test } from 'vitest'
+
+let db
+
+beforeAll(() => {
+  db = drizzle(new PGlite())
+})
+
+beforeEach(async () => {
+  await db.execute(sql`drop schema if exists public cascade`)
+  await db.execute(sql`create schema public`)
+  await db.execute(sql`
+    create table users (
+      id serial primary key,
+      name text not null
+    )
+  `)
+})
+
+test('insert via db.execute + select via db.execute', async () => {
+  await db.execute(sql`insert into users (name) values (${'John'})`)
+
+  const result = await db.execute(sql`select id, name from users`)
+  expect(Array.from(result.rows)).toEqual([{ id: 1, name: 'John' }])
+})
+```
+
+<figure class="logo-strip">
+  <div class="logo-strip-row">
+    <a class="logo-strip-item" href="https://orm.drizzle.team">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/drizzle-dark.svg" alt="Drizzle" />
+    </a>
+    <a class="logo-strip-item" href="https://supabase.com">
+      <img class="logo-supabase" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/supabase-dark.svg" alt="Supabase" />
+    </a>
+    <a class="logo-strip-item" href="https://www.prisma.io">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/prisma-dark.svg" alt="Prisma" />
+    </a>
+  </div>
+</figure>
 
 Tests run fast enough for CI and behave close enough to production that the bugs surface in tests, not later.
 
@@ -160,9 +352,40 @@ Tests run fast enough for CI and behave close enough to production that the bugs
 
 A lot of adoption depends on the Postgres ecosystem around PGlite, not just PGlite itself. Once Drizzle or Kysely treats it as a normal Postgres target, the rest of the project does too.
 
-PGlite now shows up across the Postgres tooling layer: Drizzle, Kysely, Prisma, MikroORM, Effect SQL, Knex, TypeORM, Orange ORM and others all document how to point at it.
+PGlite now shows up across the Postgres tooling layer: Drizzle, [Kysely](https://kysely.dev), Prisma, [MikroORM](https://mikro-orm.io), [Effect SQL](https://effect.website/docs/sql/introduction), [Knex](https://knexjs.org), [TypeORM](https://typeorm.io), [Orange ORM](https://orange-orm.io) and others all [document how to point at it](https://pglite.dev/docs/orm-support).
 
-<!-- TODO: add a compact logo grid for ORMs and frameworks. -->
+<figure class="logo-strip">
+  <div class="logo-strip-row logo-strip-grid">
+    <a class="logo-strip-item" href="https://orm.drizzle.team">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/drizzle-dark.svg" alt="Drizzle" />
+    </a>
+    <a class="logo-strip-item" href="https://kysely.dev">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/kysely.svg" alt="" />
+      <span class="logo-strip-label">Kysely</span>
+    </a>
+    <a class="logo-strip-item" href="https://www.prisma.io">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/prisma-dark.svg" alt="Prisma" />
+    </a>
+    <a class="logo-strip-item" href="https://mikro-orm.io">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/mikroorm.svg" alt="" />
+      <span class="logo-strip-label">MikroORM</span>
+    </a>
+    <a class="logo-strip-item" href="https://effect.website/docs/sql/introduction">
+      <img src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/effect-dark.svg" alt="Effect" />
+    </a>
+    <a class="logo-strip-item" href="https://knexjs.org">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/knex.svg" alt="" />
+      <span class="logo-strip-label">Knex.js</span>
+    </a>
+    <a class="logo-strip-item" href="https://typeorm.io">
+      <img class="logo-wide" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/wordmark/typeorm-dark.png" alt="TypeORM" />
+    </a>
+    <a class="logo-strip-item" href="https://orange-orm.io">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/orangeorm.svg" alt="" />
+      <span class="logo-strip-label">Orange ORM</span>
+    </a>
+  </div>
+</figure>
 
 Embedded Postgres is much more useful when developers don't have to throw away their existing migrations, schemas, query builders and type-safe database code to use it.
 
@@ -170,9 +393,30 @@ Embedded Postgres is much more useful when developers don't have to throw away t
 
 PGlite also runs Postgres in places a database server couldn't — inside browser products, docs, demos, and even research papers.
 
-Supabase built [`database.build`](https://database.build/) on top of PGlite: an AI-assisted database design tool that runs entirely in the browser. Supabase Studio uses it as a sandbox for testing RLS policies without touching the real database. The [Key Joins proposal](https://keyjoin.org/) goes further and embeds a custom PGlite build into the paper itself, so readers can run the proposed SQL syntax inline as they read.
+Supabase built [`database.build`](https://database.build/) on top of PGlite: an AI-assisted database design tool that runs entirely in the browser. [Supabase Studio](https://supabase.com/dashboard) uses it as a sandbox for testing RLS policies without touching the real database. The [Key Joins proposal](https://keyjoin.org/) goes further and embeds a custom PGlite build into the paper itself, so readers can run the proposed SQL syntax inline as they read.
 
-<!-- TODO: add screenshots or short videos for `database.build`, Supabase Studio RLS Tester, and KeyJoin. Add a logo row or short mention for LiveCodes, Codapi, `pg-browser-proxy`, and `pglite-server`. -->
+Smaller tools wrap PGlite for interactive code playgrounds: [LiveCodes](https://livecodes.io/) and [Codapi](https://codapi.org/) both let authors embed runnable Postgres snippets directly in their docs.
+
+<figure class="logo-strip">
+  <div class="logo-strip-row">
+    <a class="logo-strip-item" href="https://livecodes.io/">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/livecodes.svg" alt="" />
+      <span class="logo-strip-label">LiveCodes</span>
+    </a>
+    <a class="logo-strip-item" href="https://codapi.org/">
+      <img class="logo-icon" src="/img/blog/pglite-reaches-10-million-weekly-downloads/logos/codapi.svg" alt="" />
+      <span class="logo-strip-label">Codapi</span>
+    </a>
+  </div>
+</figure>
+
+The video below shows the kind of browser-native database workflow that PGlite makes possible in [`database.build`](https://database.build/): the database is created, queried and iterated on inside the page, with no server to provision first.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="ooWaPVvljlU" title="I gave AI full control over my database (postgres.new)" />
+  </div>
+</figure>
 
 None of these could work with a Postgres server. With PGlite the database is part of the document or the application, not something you point at over a network.
 
@@ -293,6 +537,28 @@ await db.exec('CREATE TABLE test (id serial PRIMARY KEY, name text)')
 await db.exec("INSERT INTO test (name) VALUES ('hello')")
 const result = await db.query('SELECT * FROM test')
 ```
+
+Or run it behind a Postgres socket for tools that expect a normal database connection:
+
+```bash
+npm install @electric-sql/pglite @electric-sql/pglite-socket
+```
+
+```typescript
+import { PGlite } from '@electric-sql/pglite'
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
+
+const db = await PGlite.create()
+const server = new PGLiteSocketServer({
+  db,
+  host: '127.0.0.1',
+  port: 5432,
+})
+
+await server.start()
+```
+
+The [`pglite-socket`](https://pglite.dev/docs/pglite-socket) package also ships a `pglite-server` CLI that can start your app with `DATABASE_URL` already pointing at PGlite.
 
 You can find the project on [GitHub](https://github.com/electric-sql/pglite/) and join the [Discord](https://discord.gg/pVASdMED).
 
