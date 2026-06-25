@@ -339,19 +339,27 @@ defmodule Electric.ShapeCache do
       case restore_shape_and_dependencies(handle, shape, opts) do
         {:ok, _pid} ->
           # await_snapshot_start/2 is a GenServer.call into the just-started
-          # consumer. If that consumer dies before/during the call it exits,
-          # which would otherwise propagate out of handle_continue and crash
-          # ShapeCache before mark_as_ready — turning a single shape that
-          # reliably fails its snapshot into a stack-wide restart loop. Mirror
-          # the materializer (materializer.ex) and catch :exit so one bad
-          # subquery shape can't take down or stall restore for the whole stack.
+          # consumer. If that consumer dies before/during the call it exits;
+          # left unguarded that would propagate out of handle_continue and
+          # crash ShapeCache before mark_as_ready — turning a single shape
+          # that reliably fails its snapshot into a stack-wide restart loop.
+          # A call timeout (the consumer is alive but wedged) exits the same
+          # way. In either case we can't confirm the shape's consumer came up
+          # subscribed-and-correct, and the eager start exists precisely to
+          # guarantee that consistency. Leaving the shape alive-but-unconfirmed
+          # would silently reintroduce the divergence this restore path fixes,
+          # so we purge it (mirroring restore_shape_and_dependencies' own
+          # clean_shape-on-failure) and let the client refetch from scratch.
           try do
             _ = Electric.Shapes.Consumer.await_snapshot_start(state.stack_id, handle)
           catch
             :exit, reason ->
               Logger.warning(
-                "Eager subquery consumer await failed for #{handle}: #{inspect(reason)}"
+                "Eager subquery consumer await failed for #{handle}: #{inspect(reason)}; " <>
+                  "purging shape to force a clean refetch"
               )
+
+              clean_shape(handle, state.stack_id)
           end
 
         _ ->
