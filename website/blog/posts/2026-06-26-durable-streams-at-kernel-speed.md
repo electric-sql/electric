@@ -83,7 +83,7 @@ Writes take data from the HTTP socket buffer and append it to a stream log file 
 
 To guarantee no data loss, every write to a stream would have to be flushed to disk before its request is acknowledged. To avoid that we use the WAL. Every append, across every stream, is staged into a sharded WAL. We call `fsync` immediately when new data arrives for a WAL shard. While a flush is in progress, we batch other incoming requests and commit them together once the previous batch finishes.
 
-Every WAL record carries a CRC32C checksum for recoverability. CRC32C is a hardware instruction on modern x86 and ARM CPUs and is very fast. Computing the checksum requires moving data into user space, which prevents us from using `splice` copy data directly from socket to the file in kernel space. This cost is only paid once per write. Data is stored in wire format so reads remain fast as we'll see next.
+Every WAL record carries a CRC32C checksum for recoverability. CRC32C is a hardware instruction on modern x86 and ARM CPUs and is very fast. Computing the checksum requires moving data into user space, which prevents us from using `splice` to copy data directly from the socket to the file in kernel space. This cost is only paid once per write. Data is stored in wire format so reads remain fast as we'll see next.
 
 ### The read path
 
@@ -103,7 +103,7 @@ Once the log's tail prefix reaches a certain length, the server seals the log *c
 
 Kafka takes a different path to append throughput: it relies on [replication](https://kafka.apache.org/35/configuration/topic-level-configs/) for durability, only flushing to disk asynchronously. This server keeps fsync-based durability on a single node and makes it cheap with the WAL and group commit. 
 
-The Rust server offers a `memory` mode that disables the WAL which is intended to pair with a replication algorithm in the future, taking advantage of async flushes and. `splice`.
+The Rust server offers a `memory` mode that disables the WAL, intended to pair with a replication algorithm in the future, taking advantage of async flushes and `splice`.
 
 ## Benchmarks
 
