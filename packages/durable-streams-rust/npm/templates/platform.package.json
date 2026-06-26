@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/durable-streams/durable-streams.git",
-    "directory": "packages/server-rust"
+    "directory": "packages/durable-streams-rust"
   },
   "files": ["bin/durable-streams-server"],
   "os": [],

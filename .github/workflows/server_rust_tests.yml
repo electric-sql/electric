@@ -4,11 +4,11 @@ on:
   push:
     branches: ['main']
     paths:
-      - 'packages/server-rust/**'
+      - 'packages/durable-streams-rust/**'
       - '.github/workflows/server_rust_tests.yml'
   pull_request:
     paths:
-      - 'packages/server-rust/**'
+      - 'packages/durable-streams-rust/**'
       - '.github/workflows/server_rust_tests.yml'
 
 permissions:
@@ -24,7 +24,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
-        working-directory: packages/server-rust
+        working-directory: packages/durable-streams-rust
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +34,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/server-rust
+          workspaces: packages/durable-streams-rust
 
       - name: Build
         run: cargo build --release
@@ -49,7 +49,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: durable-streams-server
-          path: packages/server-rust/target/release/durable-streams-server
+          path: packages/durable-streams-rust/target/release/durable-streams-server
           retention-days: 1
 
   conformance:
@@ -82,10 +82,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: durable-streams-server
-          path: packages/server-rust/target/release
+          path: packages/durable-streams-rust/target/release
 
       - name: Make binary executable
-        run: chmod +x packages/server-rust/target/release/durable-streams-server
+        run: chmod +x packages/durable-streams-rust/target/release/durable-streams-server
 
       - name: Run conformance (${{ matrix.config.name }})
         env:

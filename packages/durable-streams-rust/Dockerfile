@@ -2,15 +2,15 @@
 #
 # Built multi-arch (linux/amd64 + linux/arm64) natively per arch by
 # .github/workflows/docker_multiarch_image.yml — the build context is the repo
-# root and this Dockerfile is `packages/server-rust/Dockerfile`.
+# root and this Dockerfile is `packages/durable-streams-rust/Dockerfile`.
 
 # ---- build stage: compile the release binary (glibc, matches the runtime) ----
 FROM rust:1-bookworm AS build
 WORKDIR /app
 # Copy only what the build needs (no target/, no npm/) so we don't depend on a
 # .dockerignore at the shared repo root.
-COPY packages/server-rust/Cargo.toml packages/server-rust/Cargo.lock ./
-COPY packages/server-rust/src ./src
+COPY packages/durable-streams-rust/Cargo.toml packages/durable-streams-rust/Cargo.lock ./
+COPY packages/durable-streams-rust/src ./src
 # Default features only (no `tier`/`telemetry`) — minimal image, matching the
 # conformance matrix. To ship S3 tiering, add `--features tier` here AND
 # `ca-certificates` to the runtime stage.

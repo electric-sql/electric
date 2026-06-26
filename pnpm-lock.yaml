@@ -2154,6 +2154,15 @@ importers:
         specifier: ^4.1.0
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.1.7(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))
 
+  packages/durable-streams-rust:
+    devDependencies:
+      '@durable-streams/server-conformance-tests':
+        specifier: ^0.3.5
+        version: 0.3.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))
+
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
@@ -2361,15 +2370,6 @@ importers:
       vitest:
         specifier: ^4.0.15
         version: 4.0.15(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(jiti@2.6.1)(jsdom@25.0.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0)
-
-  packages/server-rust:
-    devDependencies:
-      '@durable-streams/server-conformance-tests':
-        specifier: ^0.3.5
-        version: 0.3.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))
-      vitest:
-        specifier: ^4.1.0
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))
 
   packages/start:
     devDependencies:

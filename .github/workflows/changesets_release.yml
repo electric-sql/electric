@@ -99,7 +99,7 @@ jobs:
           # across unrelated releases that leave the server-rust version unchanged),
           # and correct on the first run. The crate version is synced to this anchor
           # at publish time by sync-cargo-version.mjs.
-          VERSION="$(node -p "require('./packages/server-rust/package.json').version")"
+          VERSION="$(node -p "require('./packages/durable-streams-rust/package.json').version")"
           if curl -sf -H 'User-Agent: electric-sql-release-ci' "https://crates.io/api/v1/crates/durable-streams/$VERSION" >/dev/null 2>&1; then
             echo "needs_release=false" >> "$GITHUB_OUTPUT"
           else
