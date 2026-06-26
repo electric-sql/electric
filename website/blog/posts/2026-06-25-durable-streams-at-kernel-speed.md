@@ -91,7 +91,7 @@ We run several workloads to evaluate write scalability against various implement
 
 The configurations we run are the following:
 
-- **rust**: the Durable Streams server we have built in Rust
+- **rust**: this implementation
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
 - [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
 - [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
@@ -152,11 +152,4 @@ A thousand clients each attach to a pre-populated stream of 200 events and repla
 
 ## Summary and next steps
 
-We shipped a Durable Streams server in Rust. It does nearly a million operations a second on a single node, and it deploys with one command:
-
-```bash
-cargo install durable-streams
-```
-
-Durable Streams is an open protocol with a growing set of independent implementations, and this Rust server is a reference for teams who want to run it themselves. It is released and ready today: deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), or [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) against the conformance suite.
-<!-- TODO(links): same two (#) placeholders as the CTA block above — reference-server deploy guide and architecture doc. -->
+Durable Streams is an open protocol with a growing set of independent implementations, and this Rust server is a reference for teams who want to run it themselves. It is released and ready today: `cargo install durable-streams` , read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), or have fun  [implementing the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) yourself.
