@@ -19,6 +19,11 @@ export default {
     xAxisTitle: { type: String, default: '' },
     yAxisTitle: { type: String, default: '' },
     yAxisSuffix: { type: String, default: '' },
+    yScaleType: {
+      type: String,
+      default: 'linear',
+      validator: (v) => ['linear', 'logarithmic'].includes(v),
+    },
     height: { type: [Number, String], default: 320 },
   },
   setup(props) {
@@ -127,9 +132,22 @@ export default {
               grid: { drawOnChartArea: false },
             },
             y: {
-              min: 0,
+              type: props.yScaleType,
+              min: props.yScaleType === 'logarithmic' ? undefined : 0,
               title: { display: !!props.yAxisTitle, text: props.yAxisTitle },
-              ticks: { callback: (v) => `${v}${props.yAxisSuffix}` },
+              ticks: {
+                maxTicksLimit: 5,
+                callback: (v) => `${v}${props.yAxisSuffix}`,
+              },
+              // On a log axis, keep to a few round gridlines.
+              afterBuildTicks:
+                props.yScaleType === 'logarithmic'
+                  ? (scale) => {
+                      scale.ticks = [10, 100, 1000, 10000]
+                        .filter((t) => t >= scale.min && t <= scale.max)
+                        .map((value) => ({ value }))
+                    }
+                  : undefined,
               grid: { color: getComputedStyleValue('--vp-c-divider') },
             },
           },

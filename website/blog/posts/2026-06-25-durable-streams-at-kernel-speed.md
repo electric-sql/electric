@@ -147,6 +147,7 @@ Once written, all data is served directly from disk without transformation. No d
   x-axis-title="Number of streams"
   y-axis-title="Resident memory"
   y-axis-suffix=" MB"
+  y-scale-type="logarithmic"
 />
 
 ***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
@@ -171,12 +172,16 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 ### Catch-up: how fast can a client replay history?
 
-A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design.
+A thousand clients each attach to a pre-populated stream and replay it from the start. With 200 events per stream, rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work; node completed the same replay at 186 ms (~700 MB/s) and Ursula at 126 ms, its snapshot-and-tail path transferring fewer bytes by design. At 2,000 events per stream the gap widens: rust replays at **925 ms p99** and ~2.0 GB/s, against node's 2.1 s and ~900 MB/s. Ursula could not complete this run — its stream creation chokes under the larger pre-fill.
 
-| metric (1 KB events, 200 per stream) | rust | Node | Ursula |
-| ------------------------------------- | ------- | ------ | ------ |
-| per-client catch-up p99 (ms)          | 146     | 186  | 126    |
-| aggregate replay throughput (MB/s)    | 1,306   | 700 | 1,039  |
+| metric (1 KB events) | rust | node | ursula |
+| ------------------------------------ | ----- | ----- | ----- |
+| catch-up p99, 200 events (ms)        | 146   | 186   | 126   |
+| replay throughput, 200 events (MB/s) | 1,306 | 700   | 1,039 |
+| catch-up p99, 2,000 events (ms)      | 925   | 2,122 | —     |
+| replay throughput, 2,000 events (MB/s) | 2,037 | 906 | —     |
+
+*A — marks a run that crashed or could not complete (e.g. ran out of memory, or choked on stream creation).*
 
 ## Summary and next steps
 
