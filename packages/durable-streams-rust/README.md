@@ -29,7 +29,7 @@ runs it directly.
 features. Builds on Linux and macOS, x64 and arm64.
 
 ```bash
-# build (run from packages/server-rust)
+# build (run from packages/durable-streams-rust)
 cargo build --release        # → ./target/release/durable-streams-server
 cargo test  --release        # unit + integration tests (protocol conformance: see Conformance below)
 
@@ -171,7 +171,7 @@ The instrumentation is deliberately lean and aimed at finding bottlenecks: a sin
 ```bash
 # start the server with a short long-poll timeout to match the suite, then:
 RUST_SERVER_URL=http://localhost:4562 pnpm exec vitest run \
-  --config packages/server-rust/conformance/vitest.config.ts
+  --config packages/durable-streams-rust/conformance/vitest.config.ts
 ```
 
 The core protocol suite passes.
@@ -210,11 +210,4 @@ publishing is re-enabled.
 
 Numbers from **[ds-bench](https://github.com/electric-sql/ds-bench)**, a reproducible single-node harness. All figures below are the default **`wal` mode** (group-commit fsync, resident tail cache off). One server node (`c4d-standard-16-lssd`) pinned to **4 CPUs**, a Kubernetes client fleet driving 256-byte binary appends. Throughput is the saturation ceiling; latency is fleet-wide p50 / p99; memory is the pod cgroup working set (anon + active page cache), peak / p50.
 
-**Writes** — peaks at **~0.86M append/s** at 4 CPUs, scales cleanly to **100k streams**, with median append latency staying sub-ms → ~1.5 ms. Memory tracks **stream count, not bytes** (each stream is a lean record plus its open file; data lives on disk / in the page cache, never resident), so it stays in tens–hundreds of MiB even at 100k streams, with p50 ≪ peak.
-
-| streams | append/s | latency p50 / p99 (ms) | memory peak / p50 (MiB) |
-| ------- | -------- | ---------------------- | ----------------------- |
-| 100     | 520k     | 0.26 / 0.46            | 103 / 45                |
-| 1 000   | 650k     | 1.26 / 6.4             | 52 / 41                 |
-| 10 000  | 572k     | 1.47 / 203             | 202 / 177               |
-| 100 000 | **860k** | —                      | 950 / 515               |
+**Writes** — peaks at **860,000 append/s** at 4 CPUs, scales cleanly to **100k streams**, with median append latency staying sub-ms → ~1.5 ms. Memory tracks **stream count, not bytes** (each stream is a lean record plus its open file; data lives on disk / in the page cache, never resident), so it stays in tens–hundreds of MiB even at 100k streams, with p50 ≪ peak.

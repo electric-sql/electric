@@ -7,7 +7,7 @@ on:
   #   push:
   #     branches: ['main']
   #     paths:
-  #       - 'packages/server-rust/**'
+  #       - 'packages/durable-streams-rust/**'
   # Called by the Changesets release workflow after a version bump.
   workflow_call:
     inputs:
@@ -76,7 +76,7 @@ jobs:
         run: |
           # The crate version lives in the package.json anchor (changeset-managed),
           # which is private — so there is no git tag to describe; read it directly.
-          VERSION=$(node -p "require('./packages/server-rust/package.json').version")
+          VERSION=$(node -p "require('./packages/durable-streams-rust/package.json').version")
 
           if [ -n "$INPUT_DOCKER_TAG" ]; then
             IMAGE_TAGS="${DOCKERHUB_REPO}:${INPUT_DOCKER_TAG}"
@@ -105,5 +105,5 @@ jobs:
       image_repo: electricax/durable-streams-server-rust
       artifact_prefix: durable-streams-server-rust
       context: .
-      file: packages/server-rust/Dockerfile
+      file: packages/durable-streams-rust/Dockerfile
       tags: ${{ needs.derive_build_vars.outputs.image_tags }}

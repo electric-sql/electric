@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
-    "directory": "packages/server-rust"
+    "directory": "packages/durable-streams-rust"
   },
   "scripts": {
     "test:conformance": "vitest run --config conformance/vitest.config.ts",

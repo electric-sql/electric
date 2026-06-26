@@ -3,12 +3,12 @@
  *
  * Two modes:
  *   - CI / default: builds nothing, but spawns the release binary
- *     (packages/server-rust/target/release/durable-streams-server) itself,
+ *     (packages/durable-streams-rust/target/release/durable-streams-server) itself,
  *     mirroring the Caddy harness. Run with: `pnpm vitest run --project server-rust`
  *     (build the binary first with `cargo build --release`).
  *   - Manual: set RUST_SERVER_URL to point at an already-running server, e.g.
  *     RUST_SERVER_URL=http://localhost:4562 vitest run \
- *       --config packages/server-rust/conformance/vitest.config.ts
+ *       --config packages/durable-streams-rust/conformance/vitest.config.ts
  */
 import { spawn } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
