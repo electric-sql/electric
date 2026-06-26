@@ -96,7 +96,7 @@ We run several workloads to evaluate write scalability against various implement
 
 The configurations we run are the following:
 
-- **rust**: this implementation
+- **[rust](https://crates.io/crates/durable-streams)**: this implementation
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
 - [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
 
@@ -127,15 +127,6 @@ Serving a hundred thousand streams, rust holds a median resident footprint of ab
 
 Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
 
-| # streams | rust (peak / p50) | node (peak / p50) | ursula (peak / p50) |
-| --------- | ----------------- | ----------------- | ------------------- |
-| 100       | 103 / 45          | 488 / 279         | 3,693 / 2,644       |
-| 1,000     | 52 / 41           | 214 / 159         | 2,245 / 1,817       |
-| 10,000    | 202 / 177         | 1,052 / 793       | 5,058 / 4,286       |
-| 100,000   | 950 / 515         | —                 | —                   |
-
-*Server working-set memory under write load (peak / p50, MB). Node runs out of memory at 100k streams; ursula caps out at 10k.*
-
 <MemoryErrorBarChart
   title="Working-set memory — p50 (bars) with peak (whisker)"
   :data="[
@@ -147,10 +138,7 @@ Once written, all data is served directly from disk without transformation. No d
   x-axis-title="Number of streams"
   y-axis-title="Resident memory"
   y-axis-suffix=" MB"
-  y-scale-type="logarithmic"
 />
-
-***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 
 ### SSE fan-out: latency at scale
 
@@ -174,12 +162,10 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 A thousand clients each attach to a pre-populated stream and replay it from the start. With 200 events per stream, rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work; node completed the same replay at 186 ms (~700 MB/s) and Ursula at 126 ms, its snapshot-and-tail path transferring fewer bytes by design. At 2,000 events per stream the gap widens: rust replays at **925 ms p99** and ~2.0 GB/s, against node's 2.1 s and ~900 MB/s. Ursula could not complete this run — its stream creation chokes under the larger pre-fill.
 
-| metric (1 KB events) | rust | node | ursula |
-| ------------------------------------ | ----- | ----- | ----- |
-| catch-up p99, 200 events (ms)        | 146   | 186   | 126   |
-| replay throughput, 200 events (MB/s) | 1,306 | 700   | 1,039 |
-| catch-up p99, 2,000 events (ms)      | 925   | 2,122 | —     |
-| replay throughput, 2,000 events (MB/s) | 2,037 | 906 | —     |
+| replay throughput (1 KB events, MB/s) | rust | node | ursula |
+| ------------------------------------- | ----- | ----- | ----- |
+| 200 events per stream                 | 1,306 | 700   | 1,039 |
+| 2,000 events per stream               | 2,037 | 906   | —     |
 
 *A — marks a run that crashed or could not complete (e.g. ran out of memory, or choked on stream creation).*
 
