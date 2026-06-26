@@ -19,8 +19,6 @@ Today we are releasing a new server implementation of Durable Streams, written i
 
 Its speed comes from a single decision: the bytes stored on disk are the bytes sent on the wire. A read is then a byte-range over a file, and a write is an append whose principal cost is durability. The rest of this post is how both are made inexpensive.
 
-In this blog post we cover the architecture, dive into the techniques that make it fast, and benchmark it against other implementations of Durable Streams.
-
 > [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Run it yourself
 > Deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), and [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
 <!-- TODO(links): fill the two (#) placeholders above — reference-server deploy guide and architecture doc. -->
@@ -55,39 +53,37 @@ The diagram traces a byte through the server, with a writer feeding it on one si
 
 ![Durable Streams write path — append into the page cache, stage into the sharded WAL, wake live readers, and acknowledge only after a group-commit fsync](/img/blog/durable-streams-at-kernel-speed/write-path.svg)
 
-Writes take data from the HTTP socket buffer and append it to a stream log file on disk. Once written to the file system, the bytes stay shortly in the page cache; any live subscribers that are waiting for new data on that stream are woken and go fetch data at newly written offset. Typically they will find the data in the page cache and operation returns very quickly for everyone.
+Writes take data from the HTTP socket buffer and append it to a stream log file on disk. Once written to the file system, the bytes stay shortly in the page cache; any live subscribers that are waiting for new data on that stream are woken and go fetch data at newly written offset. Typically they will find the data in the page cache and operation returns very quickly for everyone without copying it.
 
-**Durability.** To guarantee no data loss, every write to a stream would have to be flushed to disk before its request is acknowledged. That would cause a flood of syscalls when many streams are written concurrently.
-
-To prevent that, we use a Write ahead log (WAL). Every append, across every stream, is staged into a sharded WAL. We call `fsync()` immediately when new data arrives for a WAL shard; while a flush is in progress, we batch other incoming requests and commit them together in a group commit once the previous batch finishes.
-
-We keep a minimum-LSN watermark (an LSN is a sequence number in the WAL) and recycle WAL segments once all operations in a segment have been written to their stream files.
-
-Every WAL record carries a CRC32C checksum, so on restart replay stops at the first record that fails to verify: the unacknowledged tail is discarded and each stream is repaired to its last durable record. CRC32C is a hardware instruction on modern x86 and ARM CPUs and is very fast.
-
-Computing the checksum requires moving data into user space, which prevents using `splice` optimization to copy data directly from the socket to the file. This is a cost paid once; because data is stored in wire format, reads remain fast.
-
-Kafka takes a different path to append throughput: it keeps `fsync` off the critical path and [relies on replication](https://kafka.apache.org/35/configuration/topic-level-configs/) for durability, flushing to disk asynchronously. This server keeps fsync-based durability on a single node and makes it cheap with the WAL and group commit, so it never pays a per-stream fsync. For the replicated style, the server offers a `memory` mode that disables the WAL and uses `splice` to copy data; it is intended to pair with a replication algorithm in the future.
-
-> [!Note] Three syscalls worth knowing
+> [!Note] Syscalls worth knowing
 >
 > - **fsync(2)** — A `write()` only deposits data in the kernel's page cache; the kernel flushes it to disk whenever it likes. `fsync` (and `fdatasync`, which skips most metadata) blocks until the bytes are actually on stable storage, so they survive a crash or power loss.
 > - **sendfile(2)** — Copies data directly between two file descriptors (classically a file to a socket) inside the kernel, without bouncing it through a user-space buffer. One kernel-to-kernel transfer instead of a `read()` then a `write()`: fewer copies and context switches.
 > - **splice(2)** — The general zero-copy primitive. It moves data between two descriptors via a kernel pipe, with no user-space copy. It works in either direction (for example, socket to file), as long as one end is a pipe.
 
+## Durability
+
+To guarantee no data loss, every write to a stream would have to be flushed to disk before its request is acknowledged. To avoid that we use a WAL. Every append, across every stream, is staged into a sharded WAL. We call `fsync` immediately when new data arrives for a WAL shard. While a flush is in progress, we batch other incoming requests and commit them together once the previous batch finishes.
+
+Every WAL record carries a CRC32C checksum for recoverability. CRC32C is a hardware instruction on modern x86 and ARM CPUs and is very fast. Computing the checksum requires moving data into user space, which prevents using `splice` optimization to copy data directly from the socket to the file. This is a cost paid once; because data is stored in wire format, reads remain fast.
+
 ### The read path
 
 ![Durable Streams read path — map an offset to a byte range and serve it to the socket with zero-copy sendfile, one shared copy fanning out to every live reader](/img/blog/durable-streams-at-kernel-speed/read-path.svg)
 
-A read request provides an address and an *offset* that maps to a byte position in a file. The server returns all bytes from the offset to the end of the file. The file already holds the wire bytes, so the server reads byte ranges and serves them without modification. On Linux that range reaches the socket through `sendfile`. This is possible only because the server owns its sockets, running a hand-rolled HTTP/1.1 loop rather than a framework that would stage the response back into user space.
+A read request provides an address and an *offset* that maps to a byte position in a file. The server returns all bytes from the offset to the end of the file. The file already holds the wire bytes, so the server reads byte ranges and serves them without modification. On Linux that range reaches the socket through `sendfile`, allowing a direct copy from disk to network. 
 
-Fan-out costs no more than a single read. One append advances the tail and wakes every live reader at once, and because the new bytes are already in memory, all subscribers are served from one shared copy. The cost scales with the payload, not with the number of subscribers.
+**Fan-out**:One append advances the tail and wakes every live reader at once, and because the new bytes are already in memory, all subscribers are served from one shared copy. The cost scales with the payload, not with the number of subscribers.
 
-Large reads stay bounded the same way: history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its full size. With no garbage collector, that footprint holds steady under load.
+**Catch-up**: Large reads stay bounded the same way history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its full size. With no garbage collector, that footprint holds steady under load.
 
-## Persistence and tiered storage
+## Tiered storage
 
-A single node is a reliable server because it does not hold streams in memory. Hot data lives on disk and is served from the page cache through `sendfile`, so the server is bounded by disk rather than RAM and survives restarts. Once data leaves the live tail it is immutable, so the server seals it into fixed-size segments and uploads them to an object store — R2, Tigris, MinIO or B2 — keeping only the active tail locally. Sealed segments are immutable and carry long-lived cache headers, so repeated cold reads are served from a CDN and do not reach the origin. Offload happens only after the data is durable: a segment is uploaded and verified before its local copy is removed, so a read is never directed at an object that is not there. A single binary together with an object store is therefore a complete and durable server.
+A single node is a reliable server because it does not hold streams in memory. Hot data lives on disk and is served from the page cache through `sendfile`, so the server is bounded by disk rather than RAM and survives restarts. Once data leaves the live tail it is immutable, so the server seals it into fixed-size segments and uploads them to an object store, keeping only the active tail locally. Sealed segments are immutable and carry long-lived cache headers, so repeated cold reads are served from a CDN and do not reach the origin. Offload happens only after the data is durable: a segment is uploaded and verified before its local copy is removed, so a read is never directed at an object that is not there. A single binary together with an object store is therefore a complete and durable server.
+
+## Comparing with Kafka
+
+Kafka takes a different path to append throughput: it keeps `fsync` off the critical path and [relies on replication](https://kafka.apache.org/35/configuration/topic-level-configs/) for durability, flushing to disk asynchronously. This server keeps fsync-based durability on a single node and makes it cheap with the WAL and group commit, so it never pays a per-stream fsync. For the replicated style, the server offers a `memory` mode that disables the WAL and uses `splice` to copy data; it is intended to pair with a replication algorithm in the future.
 
 ## Benchmarks
 
