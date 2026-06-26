@@ -104,28 +104,19 @@ The configurations we run are the following:
 In this experiment, we ramp up the client fleet to saturation to find the maximum throughput of the server. Each client operation is a 256-byte binary payload over a fixed range of streams.
 
 <StorageComparisonChart
-  title="Write throughput and memory at saturation"
-  :height="380"
+  title="Write throughput at saturation"
   :data="[
     { label: 'rust', data: [520, 650, 572, 860], color: '#06b6d4' },
     { label: 'node', data: [55, 76, 63, null], color: '#f59e0b' },
-    { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' },
-    { label: 'rust memory (p50)', data: [45, 41, 177, 515], color: 'rgba(6, 182, 212, 0.6)', fill: 'origin', fillColor: 'rgba(6, 182, 212, 0.25)', yAxisID: 'y2' },
-    { label: 'rust memory (max)', data: [103, 52, 202, 950], color: 'rgba(6, 182, 212, 0.35)', fill: 'origin', fillColor: 'rgba(6, 182, 212, 0.10)', yAxisID: 'y2' },
-    { label: 'node memory (p50)', data: [279, 159, 793, null], color: 'rgba(245, 158, 11, 0.6)', fill: 'origin', fillColor: 'rgba(245, 158, 11, 0.25)', yAxisID: 'y2' },
-    { label: 'node memory (max)', data: [488, 214, 1052, null], color: 'rgba(245, 158, 11, 0.35)', fill: 'origin', fillColor: 'rgba(245, 158, 11, 0.10)', yAxisID: 'y2' },
-    { label: 'ursula memory (p50)', data: [2644, 1817, 4286, null], color: 'rgba(168, 85, 247, 0.6)', fill: 'origin', fillColor: 'rgba(168, 85, 247, 0.25)', yAxisID: 'y2' },
-    { label: 'ursula memory (max)', data: [3693, 2245, 5058, null], color: 'rgba(168, 85, 247, 0.35)', fill: 'origin', fillColor: 'rgba(168, 85, 247, 0.10)', yAxisID: 'y2' }
+    { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
   y-axis-title="Appends/s"
   y-axis-suffix="k"
-  y2-axis-title="Memory"
-  y2-axis-suffix=" MB"
 />
 
-*Write throughput (solid lines, left axis) and working-set memory (filled areas, right axis): the darker area is p50, the lighter is max, per system; single node, 256-byte records. ursula and node cap out at 10k streams.*
+*Append throughput at saturation (appends/s); single node, 256-byte records.*
 
 **rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
@@ -134,6 +125,15 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
 Serving a hundred thousand streams, rust holds a median resident footprint of about **515 MB**, briefly spiking under a gigabyte during the write burst at initialization. At lower stream counts it sits in the tens to low hundreds of MB. Our Node server is about 800 MB at 10k streams and runs out of memory at 100k.
 
 Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
+
+| # streams | rust (peak / p50) | node (peak / p50) | ursula (peak / p50) |
+| --------- | ----------------- | ----------------- | ------------------- |
+| 100       | 103 / 45          | 488 / 279         | 3,693 / 2,644       |
+| 1,000     | 52 / 41           | 214 / 159         | 2,245 / 1,817       |
+| 10,000    | 202 / 177         | 1,052 / 793       | 5,058 / 4,286       |
+| 100,000   | 950 / 515         | —                 | —                   |
+
+*Server working-set memory under write load (peak / p50, MB). Node runs out of memory at 100k streams; ursula caps out at 10k.*
 
 ***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 
