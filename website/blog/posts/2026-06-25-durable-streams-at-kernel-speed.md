@@ -8,7 +8,7 @@ tags: [durable-streams, rust, performance]
 image: /img/blog/durable-streams-at-kernel-speed/header.jpg
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 Every agent you work with today is backed by a log. [Durable Streams](/streams/) is the data primitive for storing it: an append-only log that is durable, addressable, and writable from anywhere on the internet.
