@@ -91,7 +91,7 @@ We run several workloads to evaluate write scalability against various implement
 
 The configurations we run are the following:
 
-- **rust**: the Rust Durable Streams server we have built
+- **rust**: the Durable Streams server we have built in Rust
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
 - [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
 - [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
