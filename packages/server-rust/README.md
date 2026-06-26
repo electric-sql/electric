@@ -150,7 +150,6 @@ In `memory` mode there is no WAL and no WAL replay. Recovery is a sidecar pass: 
 - **Per-stream serialization, lock-free reads** — one async mutex per stream orders appends; reads take a brief snapshot and do positioned `pread`s, never blocking the writer.
 - **watch-channel wakeups** drive long-poll and SSE subscribers, so there's no polling loop.
 - **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte) and binary appends with `splice(2)`; elsewhere it falls back to positioned reads.
-- **Resident tail cache** — the most recent appended chunk is kept in memory, so caught-up live readers (long-poll / SSE) and immediate catch-up reads are served from one shared copy instead of a per-reader file read.
 
 ## Tiered storage (cold offload)
 
@@ -209,20 +208,13 @@ publishing is re-enabled.
 
 ## Benchmarks
 
-Measured on a dedicated 12-core Xeon (Linux 6.8): the server runs in its own
-cgroup and `wrk` is `taskset`-pinned to disjoint cores (a reserved core keeps
-`sshd` schedulable), CPU governor `performance`, 3 repeats per cell.
+Numbers from **[ds-bench](https://github.com/electric-sql/ds-bench)**, a reproducible single-node harness. All figures below are the default **`wal` mode** (group-commit fsync, resident tail cache off). One server node (`c4d-standard-16-lssd`) pinned to **4 CPUs**, a Kubernetes client fleet driving 256-byte binary appends. Throughput is the saturation ceiling; latency is fleet-wide p50 / p99; memory is the pod cgroup working set (anon + active page cache), peak / p50.
 
-**Reads** (8 cores, conn 256):
+**Writes** — peaks at **~0.86M append/s** at 4 CPUs, scales cleanly to **100k streams**, with median append latency staying sub-ms → ~1.5 ms. Memory tracks **stream count, not bytes** (each stream is a lean record plus its open file; data lives on disk / in the page cache, never resident), so it stays in tens–hundreds of MiB even at 100k streams, with p50 ≪ peak.
 
-| read size | throughput | server CPU |
-| --------- | ---------- | ---------- |
-| 1 KB      | 236k /s    | 508 %      |
-| 16 KB     | 160k /s    | 456 %      |
-| 1 MB      | 11.2k /s   | 266 %      |
-
-**Read scaling by server cores** (1 KB, conn 256): 2c → **193k /s**, 4c → **256k /s**, 8c → 236k /s (the load generator on its 3 cores saturates past 4 server cores).
-
-**Appends** (100 B): 116k /s @ conn 64, **210k /s** @ conn 256. **Cold-tier read** (`--tier local`, via `Body::Channel`): ~5 GB/s.
-
-Hot reads stay sub-millisecond (p50 ≤ 0.11 ms) even under a 512 MB-capped cold backfill. cv across repeats is < 1 % for most cells.
+| streams | append/s | latency p50 / p99 (ms) | memory peak / p50 (MiB) |
+| ------- | -------- | ---------------------- | ----------------------- |
+| 100     | 520k     | 0.26 / 0.46            | 103 / 45                |
+| 1 000   | 650k     | 1.26 / 6.4             | 52 / 41                 |
+| 10 000  | 572k     | 1.47 / 203             | 202 / 177               |
+| 100 000 | **860k** | —                      | 950 / 515               |
