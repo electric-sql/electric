@@ -1,0 +1,93 @@
+name: Server Rust tests
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'packages/server-rust/**'
+      - '.github/workflows/server_rust_tests.yml'
+  pull_request:
+    paths:
+      - 'packages/server-rust/**'
+      - '.github/workflows/server_rust_tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo:
+    name: cargo build + test + clippy
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: packages/server-rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/server-rust
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Clippy
+        run: cargo clippy --release -- -D warnings
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: durable-streams-server
+          path: packages/server-rust/target/release/durable-streams-server
+          retention-days: 1
+
+  conformance:
+    name: conformance (${{ matrix.config.name }})
+    needs: cargo
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in sync with the run-configuration matrix in the package README.
+        config:
+          - { name: wal-default, args: '' }
+          - { name: wal-resident-cache, args: '--tail-cache-bytes 65536' }
+          - { name: wal-read-offload-always, args: '--read-offload always' }
+          - { name: memory, args: '--durability memory' }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @electric-ax/durable-streams-server-rust...
+
+      - name: Download server binary
+        uses: actions/download-artifact@v4
+        with:
+          name: durable-streams-server
+          path: packages/server-rust/target/release
+
+      - name: Make binary executable
+        run: chmod +x packages/server-rust/target/release/durable-streams-server
+
+      - name: Run conformance (${{ matrix.config.name }})
+        env:
+          RUST_SERVER_ARGS: ${{ matrix.config.args }}
+        run: pnpm --filter @electric-ax/durable-streams-server-rust test:conformance

@@ -1,0 +1,10 @@
+/target
+/.profile-hot.sh
+# The repo-root .gitignore has a bare `wal` rule (runtime WAL data dirs) that also
+# swallows this crate's `src/wal/` source module — re-include the source here.
+!src/wal/
+!src/wal/**
+# the benchmark harness now lives in the separate durable-streams-bench repo;
+# the cross-server suite may still drop these here when run against this checkout:
+/bench/
+benchmark-results.json

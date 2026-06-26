@@ -1,0 +1,21 @@
+{
+  "name": "@electric-ax/durable-streams-server-rust",
+  "version": "0.1.0",
+  "description": "High-performance Durable Streams server (Rust) — native binary distributed via npm.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/server-rust"
+  },
+  "scripts": {
+    "test:conformance": "vitest run --config conformance/vitest.config.ts",
+    "sync-version": "node scripts/sync-cargo-version.mjs"
+  },
+  "devDependencies": {
+    "@durable-streams/server-conformance-tests": "^0.3.5",
+    "vitest": "^4.1.0"
+  }
+}

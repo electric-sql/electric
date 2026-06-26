@@ -1,0 +1,152 @@
+name: Publish durable-streams-server-rust (npm + crates.io)
+
+# Reusable: called by changesets_release.yml after a version bump, OR manually.
+# Publishes the binary npm packages (main + 4 platform) and the crate. The Docker
+# image is published separately by server_rust_dockerhub_image.yml.
+#
+# The version is read from packages/server-rust/package.json (the changeset-managed
+# anchor, `private: true` so changesets bumps it but does not publish it). Both
+# registries use OIDC Trusted Publishing — no tokens (one-time setup required on
+# crates.io and npm before the first release).
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        description: 'Git ref to build/publish from'
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git ref to build/publish from'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write # OIDC for npm --provenance and crates.io trusted publishing
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              target: x86_64-unknown-linux-gnu,
+              os: blacksmith-4vcpu-ubuntu-2404,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              os: blacksmith-4vcpu-ubuntu-2404-arm,
+            }
+          - { target: x86_64-apple-darwin, os: macos-13 }
+          - { target: aarch64-apple-darwin, os: macos-latest }
+    defaults:
+      run:
+        working-directory: packages/server-rust
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/server-rust
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Smoke test (/health)
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release/durable-streams-server"
+          "$bin" --port 4599 --data-dir "$RUNNER_TEMP/smoke" &
+          pid=$!
+          ok=
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4599/health | grep -q ok; then ok=1; break; fi
+            sleep 0.3
+          done
+          kill "$pid" 2>/dev/null || true
+          test -n "$ok" || { echo "server did not answer /health"; exit 1; }
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target }}
+          path: packages/server-rust/target/${{ matrix.target }}/release/durable-streams-server
+          if-no-files-found: error
+
+  cargo-publish:
+    needs: build
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Sync Cargo.toml version from the package.json anchor
+        run: node packages/server-rust/scripts/sync-cargo-version.mjs
+      - name: Authenticate to crates.io (Trusted Publishing, OIDC)
+        uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        # --allow-dirty: sync-cargo-version edited Cargo.toml in the working tree.
+        run: cargo publish --allow-dirty --manifest-path packages/server-rust/Cargo.toml
+
+  npm-publish:
+    needs: build
+    # DISABLED: not publishing the npm packages yet (the crate + Docker image still
+    # publish). Re-enable by removing this `if: false`.
+    if: ${{ false }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Update npm for OIDC trusted publishing (>= 11.5.1)
+        run: npm install -g npm@latest
+      - name: Download built binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: ${{ runner.temp }}/bins
+      - name: Arrange binaries by rust target
+        run: |
+          # download-artifact unpacks each as <path>/bin-<target>/durable-streams-server
+          mkdir -p "$RUNNER_TEMP/arranged"
+          for d in "$RUNNER_TEMP"/bins/bin-*; do
+            target="$(basename "$d" | sed 's/^bin-//')"
+            mkdir -p "$RUNNER_TEMP/arranged/$target"
+            cp "$d/durable-streams-server" "$RUNNER_TEMP/arranged/$target/"
+          done
+      - name: Assemble npm packages
+        run: |
+          version="$(node -p "require('./packages/server-rust/package.json').version")"
+          node packages/server-rust/npm/assemble.mjs \
+            --version "$version" \
+            --bins "$RUNNER_TEMP/arranged" \
+            --out "$RUNNER_TEMP/npm-dist"
+      - name: Publish platform packages, then main (OIDC, public)
+        run: |
+          set -e
+          for d in "$RUNNER_TEMP"/npm-dist/*/; do
+            [ "$(basename "$d")" = "main" ] && continue
+            echo "publishing $d"
+            npm publish "$d" --access public --provenance
+          done
+          echo "publishing main"
+          npm publish "$RUNNER_TEMP/npm-dist/main" --access public --provenance
