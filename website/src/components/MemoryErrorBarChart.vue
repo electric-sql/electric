@@ -116,12 +116,19 @@ export default {
             },
             tooltip: {
               callbacks: {
+                title: (context) =>
+                  props.xAxisTitle
+                    ? `${props.xAxisTitle}: ${context[0].label}`
+                    : context[0].label,
                 label: (context) => {
                   const d = props.data[context.datasetIndex]
                   const peak = d?.peak?.[context.dataIndex]
                   const s = props.yAxisSuffix
-                  const base = `${context.dataset.label}: ${context.raw}${s} (p50)`
-                  return peak != null ? `${base}, ${peak}${s} peak` : base
+                  const lines = [
+                    `${context.dataset.label} p50: ${context.raw}${s}`,
+                  ]
+                  if (peak != null) lines.push(`${context.dataset.label} peak: ${peak}${s}`)
+                  return lines
                 },
               },
             },
