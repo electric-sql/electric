@@ -129,10 +129,10 @@ Once written, all data is served directly from disk without transformation. No d
 <StorageComparisonChart
   title="Working-set memory under write load"
   :data="[
+    { label: 'rust (peak)', data: [103, 52, 202, 950], color: '#06b6d4', dashed: true, fill: '+1', fillColor: 'rgba(6, 182, 212, 0.12)' },
     { label: 'rust (p50)', data: [45, 41, 177, 515], color: '#06b6d4' },
-    { label: 'rust (peak)', data: [103, 52, 202, 950], color: '#06b6d4', dashed: true },
-    { label: 'node (p50)', data: [279, 159, 793, null], color: '#f59e0b' },
-    { label: 'node (peak)', data: [488, 214, 1052, null], color: '#f59e0b', dashed: true }
+    { label: 'node (peak)', data: [488, 214, 1052, null], color: '#f59e0b', dashed: true, fill: '+1', fillColor: 'rgba(245, 158, 11, 0.12)' },
+    { label: 'node (p50)', data: [279, 159, 793, null], color: '#f59e0b' }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
@@ -140,7 +140,7 @@ Once written, all data is served directly from disk without transformation. No d
   y-axis-suffix=" MB"
 />
 
-*Working-set memory under write load: median (solid) and peak (dashed). Node runs out of memory at 100k streams.*
+*Working-set memory under write load. The shaded band spans median (p50) to peak per system. Node runs out of memory at 100k streams.*
 
 ***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 

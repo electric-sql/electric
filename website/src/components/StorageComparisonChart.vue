@@ -109,7 +109,8 @@ export default {
         data: dataset.data,
         borderColor:
           dataset.color || defaultColors[index % defaultColors.length],
-        backgroundColor: 'transparent',
+        // Translucent fill colour for range bands; transparent otherwise.
+        backgroundColor: dataset.fillColor || 'transparent',
         borderWidth: 2,
         // Force CubDB lines to be solid regardless of dashed flag
         borderDash:
@@ -119,7 +120,8 @@ export default {
               ? [5, 5]
               : undefined,
         pointStyle: false,
-        fill: false,
+        // `fill` can target another dataset (e.g. '+1') to shade a band.
+        fill: dataset.fill ?? false,
         order: index + 1,
       }))
 
