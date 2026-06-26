@@ -35,7 +35,7 @@ At a high level, the server is made of three components: an HTTP server that imp
 
 ![Durable Streams server — high-level data flow, durability, and tiered storage](/img/blog/durable-streams-at-kernel-speed/architecture.svg)
 
-## Challenges
+### Challenges
 
 The job of the Durable Streams server is almost trivial. The difficulty is making it scale to a large number of streams, at high throughput and low memory usage, without losing a single byte. Our Rust implementation does this while running an order of magnitude faster than our previous Node implementation.
 
@@ -61,7 +61,7 @@ Writes take data from the HTTP socket buffer and append it to a stream log file 
 > - **sendfile(2)** — Copies data directly between two file descriptors (classically a file to a socket) inside the kernel, without bouncing it through a user-space buffer. One kernel-to-kernel transfer instead of a `read()` then a `write()`: fewer copies and context switches.
 > - **splice(2)** — The general zero-copy primitive. It moves data between two descriptors via a kernel pipe, with no user-space copy. It works in either direction (for example, socket to file), as long as one end is a pipe.
 
-## Durability
+#### Durability
 
 To guarantee no data loss, every write to a stream would have to be flushed to disk before its request is acknowledged. To avoid that we use a WAL. Every append, across every stream, is staged into a sharded WAL. We call `fsync` immediately when new data arrives for a WAL shard. While a flush is in progress, we batch other incoming requests and commit them together once the previous batch finishes.
 
@@ -77,11 +77,11 @@ A read request provides an address and an *offset* that maps to a byte position 
 
 **Catch-up**: Large reads stay bounded the same way history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its full size. With no garbage collector, that footprint holds steady under load.
 
-## Tiered storage
+### Tiered storage
 
 A single node is a reliable server because it does not hold streams in memory. Hot data lives on disk and is served from the page cache through `sendfile`, so the server is bounded by disk rather than RAM and survives restarts. Once data leaves the live tail it is immutable, so the server seals it into fixed-size segments and uploads them to an object store, keeping only the active tail locally. Sealed segments are immutable and carry long-lived cache headers, so repeated cold reads are served from a CDN and do not reach the origin. Offload happens only after the data is durable: a segment is uploaded and verified before its local copy is removed, so a read is never directed at an object that is not there. A single binary together with an object store is therefore a complete and durable server.
 
-## Comparing with Kafka
+### Comparing with Kafka
 
 Kafka takes a different path to append throughput: it keeps `fsync` off the critical path and [relies on replication](https://kafka.apache.org/35/configuration/topic-level-configs/) for durability, flushing to disk asynchronously. This server keeps fsync-based durability on a single node and makes it cheap with the WAL and group commit, so it never pays a per-stream fsync. For the replicated style, the server offers a `memory` mode that disables the WAL and uses `splice` to copy data; it is intended to pair with a replication algorithm in the future.
 
@@ -93,7 +93,7 @@ The configurations we run are the following:
 
 - **ds-rust**: the Rust Durable Streams server we have built
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
-- [**ursula**](https://github.com/tonbo-io/ursula): Ursula with log persistence off — the best single-node scenario for Ursula
+- [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
 - [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
 
 ### Write throughput
@@ -107,7 +107,9 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
 | 10,000    | 572k    | 89k    | 63k  | —      |
 | 100,000   | 860k    | —      | —    | —      |
 
-**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device.
+*Append throughput at saturation (appends/s); single node, 256-byte records.*
+
+**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula isa single-node deployments with WAL off, the best case for a single node deployment.
 
 #### Memory usage
 
@@ -124,9 +126,9 @@ Once written, all data is served directly from disk without transformation. No d
 
 *Server working-set memory under write load (peak / p50, MB).*
 
-*We have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
+***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 
-### SSE fan-out
+### SSE fan-out: latency at scale
 
 One writer feeds a growing set of SSE subscribers. Median delivery latency stayed around a millisecond at small fan-outs and rose to about four milliseconds at a thousand subscribers, on par with Ursula.
 
