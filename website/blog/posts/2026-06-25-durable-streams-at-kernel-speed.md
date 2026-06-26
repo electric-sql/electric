@@ -13,7 +13,6 @@ published: true
 
 <script setup>
 import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
-import MemoryErrorBarChart from '../../src/components/MemoryErrorBarChart.vue'
 </script>
 
 <style>
@@ -31,9 +30,8 @@ Today we are releasing a new server implementation of Durable Streams, written i
 
 Its speed comes from a single decision: the bytes stored on disk are the bytes sent on the wire. A read is then a byte-range over a file, and a write is an append whose principal cost is durability. The rest of this post is how both are made inexpensive.
 
-> [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Run it yourself
-> Deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), and [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
-<!-- TODO(links): fill the two (#) placeholders above — reference-server deploy guide and architecture doc. -->
+> [!Info] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Get started with Durable&nbsp;Streams
+> [Download the crate](https://crates.io/crates/durable-streams) and start building, [sign up for Electric&nbsp;Cloud](/cloud/) to try Durable&nbsp;Streams as a managed service, or [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main) yourself.
 
 ## A primer on the protocol
 
@@ -137,18 +135,14 @@ Once written, all data is served directly from disk without transformation. No d
 
 Ursula sits in the gigabytes by contrast: it keeps the Raft log in memory between snapshots, so data accumulates there over each snapshot interval rather than tracking the working set on disk.
 
-<MemoryErrorBarChart
-  title="Working-set memory — p50 (bars) with peak (whisker)"
-  :data="[
-    { label: 'rust', p50: [45, 41, 177, 515], peak: [103, 52, 202, 950], color: '#75fbfd' },
-    { label: 'node', p50: [279, 159, 793, null], peak: [488, 214, 1052, null], color: '#f59e0b' },
-    { label: 'ursula', p50: [2644, 1817, 4286, null], peak: [3693, 2245, 5058, null], color: '#a855f7' }
-  ]"
-  :labels="['100', '1,000', '10,000', '100,000']"
-  x-axis-title="Number of streams"
-  y-axis-title="Resident memory"
-  y-axis-suffix=" MB"
-/>
+| # streams | rust (peak / p50) | node (peak / p50) | ursula (peak / p50) |
+| --------- | ----------------- | ----------------- | ------------------- |
+| 100       | 103 / 45          | 488 / 279         | 3,693 / 2,644       |
+| 1,000     | 52 / 41           | 214 / 159         | 2,245 / 1,817       |
+| 10,000    | 202 / 177         | 1,052 / 793       | 5,058 / 4,286       |
+| 100,000   | 950 / 515         | —                 | —                   |
+
+*Server working-set memory under write load (peak / p50, MB). Node runs out of memory at 100k streams; ursula caps out at 10k.*
 
 ### SSE fan-out: latency at scale
 

@@ -296,6 +296,7 @@ export default {
   position: relative;
   display: block;
   box-sizing: border-box;
+  margin-bottom: 1.75rem;
 }
 
 @media (max-width: 860px) {
