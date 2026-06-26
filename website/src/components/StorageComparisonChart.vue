@@ -37,6 +37,11 @@ export default {
       type: String,
       default: '',
     },
+    yScaleType: {
+      type: String,
+      default: 'linear',
+      validator: (v) => ['linear', 'logarithmic'].includes(v),
+    },
     // Desired number of columns to render side-by-side responsively
     columns: {
       type: Number,
@@ -173,9 +178,9 @@ export default {
               },
             },
             y: {
-              type: 'linear',
+              type: props.yScaleType,
               position: 'left',
-              min: 0,
+              min: props.yScaleType === 'logarithmic' ? undefined : 0,
               title: {
                 display: true,
                 text: props.yAxisTitle,

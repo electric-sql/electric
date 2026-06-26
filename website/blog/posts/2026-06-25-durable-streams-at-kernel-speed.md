@@ -117,9 +117,10 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
   x-axis-title="Number of streams"
   y-axis-title="Appends/s"
   y-axis-suffix="k"
+  y-scale-type="logarithmic"
 />
 
-*Append throughput at saturation (appends/s); single node, 256-byte records.*
+*Append throughput at saturation (appends/s, log scale); single node, 256-byte records.*
 
 **rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
