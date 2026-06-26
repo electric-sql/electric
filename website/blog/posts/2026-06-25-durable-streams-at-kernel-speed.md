@@ -1,8 +1,8 @@
 ---
 title: "Durable Streams at kernel speed"
-description: "A Rust implementation of Durable Streams that reaches a million appends per second on a single 4vCPU machine."
+description: "A Rust implementation of Durable Streams that reaches nearly a million appends per second on a single 4vCPU machine."
 excerpt: >-
-  We're releasing a new Durable Streams reference server implemented in Rust. It reaches a million operations per second on a single 4vCPU machine. Here's how we've built it.
+  We're releasing a new Durable Streams reference server implemented in Rust. It reaches nearly a million operations per second on a single 4vCPU machine. Here's how we've built it.
 authors: [balegas]
 tags: [durable-streams, rust, performance]
 image: /img/blog/durable-streams-at-kernel-speed/header.jpg
@@ -115,6 +115,7 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
   x-axis-title="Number of streams"
   y-axis-title="Appends/s"
   y-axis-suffix="k"
+  solid-markers
 />
 
 *Append throughput at saturation (appends/s); single node, 256-byte records.*
@@ -156,6 +157,7 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
   x-axis-title="Subscribers"
   y-axis-title="Latency"
   y-axis-suffix=" ms"
+  solid-markers
 />
 
 *SSE end-to-end delivery latency (p50, ms); one writer at 50 events/s.*

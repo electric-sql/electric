@@ -56,6 +56,12 @@ export default {
       default: 'linear',
       validator: (v) => ['linear', 'logarithmic'].includes(v),
     },
+    // Fill legend/tooltip swatches with the line colour (solid) instead of
+    // leaving them hollow/transparent.
+    solidMarkers: {
+      type: Boolean,
+      default: false,
+    },
     // Desired number of columns to render side-by-side responsively
     columns: {
       type: Number,
@@ -123,8 +129,13 @@ export default {
         data: dataset.data,
         borderColor:
           dataset.color || defaultColors[index % defaultColors.length],
-        // Translucent fill colour for range bands; transparent otherwise.
-        backgroundColor: dataset.fillColor || 'transparent',
+        // Translucent fill colour for range bands; with solidMarkers the
+        // legend/tooltip swatch fills with the line colour; transparent otherwise.
+        backgroundColor:
+          dataset.fillColor ||
+          (props.solidMarkers
+            ? dataset.color || defaultColors[index % defaultColors.length]
+            : 'transparent'),
         borderWidth: 2,
         // Force CubDB lines to be solid regardless of dashed flag
         borderDash:
