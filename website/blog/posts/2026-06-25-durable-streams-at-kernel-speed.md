@@ -109,7 +109,7 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
 
 *Append throughput at saturation (appends/s); single node, 256-byte records.*
 
-**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula isa single-node deployments with WAL off, the best case for a single node deployment.
+**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
 #### Memory usage
 
@@ -143,7 +143,7 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 ### Catch-up: how fast can a client replay history?
 
-A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
+A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
 
 | metric (1 KB events, 200 per stream) | ds-rust | Node | Ursula |
 | ------------------------------------- | ------- | ------ | ------ |
