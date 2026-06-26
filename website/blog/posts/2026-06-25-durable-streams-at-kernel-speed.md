@@ -127,6 +127,8 @@ Serving a hundred thousand streams, rust holds a median resident footprint of ab
 
 Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
 
+Ursula sits in the gigabytes by contrast: it keeps the Raft log in memory between snapshots, so data accumulates there over each snapshot interval rather than tracking the working set on disk.
+
 <MemoryErrorBarChart
   title="Working-set memory — p50 (bars) with peak (whisker)"
   :data="[
