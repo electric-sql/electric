@@ -13,12 +13,11 @@ published: true
 
 <script setup>
 import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
-import StorageComparisonChartColumn from '../../src/components/StorageComparisonChartColumn.vue'
 </script>
 
 The industry is moving agents out of sandboxes and onto the internet — a third wave of agents that are durable, multi-user and [long-lived](/blog/2026/06/04/serverless-agents). [Durable Streams](/streams/) is the primitive for this: an append-only log that works over HTTP. 
 
-Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). Its adoption is showing up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
+Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) and its adoption is showing up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [by other open-source projects](https://ursula.tonbo.io/).
 
 Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, conformant, easy to deploy and open-source.
 
@@ -127,11 +126,13 @@ Serving a hundred thousand streams, rust holds a median resident footprint of ab
 
 Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
 
-<StorageComparisonChartColumn
-  title="Working-set memory under write load (p50)"
+<StorageComparisonChart
+  title="Working-set memory under write load"
   :data="[
-    { label: 'rust', data: [45, 41, 177, 515] },
-    { label: 'node', data: [279, 159, 793, null] }
+    { label: 'rust (p50)', data: [45, 41, 177, 515], color: '#06b6d4' },
+    { label: 'rust (peak)', data: [103, 52, 202, 950], color: '#06b6d4', dashed: true },
+    { label: 'node (p50)', data: [279, 159, 793, null], color: '#f59e0b' },
+    { label: 'node (peak)', data: [488, 214, 1052, null], color: '#f59e0b', dashed: true }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
@@ -139,7 +140,7 @@ Once written, all data is served directly from disk without transformation. No d
   y-axis-suffix=" MB"
 />
 
-*Median (p50) working-set memory under write load. Peaks: rust 950 MB at 100k streams; Node 1,052 MB at 10k, out of memory at 100k.*
+*Working-set memory under write load: median (solid) and peak (dashed). Node runs out of memory at 100k streams.*
 
 ***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 
@@ -147,11 +148,11 @@ Once written, all data is served directly from disk without transformation. No d
 
 One writer feeds a growing set of SSE subscribers. Median delivery latency stayed around a millisecond at small fan-outs and rose to about four milliseconds at a thousand subscribers, on par with Ursula.
 
-<StorageComparisonChartColumn
+<StorageComparisonChart
   title="SSE delivery latency (p50)"
   :data="[
-    { label: 'rust', data: [1.00, 1.09, 1.44, 3.72] },
-    { label: 'ursula', data: [0.99, 1.10, 1.42, 3.28] }
+    { label: 'rust', data: [1.00, 1.09, 1.44, 3.72], color: '#06b6d4' },
+    { label: 'ursula', data: [0.99, 1.10, 1.42, 3.28], color: '#a855f7' }
   ]"
   :labels="['1', '10', '100', '1,000']"
   x-axis-title="Subscribers"
