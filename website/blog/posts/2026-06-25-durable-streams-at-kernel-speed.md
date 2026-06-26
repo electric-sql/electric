@@ -19,7 +19,7 @@ The industry is moving agents out of sandboxes and onto the internet — a third
 
 Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) and its adoption is showing up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [by other open-source projects](https://ursula.tonbo.io/).
 
-Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, conformant, easy to deploy and open-source.
+Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, conformant, easy to deploy and open-source, and [published on crates.io](https://crates.io/crates/durable-streams).
 
 Its speed comes from a single decision: the bytes stored on disk are the bytes sent on the wire. A read is then a byte-range over a file, and a write is an append whose principal cost is durability. The rest of this post is how both are made inexpensive.
 
@@ -110,12 +110,12 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
     { label: 'rust', data: [520, 650, 572, 860], color: '#06b6d4' },
     { label: 'node', data: [55, 76, 63, null], color: '#f59e0b' },
     { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' },
-    { label: 'rust memory (peak)', data: [103, 52, 202, 950], color: '#06b6d4', dashed: true, fill: '+1', fillColor: 'rgba(6, 182, 212, 0.12)', yAxisID: 'y2' },
-    { label: 'rust memory (p50)', data: [45, 41, 177, 515], color: '#06b6d4', yAxisID: 'y2' },
-    { label: 'node memory (peak)', data: [488, 214, 1052, null], color: '#f59e0b', dashed: true, fill: '+1', fillColor: 'rgba(245, 158, 11, 0.12)', yAxisID: 'y2' },
-    { label: 'node memory (p50)', data: [279, 159, 793, null], color: '#f59e0b', yAxisID: 'y2' },
-    { label: 'ursula memory (peak)', data: [3693, 2245, 5058, null], color: '#a855f7', dashed: true, fill: '+1', fillColor: 'rgba(168, 85, 247, 0.12)', yAxisID: 'y2' },
-    { label: 'ursula memory (p50)', data: [2644, 1817, 4286, null], color: '#a855f7', yAxisID: 'y2' }
+    { label: 'rust memory (p50)', data: [45, 41, 177, 515], color: 'rgba(6, 182, 212, 0.6)', fill: 'origin', fillColor: 'rgba(6, 182, 212, 0.25)', yAxisID: 'y2' },
+    { label: 'rust memory (max)', data: [103, 52, 202, 950], color: 'rgba(6, 182, 212, 0.35)', fill: 'origin', fillColor: 'rgba(6, 182, 212, 0.10)', yAxisID: 'y2' },
+    { label: 'node memory (p50)', data: [279, 159, 793, null], color: 'rgba(245, 158, 11, 0.6)', fill: 'origin', fillColor: 'rgba(245, 158, 11, 0.25)', yAxisID: 'y2' },
+    { label: 'node memory (max)', data: [488, 214, 1052, null], color: 'rgba(245, 158, 11, 0.35)', fill: 'origin', fillColor: 'rgba(245, 158, 11, 0.10)', yAxisID: 'y2' },
+    { label: 'ursula memory (p50)', data: [2644, 1817, 4286, null], color: 'rgba(168, 85, 247, 0.6)', fill: 'origin', fillColor: 'rgba(168, 85, 247, 0.25)', yAxisID: 'y2' },
+    { label: 'ursula memory (max)', data: [3693, 2245, 5058, null], color: 'rgba(168, 85, 247, 0.35)', fill: 'origin', fillColor: 'rgba(168, 85, 247, 0.10)', yAxisID: 'y2' }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
@@ -125,7 +125,7 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
   y2-axis-suffix=" MB"
 />
 
-*Write throughput (solid lines, left axis) and working-set memory (right axis; shaded bands span p50 to peak per system); single node, 256-byte records. ursula and node cap out at 10k streams.*
+*Write throughput (solid lines, left axis) and working-set memory (filled areas, right axis): the darker area is p50, the lighter is max, per system; single node, 256-byte records. ursula and node cap out at 10k streams.*
 
 **rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
@@ -166,4 +166,10 @@ A thousand clients each attach to a pre-populated stream of 200 events and repla
 
 ## Summary and next steps
 
-Durable Streams is an open protocol with a growing set of independent implementations, and this Rust server is a reference for teams who want to run it themselves. It is released and ready today: `cargo install durable-streams` , read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), or have fun  [implementing the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) yourself.
+Durable Streams is an open protocol with a growing set of independent implementations, and this Rust server is a reference for teams who want to run it themselves. It is released and ready today — install it from [crates.io](https://crates.io/crates/durable-streams) with `cargo install durable-streams`, read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), or have fun [implementing the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) yourself.
+
+This is a first release and there is plenty ahead:
+
+- **Performance and memory.** Further throughput gains and lower per-stream memory — we have not yet done any memory optimization.
+- **Multi-node.** A multi-node server for high availability and horizontal scalability.
+- **Chaos testing.** Deterministic chaos simulation to shake out bugs under faults and partitions.
