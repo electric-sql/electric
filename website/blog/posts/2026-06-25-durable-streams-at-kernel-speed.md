@@ -15,7 +15,9 @@ The industry is moving agents out of sandboxes and onto the internet — a third
 
 Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). That adoption shows up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
 
-Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, easy to deploy and open-source.
+Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, conformant, easy to deploy and open-source.
+
+Its speed comes from a single decision: the bytes stored on disk are the bytes sent on the wire. A read is then a byte-range over a file, and a write is an append whose principal cost is durability. The rest of this post is how both are made inexpensive.
 
 In this blog post we cover the architecture, dive into the techniques that make it fast, and benchmark it against other implementations of Durable Streams.
 
@@ -45,7 +47,7 @@ The job of the Durable Streams server is almost trivial. The difficulty is makin
 
 **Memory usage.** One record may fan out to thousands of live subscribers, and a reconnecting client may replay a long history. We want to keep memory usage stable at all times, even when the data in flight far exceeds the RAM in the box.
 
-The key idea behind the design is to move bytes as-is, from the socket into files and back out to the socket, without any transformation, so that data never has to move into user space. Let us dig into the write and read paths to see how that is achieved.
+The key idea behind the design is to move bytes as-is, from the socket into files and back out to the socket, without touching them, such that we can keep data on the kernel side. Let us dig into the write and read paths to see how that is achieved.
 
 ### The write path
 
@@ -65,7 +67,7 @@ Every WAL record carries a CRC32C checksum, so on restart replay stops at the fi
 
 Computing the checksum requires moving data into user space, which prevents using `splice` optimization to copy data directly from the socket to the file. This is a cost paid once; because data is stored in wire format, reads remain fast.
 
-Kafka [trades durability for speed](https://kafka.apache.org/35/configuration/topic-level-configs/) by using replication to avoid disk flushes in the write path. Our server provides a `memory` mode that disables WAL and uses `splice` for copying data. This mode is intended to be used with a replication algorithm in the future.
+Kafka takes a different path to append throughput: it keeps `fsync` off the critical path and [relies on replication](https://kafka.apache.org/35/configuration/topic-level-configs/) for durability, flushing to disk asynchronously. This server keeps fsync-based durability on a single node and makes it cheap with the WAL and group commit, so it never pays a per-stream fsync. For the replicated style, the server offers a `memory` mode that disables the WAL and uses `splice` to copy data; it is intended to pair with a replication algorithm in the future.
 
 > [!Note] Three syscalls worth knowing
 >
@@ -82,6 +84,10 @@ A read request provides an address and an *offset* that maps to a byte position 
 Fan-out costs no more than a single read. One append advances the tail and wakes every live reader at once, and because the new bytes are already in memory, all subscribers are served from one shared copy. The cost scales with the payload, not with the number of subscribers.
 
 Large reads stay bounded the same way: history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its full size. With no garbage collector, that footprint holds steady under load.
+
+## Persistence and tiered storage
+
+A single node is a reliable server because it does not hold streams in memory. Hot data lives on disk and is served from the page cache through `sendfile`, so the server is bounded by disk rather than RAM and survives restarts. Once data leaves the live tail it is immutable, so the server seals it into fixed-size segments and uploads them to an object store — R2, Tigris, MinIO or B2 — keeping only the active tail locally. Sealed segments are immutable and carry long-lived cache headers, so repeated cold reads are served from a CDN and do not reach the origin. Offload happens only after the data is durable: a segment is uploaded and verified before its local copy is removed, so a read is never directed at an object that is not there. A single binary together with an object store is therefore a complete and durable server.
 
 ## Benchmarks
 
