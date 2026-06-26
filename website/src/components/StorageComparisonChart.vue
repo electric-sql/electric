@@ -42,6 +42,20 @@ export default {
       default: 'linear',
       validator: (v) => ['linear', 'logarithmic'].includes(v),
     },
+    // Optional secondary (right-hand) Y axis. Datasets opt in with yAxisID: 'y2'.
+    y2AxisTitle: {
+      type: String,
+      default: '',
+    },
+    y2AxisSuffix: {
+      type: String,
+      default: '',
+    },
+    y2ScaleType: {
+      type: String,
+      default: 'linear',
+      validator: (v) => ['linear', 'logarithmic'].includes(v),
+    },
     // Desired number of columns to render side-by-side responsively
     columns: {
       type: Number,
@@ -122,8 +136,12 @@ export default {
         pointStyle: false,
         // `fill` can target another dataset (e.g. '+1') to shade a band.
         fill: dataset.fill ?? false,
+        // Datasets may render against the secondary axis via yAxisID: 'y2'.
+        yAxisID: dataset.yAxisID || 'y',
         order: index + 1,
       }))
+
+      const hasY2 = props.data.some((d) => d.yAxisID === 'y2')
 
       const chartData = {
         labels: props.labels,
@@ -152,7 +170,11 @@ export default {
                   return `${props.xAxisTitle}: ${context[0].label}`
                 },
                 label: (context) => {
-                  return `${context.dataset.label}: ${context.raw}${props.yAxisSuffix}`
+                  const suffix =
+                    context.dataset.yAxisID === 'y2'
+                      ? props.y2AxisSuffix
+                      : props.yAxisSuffix
+                  return `${context.dataset.label}: ${context.raw}${suffix}`
                 },
               },
             },
@@ -194,6 +216,27 @@ export default {
                 color: getComputedStyleValue('--vp-c-divider'),
               },
             },
+            ...(hasY2
+              ? {
+                  y2: {
+                    type: props.y2ScaleType,
+                    position: 'right',
+                    min: props.y2ScaleType === 'logarithmic' ? undefined : 0,
+                    title: {
+                      display: true,
+                      text: props.y2AxisTitle,
+                    },
+                    ticks: {
+                      callback: (value) => `${value}${props.y2AxisSuffix}`,
+                    },
+                    // Keep the right axis gridlines off the chart area to
+                    // avoid doubling the left axis grid.
+                    grid: {
+                      drawOnChartArea: false,
+                    },
+                  },
+                }
+              : {}),
           },
         },
       })
