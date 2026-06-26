@@ -16,6 +16,13 @@ import StorageComparisonChart from '../../src/components/StorageComparisonChart.
 import MemoryErrorBarChart from '../../src/components/MemoryErrorBarChart.vue'
 </script>
 
+<style>
+.centered-table table {
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
 The industry is moving agents out of sandboxes and onto the internet — a third wave of agents that are durable, multi-user and [long-lived](/blog/2026/06/04/serverless-agents). [Durable Streams](/streams/) is the primitive for this: an append-only log that works over HTTP. 
 
 Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) and its adoption is showing up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [by other open-source projects](https://ursula.tonbo.io/).
@@ -107,7 +114,7 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
 <StorageComparisonChart
   title="Write throughput at saturation"
   :data="[
-    { label: 'rust', data: [520, 650, 572, 860], color: '#06b6d4' },
+    { label: 'rust', data: [520, 650, 572, 860], color: '#75fbfd' },
     { label: 'node', data: [55, 76, 63, null], color: '#f59e0b' },
     { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' }
   ]"
@@ -133,7 +140,7 @@ Ursula sits in the gigabytes by contrast: it keeps the Raft log in memory betwee
 <MemoryErrorBarChart
   title="Working-set memory — p50 (bars) with peak (whisker)"
   :data="[
-    { label: 'rust', p50: [45, 41, 177, 515], peak: [103, 52, 202, 950], color: '#06b6d4' },
+    { label: 'rust', p50: [45, 41, 177, 515], peak: [103, 52, 202, 950], color: '#75fbfd' },
     { label: 'node', p50: [279, 159, 793, null], peak: [488, 214, 1052, null], color: '#f59e0b' },
     { label: 'ursula', p50: [2644, 1817, 4286, null], peak: [3693, 2245, 5058, null], color: '#a855f7' }
   ]"
@@ -150,7 +157,7 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 <StorageComparisonChart
   title="SSE delivery latency (p50)"
   :data="[
-    { label: 'rust', data: [1.00, 1.09, 1.44, 3.72], color: '#06b6d4' },
+    { label: 'rust', data: [1.00, 1.09, 1.44, 3.72], color: '#75fbfd' },
     { label: 'ursula', data: [0.99, 1.10, 1.42, 3.28], color: '#a855f7' }
   ]"
   :labels="['1', '10', '100', '1,000']"
@@ -166,10 +173,14 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 A thousand clients each attach to a pre-populated stream and replay it from the start. With 200 events per stream, rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work; node completed the same replay at 186 ms (~700 MB/s) and Ursula at 126 ms, its snapshot-and-tail path transferring fewer bytes by design. At 2,000 events per stream the gap widens: rust replays at **925 ms p99** and ~2.0 GB/s, against node's 2.1 s and ~900 MB/s. Ursula could not complete this run — its stream creation chokes under the larger pre-fill.
 
-| replay throughput (1 KB events, MB/s) | rust | node | ursula |
-| ------------------------------------- | ----- | ----- | ----- |
-| 200 events per stream                 | 1,306 | 700   | 1,039 |
-| 2,000 events per stream               | 2,037 | 906   | —     |
+<div class="centered-table">
+
+| replay throughput (1 KB events, MB/s) |  rust  |  node  | ursula |
+| ------------------------------------- | :----: | :----: | :----: |
+| 200 events per stream                 | 1,306  |  700   | 1,039  |
+| 2,000 events per stream               | 2,037  |  906   |   —    |
+
+</div>
 
 *A — marks a run that crashed or could not complete (e.g. ran out of memory, or choked on stream creation).*
 
