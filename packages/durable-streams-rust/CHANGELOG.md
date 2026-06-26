@@ -1,5 +1,13 @@
 # @electric-ax/durable-streams-server-rust
 
+## 0.1.2
+
+### Patch Changes
+
+- d1db07a: Rename the package folder to `packages/durable-streams-rust`. Drop the Intel
+  macOS (`macos-13`) build from the release matrix. Correct the README throughput
+  figure.
+
 ## 0.1.1
 
 ### Patch Changes
