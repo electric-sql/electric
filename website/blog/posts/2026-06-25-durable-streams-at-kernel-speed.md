@@ -1,8 +1,8 @@
 ---
 title: "Durable Streams at kernel speed"
-description: "A Rust reference server for Durable Streams that reaches nearly a million appends per second on a single 4 vCPU node."
+description: "A Rust implementation of Durable Streams that reaches a million appends per second on a single 4vCPU machine."
 excerpt: >-
-  We're releasing a Rust reference server for Durable Streams that reaches nearly a million operations per second on a single 4 vCPU node. Here's the architecture, the kernel-level techniques that make it fast, and how it benchmarks against other implementations.
+  We're releasing a new Durable Streams reference server implemented in Rust. It reaches a million operations per second on a single 4vCPU machine. Here's how we've built it.
 authors: [balegas]
 tags: [durable-streams, rust, performance]
 image: /img/blog/durable-streams-at-kernel-speed/header.jpg
@@ -11,9 +11,9 @@ post: true
 published: true
 ---
 
-Every agent you work with today is backed by a log. [Durable Streams](/streams/) is the data primitive for storing it: an append-only log that is durable, addressable, and writable from anywhere on the internet.
+The industry is moving agents out of sandboxes and onto the internet — a third wave of agents that are durable, multi-user and [long-lived](/blog/2026/06/04/serverless-agents). [Durable Streams](/streams/) is the primitive for this: an append-only log that works over HTTP. 
 
-Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
+Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). That adoption shows up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
 
 Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, easy to deploy and open-source.
 
@@ -33,7 +33,7 @@ Because the protocol is plain HTTP, a stream can be served from anywhere and can
 
 At a high level, the server is made of three components: an HTTP server that implements the Durable Streams protocol; a write-ahead log (WAL) that makes each append durable; and hot storage, built on the file system, that holds every stream as a file of the protocol's wire bytes. Optionally, you can connect to an external object store to offload sealed chunks of data. The server forwards requests to hot or cold storage based on the requested offset.
 
-![Durable Streams server — high-level data flow, durability, and tiered storage](/img/blog/durable-streams-at-kernel-speed/architecture-map.svg)
+![Durable Streams server — high-level data flow, durability, and tiered storage](/img/blog/durable-streams-at-kernel-speed/architecture.svg)
 
 ## Challenges
 
@@ -139,12 +139,12 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 ### Catch-up: how fast can a client replay history?
 
-A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GiB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
+A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
 
-| metric (1 KiB events, 200 per stream) | ds-rust | Ursula |
-| ------------------------------------- | ------- | ------ |
-| per-client catch-up p99 (ms)          | 146     | 126    |
-| aggregate replay throughput (MiB/s)   | 1,306   | 1,039  |
+| metric (1 KB events, 200 per stream) | ds-rust | Node | Ursula |
+| ------------------------------------- | ------- | ------ | ------ |
+| per-client catch-up p99 (ms)          | 146     | 186  | 126    |
+| aggregate replay throughput (MB/s)    | 1,306   | 700 | 1,039  |
 
 ## Summary and next steps
 

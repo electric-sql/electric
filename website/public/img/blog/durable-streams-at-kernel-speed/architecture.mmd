@@ -1,0 +1,20 @@
+flowchart LR
+  W([Writer])
+  R([Reader])
+
+  subgraph server["Durable Streams server — single Rust binary"]
+    direction TB
+    H["HTTP server<br/>(Durable Streams protocol)"]
+    HOT["Hot storage<br/>stream files in the page cache"]
+    WAL[("Sharded WAL<br/>group-commit durability")]
+    H -- "append bytes" --> HOT
+    H -- "stage record" --> WAL
+    WAL -. "checkpoint &amp; recycle" .-> HOT
+  end
+
+  COLD[("Cold storage<br/>object store")]
+
+  W -- "append" --> H
+  R -- "read at offset" --> H
+  HOT -- "seal &amp; offload" --> COLD
+  H -. "old offsets" .-> COLD
