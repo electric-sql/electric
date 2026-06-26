@@ -13,6 +13,7 @@ function getComputedStyleValue(name) {
 export default {
   props: {
     title: { type: String, required: true },
+    subtitle: { type: String, default: '' },
     // Each item: { label: string, p50: number[], peak: number[], color?: string }
     data: { type: Array, required: true },
     labels: { type: Array, required: true },
@@ -127,7 +128,8 @@ export default {
                   const lines = [
                     `${context.dataset.label} p50: ${context.raw}${s}`,
                   ]
-                  if (peak != null) lines.push(`${context.dataset.label} peak: ${peak}${s}`)
+                  if (peak != null)
+                    lines.push(`${context.dataset.label} peak: ${peak}${s}`)
                   return lines
                 },
               },
@@ -178,6 +180,7 @@ export default {
 <template>
   <div class="MemoryErrorBarChart" :style="wrapperStyle">
     <h3>{{ title }}</h3>
+    <p v-if="subtitle" class="chart-subtitle">{{ subtitle }}</p>
     <canvas ref="chartCanvas"></canvas>
   </div>
 </template>
@@ -188,12 +191,19 @@ export default {
   position: relative;
   display: block;
   box-sizing: border-box;
+  margin-bottom: 1.75rem;
 }
 .MemoryErrorBarChart h3 {
   text-align: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   color: var(--vp-c-text-1);
   font-size: 1.05rem;
   font-weight: 600;
+}
+.MemoryErrorBarChart .chart-subtitle {
+  text-align: center;
+  margin: 0 0 0.5rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.85rem;
 }
 </style>

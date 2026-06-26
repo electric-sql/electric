@@ -13,6 +13,7 @@ published: true
 
 <script setup>
 import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
+import MemoryErrorBarChart from '../../src/components/MemoryErrorBarChart.vue'
 </script>
 
 <style>
@@ -135,21 +136,27 @@ Once written, all data is served directly from disk without transformation. No d
 
 Ursula sits in the gigabytes by contrast: it keeps the Raft log in memory between snapshots, so data accumulates there over each snapshot interval rather than tracking the working set on disk.
 
-| # streams | rust (peak / p50) | node (peak / p50) | ursula (peak / p50) |
-| --------- | ----------------- | ----------------- | ------------------- |
-| 100       | 103 / 45          | 488 / 279         | 3,693 / 2,644       |
-| 1,000     | 52 / 41           | 214 / 159         | 2,245 / 1,817       |
-| 10,000    | 202 / 177         | 1,052 / 793       | 5,058 / 4,286       |
-| 100,000   | 950 / 515         | —                 | —                   |
-
-*Server working-set memory under write load (peak / p50, MB). Node runs out of memory at 100k streams; ursula caps out at 10k.*
+<MemoryErrorBarChart
+  title="Working-set memory under write load"
+  subtitle="p50 (bars) with peak (whisker), MB"
+  :data="[
+    { label: 'rust', p50: [45, 41, 177, 515], peak: [103, 52, 202, 950], color: '#75fbfd' },
+    { label: 'node', p50: [279, 159, 793, null], peak: [488, 214, 1052, null], color: '#f59e0b' },
+    { label: 'ursula', p50: [2644, 1817, 4286, null], peak: [3693, 2245, 5058, null], color: '#a855f7' }
+  ]"
+  :labels="['100', '1,000', '10,000', '100,000']"
+  x-axis-title="Number of streams"
+  y-axis-title="Resident memory"
+  y-axis-suffix=" MB"
+/>
 
 ### SSE fan-out: latency at scale
 
 One writer feeds a growing set of SSE subscribers. Median delivery latency stayed around a millisecond at small fan-outs and rose to about four milliseconds at a thousand subscribers, on par with Ursula.
 
 <StorageComparisonChart
-  title="SSE delivery latency (p50)"
+  title="SSE delivery latency"
+  subtitle="End-to-end p50 (ms); one writer at 50 events/s"
   :data="[
     { label: 'rust', data: [1.00, 1.09, 1.44, 3.72], color: '#75fbfd' },
     { label: 'ursula', data: [0.99, 1.10, 1.42, 3.28], color: '#a855f7' }
@@ -160,8 +167,6 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
   y-axis-suffix=" ms"
   solid-markers
 />
-
-*SSE end-to-end delivery latency (p50, ms); one writer at 50 events/s.*
 
 ### Catch-up: how fast can a client replay history?
 
@@ -175,8 +180,6 @@ A thousand clients each attach to a pre-populated stream and replay it from the 
 | 2,000 events per stream               | 2,037  |  906   |   —    |
 
 </div>
-
-*A — marks a run that crashed or could not complete (e.g. ran out of memory, or choked on stream creation).*
 
 ## Summary and next steps
 

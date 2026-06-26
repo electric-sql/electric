@@ -16,6 +16,10 @@ export default {
       type: String,
       required: true,
     },
+    subtitle: {
+      type: String,
+      default: '',
+    },
     data: {
       type: Array,
       required: true,
@@ -286,6 +290,7 @@ export default {
 <template>
   <div class="StorageComparisonGraph" ref="wrapperEl" :style="wrapperStyle">
     <h3>{{ title }}</h3>
+    <p v-if="subtitle" class="chart-subtitle">{{ subtitle }}</p>
     <canvas ref="chartCanvas"></canvas>
   </div>
 </template>
@@ -307,9 +312,16 @@ export default {
 
 .StorageComparisonGraph h3 {
   text-align: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   color: var(--vp-c-text-1);
   font-size: 1.05rem;
   font-weight: 600;
+}
+
+.StorageComparisonGraph .chart-subtitle {
+  text-align: center;
+  margin: 0 0 0.5rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.85rem;
 }
 </style>
