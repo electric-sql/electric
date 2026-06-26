@@ -11,8 +11,6 @@ post: true
 published: false
 ---
 
-<!-- TODO(asset): no header.jpg was provided — add /img/blog/durable-streams-at-kernel-speed/header.jpg before publishing (other posts keep a header.jpg/hero.png in the same folder). -->
-
 Every agent you work with today is backed by a log. [Durable Streams](/streams/) is the data primitive for storing it: an append-only log that is durable, addressable, and writable from anywhere on the internet.
 
 Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
