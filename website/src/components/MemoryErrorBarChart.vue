@@ -25,7 +25,7 @@ export default {
       default: 'linear',
       validator: (v) => ['linear', 'logarithmic'].includes(v),
     },
-    height: { type: [Number, String], default: 320 },
+    height: { type: [Number, String], default: 400 },
   },
   setup(props) {
     Chart.defaults.color = getComputedStyleValue('--vp-c-text-1')
@@ -181,7 +181,9 @@ export default {
   <div class="MemoryErrorBarChart" :style="wrapperStyle">
     <h3>{{ title }}</h3>
     <p v-if="subtitle" class="chart-subtitle">{{ subtitle }}</p>
-    <canvas ref="chartCanvas"></canvas>
+    <div class="chart-canvas">
+      <canvas ref="chartCanvas"></canvas>
+    </div>
   </div>
 </template>
 
@@ -189,9 +191,16 @@ export default {
 .MemoryErrorBarChart {
   width: 100%;
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  margin-bottom: 1.75rem;
+  margin-bottom: 2.5rem;
+}
+
+.MemoryErrorBarChart .chart-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .MemoryErrorBarChart h3 {
   text-align: center;

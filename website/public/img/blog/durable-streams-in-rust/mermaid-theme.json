@@ -1,0 +1,36 @@
+{
+  "theme": "base",
+  "sequence": {
+    "actorFontSize": 16,
+    "actorFontWeight": 500,
+    "noteFontSize": 15
+  },
+  "themeVariables": {
+    "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    "fontSize": "14px",
+    "primaryColor": "transparent",
+    "primaryBorderColor": "#75fbfd",
+    "primaryTextColor": "#ffffff",
+    "lineColor": "#ffffff",
+    "tertiaryColor": "transparent",
+    "clusterBkg": "transparent",
+    "clusterBorder": "#75fbfd",
+    "edgeLabelBackground": "transparent",
+    "actorBkg": "transparent",
+    "actorBorder": "#75fbfd",
+    "actorTextColor": "#ffffff",
+    "actorLineColor": "#6b7280",
+    "signalColor": "#ffffff",
+    "signalTextColor": "#ffffff",
+    "labelBoxBkgColor": "transparent",
+    "labelBoxBorderColor": "#75fbfd",
+    "labelTextColor": "#ffffff",
+    "noteBkgColor": "transparent",
+    "noteBorderColor": "#75fbfd",
+    "noteTextColor": "#ffffff",
+    "sequenceNumberColor": "#1a1a2e",
+    "activationBkgColor": "transparent",
+    "activationBorderColor": "#75fbfd"
+  },
+  "themeCSS": ".edgeLabel, .edgeLabel p, .edgeLabel span { color: #ffffff !important; } .edgeLabel rect, .labelBkg { fill: transparent !important; background-color: transparent !important; opacity: 0 !important; } .messageText, .loopText, .loopText tspan { fill: #ffffff !important; } .actor { stroke-width: 2px !important; } .note { stroke-width: 2px !important; } .node rect, .node circle, .node ellipse, .node polygon, .node path { stroke-width: 2px !important; }"
+}

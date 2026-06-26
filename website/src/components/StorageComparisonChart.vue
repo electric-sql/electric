@@ -74,7 +74,7 @@ export default {
     // Fixed height for the chart container. Number -> px, or any CSS size string.
     height: {
       type: [Number, String],
-      default: 320,
+      default: 400,
     },
   },
   setup(props) {
@@ -291,7 +291,9 @@ export default {
   <div class="StorageComparisonGraph" ref="wrapperEl" :style="wrapperStyle">
     <h3>{{ title }}</h3>
     <p v-if="subtitle" class="chart-subtitle">{{ subtitle }}</p>
-    <canvas ref="chartCanvas"></canvas>
+    <div class="chart-canvas">
+      <canvas ref="chartCanvas"></canvas>
+    </div>
   </div>
 </template>
 
@@ -299,9 +301,16 @@ export default {
 .StorageComparisonGraph {
   width: 100%;
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  margin-bottom: 1.75rem;
+  margin-bottom: 2.5rem;
+}
+
+.StorageComparisonGraph .chart-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @media (max-width: 860px) {
