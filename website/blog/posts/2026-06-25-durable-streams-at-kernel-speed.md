@@ -31,7 +31,7 @@ Today we are releasing a new server implementation of Durable Streams, written i
 Its speed comes from a single decision: the bytes stored on disk are the bytes sent on the wire. A read is then a byte-range over a file, and a write is an append whose principal cost is durability. The rest of this post is how both are made inexpensive.
 
 > [!Info] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Get started with Durable&nbsp;Streams
-> [Download the crate](https://crates.io/crates/durable-streams) and start building, [sign up for Electric&nbsp;Cloud](/cloud/) to try Durable&nbsp;Streams as a managed service, or [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main) yourself.
+> [Sign up for Electric&nbsp;Cloud](/cloud/) to try Durable&nbsp;Streams as a managed service, [download the crate](https://crates.io/crates/durable-streams) and start building, or [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main) yourself.
 
 ## A primer on the protocol
 
