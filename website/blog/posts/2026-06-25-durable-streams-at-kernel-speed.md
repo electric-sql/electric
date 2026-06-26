@@ -91,7 +91,7 @@ We run several workloads to evaluate write scalability against various implement
 
 The configurations we run are the following:
 
-- **ds-rust**: the Rust Durable Streams server we have built
+- **rust**: the Rust Durable Streams server we have built
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
 - [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
 - [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
@@ -100,24 +100,24 @@ The configurations we run are the following:
 
 In this experiment, we ramp up the client fleet to saturation to find the maximum throughput of the server. Each client operation is a 256-byte binary payload over a fixed range of streams.
 
-| # streams | ds-rust | ursula | node | s2lite |
-| --------- | ------- | ------ | ---- | ------ |
-| 100       | 520k    | 48k    | 55k  | 2.0k   |
-| 1,000     | 650k    | 91k    | 76k  | —      |
-| 10,000    | 572k    | 89k    | 63k  | —      |
-| 100,000   | 860k    | —      | —    | —      |
+| # streams | rust | node | ursula | s2lite |
+| --------- | ---- | ---- | ------ | ------ |
+| 100       | 520k | 55k  | 48k    | 2.0k   |
+| 1,000     | 650k | 76k  | 91k    | —      |
+| 10,000    | 572k | 63k  | 89k    | —      |
+| 100,000   | 860k | —    | —      | —      |
 
 *Append throughput at saturation (appends/s); single node, 256-byte records.*
 
-**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
+**rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
 #### Memory usage
 
-Serving a hundred thousand streams, ds-rust holds a median resident footprint of about **515 MB**, briefly spiking under a gigabyte during the write burst at initialization. At lower stream counts it sits in the tens to low hundreds of MB. Our Node server is about 800 MB at 10k streams and runs out of memory at 100k.
+Serving a hundred thousand streams, rust holds a median resident footprint of about **515 MB**, briefly spiking under a gigabyte during the write burst at initialization. At lower stream counts it sits in the tens to low hundreds of MB. Our Node server is about 800 MB at 10k streams and runs out of memory at 100k.
 
 Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
 
-| # streams | ds-rust (peak / p50) | Node (peak / p50) |
+| # streams | rust (peak / p50) | Node (peak / p50) |
 | --------- | -------------------- | ----------------- |
 | 100       | 103 / 45             | 488 / 279         |
 | 1,000     | 52 / 41              | 214 / 159         |
@@ -132,7 +132,7 @@ Once written, all data is served directly from disk without transformation. No d
 
 One writer feeds a growing set of SSE subscribers. Median delivery latency stayed around a millisecond at small fan-outs and rose to about four milliseconds at a thousand subscribers, on par with Ursula.
 
-| # subscribers | ds-rust (p50) | ursula (p50) |
+| # subscribers | rust (p50) | ursula (p50) |
 | ------------- | ------------- | ------------ |
 | 1             | 1.00          | 0.99         |
 | 10            | 1.09          | 1.10         |
@@ -143,9 +143,9 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 ### Catch-up: how fast can a client replay history?
 
-A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
+A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
 
-| metric (1 KB events, 200 per stream) | ds-rust | Node | Ursula |
+| metric (1 KB events, 200 per stream) | rust | Node | Ursula |
 | ------------------------------------- | ------- | ------ | ------ |
 | per-client catch-up p99 (ms)          | 146     | 186  | 126    |
 | aggregate replay throughput (MB/s)    | 1,306   | 700 | 1,039  |
