@@ -12,12 +12,13 @@ published: true
 ---
 
 <script setup>
+import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
 import StorageComparisonChartColumn from '../../src/components/StorageComparisonChartColumn.vue'
 </script>
 
 The industry is moving agents out of sandboxes and onto the internet — a third wave of agents that are durable, multi-user and [long-lived](/blog/2026/06/04/serverless-agents). [Durable Streams](/streams/) is the primitive for this: an append-only log that works over HTTP. 
 
-Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). That adoption shows up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
+Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). Its adoption is showing up across the ecosystem. It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
 
 Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, conformant, easy to deploy and open-source.
 
@@ -104,22 +105,21 @@ The configurations we run are the following:
 
 In this experiment, we ramp up the client fleet to saturation to find the maximum throughput of the server. Each client operation is a 256-byte binary payload over a fixed range of streams.
 
-<StorageComparisonChartColumn
+<StorageComparisonChart
   title="Write throughput at saturation"
   :data="[
-    { label: 'rust', data: [520, 650, 572, 860] },
-    { label: 'node', data: [55, 76, 63, null] },
-    { label: 'ursula', data: [48, 91, 89, null] },
-    { label: 's2lite', data: [2, null, null, null] }
+    { label: 'rust', data: [520, 650, 572, 860], color: '#06b6d4' },
+    { label: 'node', data: [55, 76, 63, null], color: '#f59e0b' },
+    { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' },
+    { label: 's2lite', data: [2, null, null, null], color: '#ef4444' }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
   y-axis-title="Appends/s"
   y-axis-suffix="k"
-  y-scale-type="logarithmic"
 />
 
-*Append throughput at saturation (appends/s, log scale); single node, 256-byte records.*
+*Append throughput at saturation (appends/s); single node, 256-byte records.*
 
 **rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
