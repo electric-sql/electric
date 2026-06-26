@@ -13,6 +13,7 @@ published: true
 
 <script setup>
 import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
+import MemoryErrorBarChart from '../../src/components/MemoryErrorBarChart.vue'
 </script>
 
 The industry is moving agents out of sandboxes and onto the internet — a third wave of agents that are durable, multi-user and [long-lived](/blog/2026/06/04/serverless-agents). [Durable Streams](/streams/) is the primitive for this: an append-only log that works over HTTP. 
@@ -134,6 +135,19 @@ Once written, all data is served directly from disk without transformation. No d
 | 100,000   | 950 / 515         | —                 | —                   |
 
 *Server working-set memory under write load (peak / p50, MB). Node runs out of memory at 100k streams; ursula caps out at 10k.*
+
+<MemoryErrorBarChart
+  title="Working-set memory — p50 (bars) with peak (whisker)"
+  :data="[
+    { label: 'rust', p50: [45, 41, 177, 515], peak: [103, 52, 202, 950], color: '#06b6d4' },
+    { label: 'node', p50: [279, 159, 793, null], peak: [488, 214, 1052, null], color: '#f59e0b' },
+    { label: 'ursula', p50: [2644, 1817, 4286, null], peak: [3693, 2245, 5058, null], color: '#a855f7' }
+  ]"
+  :labels="['100', '1,000', '10,000', '100,000']"
+  x-axis-title="Number of streams"
+  y-axis-title="Resident memory"
+  y-axis-suffix=" MB"
+/>
 
 ***Note**: we have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
 
