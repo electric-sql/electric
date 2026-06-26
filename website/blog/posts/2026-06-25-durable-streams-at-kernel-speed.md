@@ -99,7 +99,6 @@ The configurations we run are the following:
 - **rust**: this implementation
 - **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
 - [**ursula**](https://github.com/tonbo-io/ursula): a Kafka-inspired implementation that uses replication for durability
-- [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
 
 ### Write throughput
 
@@ -110,17 +109,15 @@ In this experiment, we ramp up the client fleet to saturation to find the maximu
   :data="[
     { label: 'rust', data: [520, 650, 572, 860], color: '#06b6d4' },
     { label: 'node', data: [55, 76, 63, null], color: '#f59e0b' },
-    { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' },
-    { label: 's2lite', data: [2, null, null, null], color: '#ef4444' }
+    { label: 'ursula', data: [48, 91, 89, null], color: '#a855f7' }
   ]"
   :labels="['100', '1,000', '10,000', '100,000']"
   x-axis-title="Number of streams"
   y-axis-title="Appends/s"
   y-axis-suffix="k"
-  y-scale-type="logarithmic"
 />
 
-*Append throughput at saturation (appends/s, log scale); single node, 256-byte records.*
+*Append throughput at saturation (appends/s); single node, 256-byte records.*
 
 **rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device. Ursula runs as a single-node deployment with its WAL off, the best case for a single node.
 
@@ -166,7 +163,7 @@ One writer feeds a growing set of SSE subscribers. Median delivery latency staye
 
 ### Catch-up: how fast can a client replay history?
 
-A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
+A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Our reference Node server completed the same replay at 186 ms, around 700 MB/s. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design.
 
 | metric (1 KB events, 200 per stream) | rust | Node | Ursula |
 | ------------------------------------- | ------- | ------ | ------ |
