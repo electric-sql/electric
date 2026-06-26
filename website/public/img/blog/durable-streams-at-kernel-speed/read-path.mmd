@@ -1,0 +1,13 @@
+sequenceDiagram
+  participant W as Writer
+  participant F as Stream file<br/>(page cache)
+  participant R as Reader
+  participant S as Socket
+
+  W->>F: append (advances tail)
+  F-->>R: wake live readers
+
+  R->>F: GET ?offset (byte range)
+  Note over F: wire bytes already on disk —<br/>nothing to decode or reframe
+  F->>S: sendfile (zero-copy)
+  Note over F,S: one copy serves every live reader.<br/>History streamed in fixed windows.

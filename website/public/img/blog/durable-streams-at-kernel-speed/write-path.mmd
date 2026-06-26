@@ -1,0 +1,11 @@
+sequenceDiagram
+  participant W as Writer
+  participant F as Stream file<br/>(page cache)
+  participant L as Sharded WAL
+  participant R as Live readers
+
+  W->>F: append — write once into page cache
+  F->>L: stage record into WAL
+  F-->>R: publish tail, wake readers (memory latency)
+  Note over L: group-commit — concurrent appends<br/>from many streams batch into one fsync
+  L-->>W: 2xx (only after durable)

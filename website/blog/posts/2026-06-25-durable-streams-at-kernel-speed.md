@@ -1,118 +1,160 @@
 ---
 title: "Durable Streams at kernel speed"
-description: >-
-  A new open-source Rust reference server for Durable Streams that reaches a million operations per second on a single machine — durable, with no cluster and no replicas.
+description: "A Rust reference server for Durable Streams that reaches nearly a million appends per second on a single 4 vCPU node."
 excerpt: >-
-  Today we're releasing a Rust reference server for Durable Streams that scales to a million operations per second on a single machine. Here's the architecture, the kernel-level techniques that get it there, and how it benchmarks against existing implementations.
+  We're releasing a Rust reference server for Durable Streams that reaches nearly a million operations per second on a single 4 vCPU node. Here's the architecture, the kernel-level techniques that make it fast, and how it benchmarks against other implementations.
 authors: [balegas]
-image: /img/blog/durable-streams-at-kernel-speed/header.jpg
 tags: [durable-streams, rust, performance]
+image: /img/blog/durable-streams-at-kernel-speed/header.jpg
 outline: [2, 3]
 post: true
 published: false
 ---
 
-<!-- TODO(asset): no header.jpg was provided — add /img/blog/durable-streams-at-kernel-speed/header.jpg before publishing (other posts use a header.jpg/hero.png in the same folder). -->
+<!-- TODO(asset): no header.jpg was provided — add /img/blog/durable-streams-at-kernel-speed/header.jpg before publishing (other posts keep a header.jpg/hero.png in the same folder). -->
 
-Every agent you work with today is backed by a log. [Durable Streams](/streams/) is the data primitive for storing that state: an append-only log that is durable, addressable, and writable from anywhere, so an agent can be [long-lived](/blog/2026/06/04/serverless-agents), shareable, and free to live on the internet.
+Every agent you work with today is backed by a log. [Durable Streams](/streams/) is the data primitive for storing it: an append-only log that is durable, addressable, and writable from anywhere on the internet.
 
-Durable Streams is built around an open protocol. It is being used to build agent frameworks such as [Flue](https://flueframework.com/) and to persist token streams in chat applications such as Prisma's [oss.chat](https://www.prisma.io/blog/building-open-chat), and it is being implemented independently by projects such as [Ursula](https://ursula.tonbo.io/).
+Durable Streams is built around an open [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md). It is being used to build agent frameworks such as [Flue](https://flueframework.com/), to persist token streams in [chat applications](https://www.prisma.io/blog/building-open-chat), and is being implemented [independently](https://ursula.tonbo.io/) in open source.
 
-Today we are releasing a new reference-server implementation of Durable Streams, written in Rust, that scales to a million operations per second on a single machine. It's open source, performant, and maintained — a server people can build on and deploy easily.
+Today we are releasing a new server implementation of Durable Streams, written in Rust, that scales to nearly a million operations per second on a 4 vCPU machine. It is fast, easy to deploy and open-source.
 
-In this blogpost we cover the architecture, dive into the techniques that get it there, and benchmark it against existing implementations.
+In this blog post we cover the architecture, dive into the techniques that make it fast, and benchmark it against other implementations of Durable Streams.
 
 > [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Run it yourself
-> Deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](#), and [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
-<!-- TODO(links): fill the three (#) placeholders above — reference-server deploy guide, architecture doc, and benchmark-reproduction repo/instructions. -->
+> Deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), and [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
+<!-- TODO(links): fill the two (#) placeholders above — reference-server deploy guide and architecture doc. -->
 
 ## A primer on the protocol
 
-A durable stream is an append-only log. A writer appends data to the tail; a reader supplies an offset — a position that maps to a precise byte in the log — and receives everything from there to the current tail. Once it has caught up, the reader can follow the stream live, over Server-Sent Events or long-polling.
+A durable stream is an append-only log. A writer appends data to the tail of the log. A reader supplies an offset that points to a byte position in the log and reads everything from there to the current tail. Once a reader has caught up, it can subscribe to receive new writes, which are sent to the client over SSE or long-polling.
 
 Because the protocol is plain HTTP, a stream can be served from anywhere and can lean on existing HTTP infrastructure — CDNs in particular — for fast, global distribution.
 
 ## Architecture
 
-At a high level the server has just two jobs: append the bytes of an HTTP request body to a file, and fan bytes from an arbitrary position in a file out to one or many clients. The model is almost trivially simple; the difficulty is making it scale.
-
-The server is a single, standalone Rust binary. It has three parts: an HTTP server that implements the durable streams protocol, taking requests in and streaming responses out; a write-ahead log that makes each append durable; and a hot storage, built on the file system, that holds the recent tail of every stream as a file of the protocol's wire bytes. Behind it sits cold storage — an object store — that receives sealed chunks: the settled prefixes of streams, handed off once they can no longer change.
+At a high level, the server is made of three components: an HTTP server that implements the Durable Streams protocol; a write-ahead log (WAL) that makes each append durable; and hot storage, built on the file system, that holds every stream as a file of the protocol's wire bytes. Optionally, you can connect to an external object store to offload sealed chunks of data. The server forwards requests to hot or cold storage based on the requested offset.
 
 ![Durable Streams server — high-level data flow, durability, and tiered storage](/img/blog/durable-streams-at-kernel-speed/architecture-map.svg)
 
-Because every append is committed to the write-ahead log before it is acknowledged, the server is durable on its own: a single node is production-grade, with no cluster and no replicas. The approach is not new — it is the design behind [Kafka](https://docs.confluent.io/kafka/design/efficient-design.html) and other high-throughput logs, here inside a single binary.
-
 ## Challenges
 
-The model is simple; making it fast is not. The same bytes pass through the server far more often than the work requires — an early version of ours sustained only a few tens of thousands of appends a second <!-- TODO(figure): drop in the exact naive append/s number --> — and three costs dominate.
+The job of the Durable Streams server is almost trivial. The difficulty is making it scale to a large number of streams, at high throughput and low memory usage, without losing a single byte. Our Rust implementation does this while running an order of magnitude faster than our previous Node implementation.
 
-**Write amplification.** A small append can be copied many times on its way to disk. At hundreds of thousands a second, the ceiling is how often each byte is moved, not the bandwidth of the disk.
+**Write amplification.** A small append can be copied many times between the network and the disk. Copying data is wasteful and slow. At hundreds of thousands of operations a second it can make memory usage unbearable.
 
-**Durability.** A durable append must be flushed to the device with an `fsync`, which is slow — milliseconds, not microseconds. Paid once per append across tens of thousands of streams, it caps throughput long before the disk does.
+**Durability.** A durable append must be flushed to the device with an `fsync`, which is a millisecond-scale operation. A naive implementation might flush every write to a stream, which would stall the server most of the time.
 
-**Sending data out.** One record may fan out to thousands of live subscribers, and a reconnecting client may replay a long history. Both are bounded by memory, not bandwidth: the footprint has to follow the working set, not the size of the audience or the history. Holding it to about <!-- TODO(figure): memory figure -->[N] MiB at either extreme is, to us, the most interesting result of this work.
+**Memory usage.** One record may fan out to thousands of live subscribers, and a reconnecting client may replay a long history. We want to keep memory usage stable at all times, even when the data in flight far exceeds the RAM in the box.
 
-The read and write paths are where the server removes these costs. We take each in turn, beginning with reads.
+The key idea behind the design is to move bytes as-is, from the socket into files and back out to the socket, without any transformation, so that data never has to move into user space. Let us dig into the write and read paths to see how that is achieved.
 
-## The read path
+### The write path
 
-The diagram traces a byte through the server — a writer feeding it on one side, readers drawing from the same files on the other. We follow it in two passes, reads first.
+The diagram traces a byte through the server, with a writer feeding it on one side and live subscribers on the other.
 
-![Durable Streams server internals — HTTP engine, writer and reader, sharded WAL, page cache over per-stream log files, cold storage](/img/blog/durable-streams-at-kernel-speed/wal-architecture.svg)
+![Durable Streams write path — append into the page cache, stage into the sharded WAL, wake live readers, and acknowledge only after a group-commit fsync](/img/blog/durable-streams-at-kernel-speed/write-path.svg)
 
-Reads are where the server sends data out, and the constraint there is memory. A read names an offset, and because the file already holds the wire bytes, the server answers with a byte range from it — nothing to decode or reframe. On Linux that range reaches the socket through `sendfile`, moved from the page cache to the wire without passing through the server's address space, so a caught-up reader is served from RAM at roughly a fifth of the CPU a buffered copy would cost. This is possible only because the server owns its sockets, running a hand-written HTTP/1.1 loop rather than a framework that would stage the response back into user space.
+Writes take data from the HTTP socket buffer and append it to a stream log file on disk. Once written to the file system, the bytes stay shortly in the page cache; any live subscribers that are waiting for new data on that stream are woken and go fetch data at newly written offset. Typically they will find the data in the page cache and operation returns very quickly for everyone.
 
-Fan-out costs no more than a single read. A live reader holds nothing but its offset and a place on the stream's watch channel; one append advances the tail and wakes every waiter at once, and because the new bytes are already in the page cache, the whole audience is served from one copy. Delivering an append does not grow more expensive as its audience does.
+**Durability.** To guarantee no data loss, every write to a stream would have to be flushed to disk before its request is acknowledged. That would cause a flood of syscalls when many streams are written concurrently.
 
-Large reads stay bounded the same way: history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its size — and with no garbage collector, that footprint holds steady under load.
+To prevent that, we use a Write ahead log (WAL). Every append, across every stream, is staged into a sharded WAL. We call `fsync()` immediately when new data arrives for a WAL shard; while a flush is in progress, we batch other incoming requests and commit them together in a group commit once the previous batch finishes.
 
-## The write path
+We keep a minimum-LSN watermark (an LSN is a sequence number in the WAL) and recycle WAL segments once all operations in a segment have been written to their stream files.
 
-The other direction answers the first two costs. An append enters through the same loop and is ordered by a per-stream lock — the only lock on the path, so different streams never contend and reads never wait on writes. Its bytes are written once into the page cache and the tail is published at once, waking live readers; only the acknowledgement waits for durability, so a reader sees the append at memory latency while the writer waits for the disk.
+Every WAL record carries a CRC32C checksum, so on restart replay stops at the first record that fails to verify: the unacknowledged tail is discarded and each stream is repaired to its last durable record. CRC32C is a hardware instruction on modern x86 and ARM CPUs and is very fast.
 
-That single write is the answer to write amplification, and for binary streams the server goes further: an append can `splice` from the socket straight into the file — the mirror of `sendfile` on the read side — never copying through user space, which roughly halves the CPU it costs.
+Computing the checksum requires moving data into user space, which prevents using `splice` optimization to copy data directly from the socket to the file. This is a cost paid once; because data is stored in wire format, reads remain fast.
 
-Durability is made cheap by the write-ahead log. Every append, across every stream, is staged into a sharded WAL, and a per-shard committer makes a whole batch durable with one `fsync` rather than one per append. Because a single `fsync` covers the appends of many streams, its cost falls to a fraction per append and the number of flushes stops tracking the number of streams — the answer to durability's per-stream tax. The stream files still take every byte and remain the read surface; they are flushed off the hot path at a checkpoint, after which the WAL is recycled and, on restart, replayed to repair a torn tail.
+Kafka [trades durability for speed](https://kafka.apache.org/35/configuration/topic-level-configs/) by using replication to avoid disk flushes in the write path. Our server provides a `memory` mode that disables WAL and uses `splice` for copying data. This mode is intended to be used with a replication algorithm in the future.
 
-## Results
+> [!Note] Three syscalls worth knowing
+>
+> - **fsync(2)** — A `write()` only deposits data in the kernel's page cache; the kernel flushes it to disk whenever it likes. `fsync` (and `fdatasync`, which skips most metadata) blocks until the bytes are actually on stable storage, so they survive a crash or power loss.
+> - **sendfile(2)** — Copies data directly between two file descriptors (classically a file to a socket) inside the kernel, without bouncing it through a user-space buffer. One kernel-to-kernel transfer instead of a `read()` then a `write()`: fewer copies and context switches.
+> - **splice(2)** — The general zero-copy primitive. It moves data between two descriptors via a kernel pipe, with no user-space copy. It works in either direction (for example, socket to file), as long as one end is a pipe.
 
-All figures below come from a single node — four CPUs, with a Kubernetes client fleet driving load — measured against two other implementations: Ursula, a single-node Raft log, and s2lite, an object-store-backed log. The suite covers three workloads: write throughput, catch-up, and fan-out. These are best-case, single-node numbers rather than a replicated result, and run-to-run variance is within roughly twenty percent.
+### The read path
 
-**Write throughput.** Ramping the client fleet until throughput plateaued, the durable WAL mode reached roughly 800,000 appends per second on four CPUs and the non-durable memory mode about a million; the gap between them is precisely the `fsync` the memory mode does not pay. The amortized flush also makes throughput nearly independent of stream count — a hundred thousand streams perform much as a hundred do — because one `fsync` still serves many. Ursula reached about 154,000 appends per second in memory and 10,000 on disk, and s2lite about 2,000, its stream creation flattening past a hundred streams. Median append latency held between a fraction of a millisecond and about two milliseconds at saturation, against hundreds of milliseconds for Ursula's disk mode and roughly fifty for s2lite.
+![Durable Streams read path — map an offset to a byte range and serve it to the socket with zero-copy sendfile, one shared copy fanning out to every live reader](/img/blog/durable-streams-at-kernel-speed/read-path.svg)
 
-| streams | Durable · WAL | Durable · memory | Ursula · in-mem | Ursula · disk | s2lite |
-|:--|--:|--:|--:|--:|--:|
-| 100 | 494k | 444k | 51k | 4k | 2k |
-| 1,000 | 636k | 496k | 86k | 5k | — |
-| 10,000 | 628k | 509k | 106k | 6k | — |
-| 100,000 | ~810k | ~1.0M | 154k | 10k | — |
+A read request provides an address and an *offset* that maps to a byte position in a file. The server returns all bytes from the offset to the end of the file. The file already holds the wire bytes, so the server reads byte ranges and serves them without modification. On Linux that range reaches the socket through `sendfile`. This is possible only because the server owns its sockets, running a hand-rolled HTTP/1.1 loop rather than a framework that would stage the response back into user space.
 
-*Append throughput at saturation (append/s); single node, 4 CPUs, 256-byte records.*
+Fan-out costs no more than a single read. One append advances the tail and wakes every live reader at once, and because the new bytes are already in memory, all subscribers are served from one shared copy. The cost scales with the payload, not with the number of subscribers.
 
-**Catch-up.** A thousand clients each reconnect to a pre-populated stream and replay it from the start. The server completed catch-up at about 146 ms p99 per client, moving the full log at roughly 1.3 GiB/s in aggregate. Ursula was slightly faster, at 126 ms — its snapshot-and-tail path transfers fewer bytes by design — and s2lite's paginated read was slowest, at 331 ms.
+Large reads stay bounded the same way: history streams out in fixed windows, so replaying a multi-gigabyte backlog costs about one window of memory rather than its full size. With no garbage collector, that footprint holds steady under load.
 
-| metric (1 KiB events, 200 per stream) | Durable | Ursula | s2lite |
-|:--|--:|--:|--:|
-| per-client catch-up p99 (ms) | 146 | 126 | 331 |
-| response body per client (KiB) | 200 | 158 | 471 |
-| aggregate replay throughput (MiB/s) | 1,306 | 1,039 | 1,301 |
+## Benchmarks
 
-**Fan-out.** With one writer feeding a growing set of SSE subscribers, median delivery latency stayed well under a millisecond at small fan-outs and rose to only a few milliseconds at a thousand subscribers — competitive with Ursula and ten to fifty times faster than s2lite's object-store path. Serving the shared tail from cache rather than re-reading it for each subscriber cut latency at high fan-out by roughly fifteen to twenty percent.
+We run several workloads to evaluate write scalability against various implementations of Durable Streams. Each server runs on a single node, pinned to 4 vCPUs, with 16 GB of RAM and an attached NVMe disk. A separate Kubernetes client fleet drives the load on the server. The [benchmarking tool](https://github.com/electric-sql/ds-bench/tree/main) and the published [results](https://github.com/electric-sql/ds-bench/blob/main/results/REPORT.md) are available and reproducible.
 
-| subscribers | Durable (cache off) | Durable (cache on) | Ursula · in-mem | Ursula · disk | s2lite |
-|:--|--:|--:|--:|--:|--:|
-| 1 | 0.38 / 0.56 | 0.32 / 0.50 | 0.39 / 0.57 | 0.41 / 0.63 | — |
-| 10 | 0.48 / 0.67 | 0.45 / 0.65 | 0.49 / 0.66 | 0.50 / 0.70 | 51.3 / 52.0 |
-| 100 | 0.84 / 1.17 | 0.79 / 1.14 | 0.81 / 1.11 | 0.87 / 1.20 | 50.9 / 52.0 |
-| 1,000 | 3.60 / 5.06 | 2.85 / 4.30 | 2.67 / 3.92 | 2.95 / 4.50 | 52.2 / 54.0 |
+The configurations we run are the following:
 
-*SSE end-to-end delivery latency (p50 / p99 ms); one writer at 50 events/s.*
+- **ds-rust**: the Rust Durable Streams server we have built
+- **[node](https://www.npmjs.com/package/@durable-streams/server)**: our reference Node server
+- [**ursula**](https://github.com/tonbo-io/ursula): Ursula with log persistence off — the best single-node scenario for Ursula
+- [**s2lite**](https://github.com/s2-streamstore/s2): a comparable streaming server that implements a different protocol
 
-**Memory.** The most telling figure is the one that barely moves. Across a wide fan-out and a multi-gigabyte replay alike, resident memory held to about <!-- TODO(figure): memory figures from report -->[N] MiB. Because egress is zero-copy and large reads stream in fixed windows, the footprint tracks the working set rather than the volume sent — a thousand listeners or a gigabyte of backfill cost close to what a single reader does.
+### Write throughput
+
+In this experiment, we ramp up the client fleet to saturation to find the maximum throughput of the server. Each client operation is a 256-byte binary payload over a fixed range of streams.
+
+| # streams | ds-rust | ursula | node | s2lite |
+| --------- | ------- | ------ | ---- | ------ |
+| 100       | 520k    | 48k    | 55k  | 2.0k   |
+| 1,000     | 650k    | 91k    | 76k  | —      |
+| 10,000    | 572k    | 89k    | 63k  | —      |
+| 100,000   | 860k    | —      | —    | —      |
+
+**ds-rust** reached roughly **860,000 appends/s** at 100k streams, a ~13x speedup over the reference Node server. Group commit lets batches of writes be `fsync`ed together, and WAL sharding lets multiple `fsync` operations run in parallel across the device.
+
+#### Memory usage
+
+Serving a hundred thousand streams, ds-rust holds a median resident footprint of about **515 MB**, briefly spiking under a gigabyte during the write burst at initialization. At lower stream counts it sits in the tens to low hundreds of MB. Our Node server is about 800 MB at 10k streams and runs out of memory at 100k.
+
+Once written, all data is served directly from disk without transformation. No data is copied into user space to serve a stream request. The only state kept in user space is per-stream metadata, which stays stable because memory management is explicit.
+
+| # streams | ds-rust (peak / p50) | Node (peak / p50) |
+| --------- | -------------------- | ----------------- |
+| 100       | 103 / 45             | 488 / 279         |
+| 1,000     | 52 / 41              | 214 / 159         |
+| 10,000    | 202 / 177            | 1,052 / 793       |
+| 100,000   | 950 / 515            | —                 |
+
+*Server working-set memory under write load (peak / p50, MB).*
+
+*We have not done any memory optimizations yet, and expect to reduce the memory used per stream.*
+
+### SSE fan-out
+
+One writer feeds a growing set of SSE subscribers. Median delivery latency stayed around a millisecond at small fan-outs and rose to about four milliseconds at a thousand subscribers, on par with Ursula.
+
+| # subscribers | ds-rust (p50) | ursula (p50) |
+| ------------- | ------------- | ------------ |
+| 1             | 1.00          | 0.99         |
+| 10            | 1.09          | 1.10         |
+| 100           | 1.44          | 1.42         |
+| 1,000         | 3.72          | 3.28         |
+
+*SSE end-to-end delivery latency (p50, ms); one writer at 50 events/s.*
+
+### Catch-up: how fast can a client replay history?
+
+A thousand clients each attach to a pre-populated stream of 200 events and replay it from the start. ds-rust finished at about **146 ms p99** per client, moving the full log at roughly **1.3 GiB/s** in aggregate, with the zero-copy `sendfile` path doing the work. Ursula was marginally faster at 126 ms, because its snapshot-and-tail path transfers fewer bytes by design; s2lite's paginated object-store read was slowest at 331 ms.
+
+| metric (1 KiB events, 200 per stream) | ds-rust | Ursula |
+| ------------------------------------- | ------- | ------ |
+| per-client catch-up p99 (ms)          | 146     | 126    |
+| aggregate replay throughput (MiB/s)   | 1,306   | 1,039  |
 
 ## Summary and next steps
 
-The result is a single standalone binary that reaches about a million operations a second, stays durable on one machine, and serves wide fan-outs and large histories in a near-constant footprint. None of what gets it there is new, and little of it lives above the kernel: the file is the response, served to the socket by `sendfile` without a copy through user space, and a single `fsync` makes many appends durable at once. That is rather the point — a single node can be made production-grade with techniques that are already well understood.
+We shipped a Durable Streams server in Rust. It does nearly a million operations a second on a single node, and it deploys with one command:
 
-Durable Streams is an open protocol with a growing set of independent implementations, and this server is a reference for the teams who want to run it themselves. It is released and ready today: deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](#), or [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) against the conformance suite. A multi-node server is in development.
-<!-- TODO(links): same three (#) placeholders as the CTA block above — reference-server deploy guide, architecture doc, benchmark-reproduction repo. -->
+```bash
+cargo install durable-streams
+```
+
+Durable Streams is an open protocol with a growing set of independent implementations, and this Rust server is a reference for teams who want to run it themselves. It is released and ready today: deploy the [reference server](#), read the [architecture doc](#), [reproduce the benchmarks](https://github.com/electric-sql/ds-bench/tree/main), or [implement the protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) against the conformance suite.
+<!-- TODO(links): same two (#) placeholders as the CTA block above — reference-server deploy guide and architecture doc. -->
