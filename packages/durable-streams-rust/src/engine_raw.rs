@@ -174,13 +174,20 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
         };
         let store = store.clone();
         tokio::spawn(async move {
-            let _permit = permit; // released when the connection ends
-            let _ = conn_loop(store, stream).await;
+            // The permit is moved INTO conn_loop so it can hand it on to a
+            // detached SSE streaming task (keeping the connection counted while
+            // the big conn_loop future is freed); otherwise it is released when
+            // conn_loop returns.
+            let _ = conn_loop(store, stream, permit).await;
         });
     }
 }
 
-async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<()> {
+async fn conn_loop(
+    store: Arc<Store>,
+    mut stream: TcpStream,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) -> std::io::Result<()> {
     const BAD_REQUEST: &[u8] =
         b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     const TOO_LARGE: &[u8] =
@@ -324,6 +331,34 @@ async fn conn_loop(store: Arc<Store>, mut stream: TcpStream) -> std::io::Result<
             body,
         };
         let resp = handlers::handle(store.clone(), req).await;
+        // SSE: hand the connection off to a DETACHED, minimal streaming task and
+        // return. An SSE subscriber parks for up to SSE_MAX_DURATION; driving it
+        // inline would keep this whole `conn_loop` future (sized to the largest
+        // request handler) resident the entire time — the dominant per-subscriber
+        // cost. The hand-off task's future holds only what streaming needs (the
+        // socket, the event source, a small frame buffer), so an idle subscriber's
+        // resident footprint collapses to ~that, mirroring a per-subscriber cursor
+        // rather than a parked request state machine. The permit moves with it so
+        // the connection stays counted; the stream closes when it ends (the client
+        // reconnects from its last offset — SSE is already capped + reconnecting).
+        if matches!(resp.body, Body::Sse(_)) {
+            tokio::spawn(async move {
+                let _permit = permit; // keep the connection counted until it ends
+                // Pass the request's `keep_alive` (true for a normal SSE GET) so
+                // the framing matches the inline path: `handle_sse` already sets
+                // `Connection: keep-alive`, and `write_head` must not also emit a
+                // `Connection: close`. The socket is closed when this task ends
+                // (it never loops back), so the stream still terminates cleanly.
+                let _ = write_response(&mut stream, resp, is_head, keep_alive).await;
+            });
+            return Ok(());
+        }
+        // A cold-tier `Body::Channel` stream also parks; release the 4 KiB read
+        // buffer first so it isn't pinned for the response (it re-grows on the
+        // next keep-alive request). Safe only with no pipelined bytes buffered.
+        if buf.is_empty() && matches!(resp.body, Body::Channel(_)) {
+            buf = BytesMut::new();
+        }
         write_response(&mut stream, resp, is_head, keep_alive).await?;
         if !keep_alive {
             return Ok(());
@@ -373,6 +408,23 @@ async fn write_response(
             if !suffix.is_empty() {
                 stream.write_all(suffix).await?;
             }
+        }
+        Body::Sse(mut src) => {
+            // Pull-based SSE driven INLINE on this connection task — no spawned
+            // producer task, no mpsc channel (those cost ~4–5 KiB of resident
+            // heap per subscriber, the source of per-subscriber fan-out memory).
+            stream.write_all(&head).await?;
+            debug_assert!(body_len.is_none());
+            // SSE events are small; `frame_chunk` grows this on demand.
+            let mut frame: Vec<u8> = Vec::with_capacity(512);
+            while let Some(b) = src.next_chunk().await {
+                frame.clear();
+                http1::frame_chunk(&mut frame, &b);
+                stream.write_all(&frame).await?;
+            }
+            // SSE is infallible (the client reconnects from its last offset), so
+            // always terminate cleanly.
+            stream.write_all(b"0\r\n\r\n").await?;
         }
         Body::Channel(crate::api::StreamBody { mut rx, failed }) => {
             stream.write_all(&head).await?;
