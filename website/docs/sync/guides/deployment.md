@@ -229,6 +229,9 @@ Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting trace
 
 See the [Telemetry reference](/docs/sync/reference/telemetry#opentelemetry) for configuration details.
 
+> [!Warning] Scrape the Prometheus endpoint, or leave it disabled
+> If you enable the Prometheus endpoint with `ELECTRIC_PROMETHEUS_PORT`, it **must be scraped regularly**. An enabled-but-unscraped endpoint accumulates metrics in memory without bound and can eventually crash the service. If you only use OpenTelemetry, leave `ELECTRIC_PROMETHEUS_PORT` unset. See the [Telemetry reference](/docs/sync/reference/telemetry#metrics) for details.
+
 ### Caching proxy
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/primitives/cdn) or [Fastly](https://www.fastly.com/primitives/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.

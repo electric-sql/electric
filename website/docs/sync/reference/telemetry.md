@@ -20,6 +20,11 @@ Metrics are reported in StatsD and Prometheus formats. To configure Electric to 
 
 You can get the current status of the service by calling the `http://electric-hostname:PROMETHUES_PORT/metrics` endpoint.
 
+> [!Warning] Only enable Prometheus if you are scraping it
+> When `ELECTRIC_PROMETHEUS_PORT` is set, Electric starts a Prometheus reporter that **must be scraped regularly** &mdash; for example by a Prometheus server polling the `/metrics` endpoint on an interval. Distribution (histogram) metrics buffer their observations in memory between scrapes and are only aggregated when the endpoint is scraped. If you enable the port but never scrape it, that buffer grows without bound and will eventually exhaust memory and crash the service.
+>
+> Only set `ELECTRIC_PROMETHEUS_PORT` if a Prometheus-compatible scraper is actively collecting from the endpoint. If you only use [OpenTelemetry](#opentelemetry), leave it unset.
+
 ## OpenTelemetry
 
 Traces are exported using the OpenTelemetry Protocol (OTLP). You can configure the OpenTelemetry Exporter for Electric using the following environment variables.
