@@ -23,7 +23,13 @@ defmodule ElectricTelemetry.MixProject do
         {:req, "~> 0.5"},
         {:telemetry, "~> 1.3"},
         {:telemetry_metrics, "~> 1.1"},
-        {:telemetry_metrics_prometheus_core, "~> 1.2"},
+        # Temporary fork pin: bounds the distribution sample buffer so an enabled-but-unscraped
+        # Prometheus endpoint can't grow ETS without limit. Upstream PR:
+        # https://github.com/beam-telemetry/telemetry_metrics_prometheus_core/pull/77
+        # Revert to `{:telemetry_metrics_prometheus_core, "~> 1.2"}` once that lands on Hex.
+        {:telemetry_metrics_prometheus_core,
+         github: "robacourt/telemetry_metrics_prometheus_core",
+         branch: "feat/auto-flush-distributions"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.3"}
       ],
