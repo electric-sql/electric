@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import * as Linking from 'expo-linking'
 import {
   cloudAuth,
+  devWarn,
   getCloudBaseUrl,
   isCallbackUrl,
   type CloudAuthProvider,
@@ -68,7 +69,7 @@ export function CloudAuthProvider({
         }
       })
       .catch((err) => {
-        console.warn(`[agents-mobile] cloud-auth getInitialURL failed:`, err)
+        devWarn(`[agents-mobile] cloud-auth getInitialURL failed:`, err)
       })
     return () => subscription.remove()
   }, [])

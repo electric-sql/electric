@@ -24,6 +24,12 @@ export { getCloudServiceIdFromServerUrl } from './cloudAgentUrls'
  * param the client sent.
  */
 
+// Auth diagnostics help in development but shouldn't write token-exchange
+// / HTTP-status details to production device logs (logcat / Console.app).
+export const devWarn = (...args: Array<unknown>): void => {
+  if (__DEV__) console.warn(...args)
+}
+
 export type CloudAuthProvider = `github` | `google`
 
 export type CloudAuthStatus =
@@ -577,11 +583,11 @@ export class CloudAuth {
         body: `{}`,
       })
     } catch (err) {
-      console.warn(`[agents-mobile] cloud-auth: getTokenForAgents fetch:`, err)
+      devWarn(`[agents-mobile] cloud-auth: getTokenForAgents fetch:`, err)
       return null
     }
     if (!res.ok) {
-      console.warn(
+      devWarn(
         `[agents-mobile] cloud-auth: getTokenForAgents returned ${res.status}`
       )
       return null
@@ -617,25 +623,25 @@ export class CloudAuth {
         body: `{"json":{}}`,
       })
     } catch (err) {
-      console.warn(`[agents-mobile] cloud-auth: whoami fetch failed:`, err)
+      devWarn(`[agents-mobile] cloud-auth: whoami fetch failed:`, err)
       return
     }
     if (res.status === 401 || res.status === 403) {
-      console.warn(
+      devWarn(
         `[agents-mobile] cloud-auth: whoami returned ${res.status}; signing out`
       )
       await this.signOut()
       return
     }
     if (!res.ok) {
-      console.warn(`[agents-mobile] cloud-auth: whoami returned ${res.status}`)
+      devWarn(`[agents-mobile] cloud-auth: whoami returned ${res.status}`)
       return
     }
     let body: unknown
     try {
       body = await res.json()
     } catch (err) {
-      console.warn(`[agents-mobile] cloud-auth: whoami body parse:`, err)
+      devWarn(`[agents-mobile] cloud-auth: whoami body parse:`, err)
       return
     }
     const result = parseWhoamiUserResponse(body)
@@ -709,7 +715,7 @@ export class CloudAuth {
       try {
         listener(next)
       } catch (err) {
-        console.warn(`[agents-mobile] cloud-auth listener threw:`, err)
+        devWarn(`[agents-mobile] cloud-auth listener threw:`, err)
       }
     }
   }

@@ -9,7 +9,7 @@ import { useCloudAuth } from '../lib/CloudAuthContext'
 import { fontSize, lineHeight, radii, spacing } from '../lib/theme'
 import type { Tokens } from '../lib/theme'
 
-const DELETE_ACCOUNT_URL = `https://electric-sql.com/about/legal/delete-account`
+const DELETE_ACCOUNT_URL = `https://electric.ax/about/legal/delete-account`
 
 /**
  * Settings → Account screen. Mirrors the desktop's `AccountPage` —
