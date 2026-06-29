@@ -26,6 +26,26 @@ pub trait EventSource: Send {
     /// Produce the next framed chunk, or `None` to end the stream. The returned
     /// future borrows `self`, so state lives in the source (no channel buffer).
     fn next_chunk(&mut self) -> Pin<Box<dyn Future<Output = Option<Bytes>> + Send + '_>>;
+
+    /// Reactor eligibility (Linux). When this returns `Some`, the connection task
+    /// hands the socket to the epoll reactor instead of driving the stream
+    /// inline, freeing its future — the per-subscriber cost. Default: not
+    /// eligible (inline / hand-off, as for every non-SSE source).
+    #[cfg(target_os = "linux")]
+    fn reactor_reg(&self) -> Option<SseReg> {
+        None
+    }
+}
+
+/// Live-tail SSE registration: everything the reactor needs to serve a
+/// subscriber once the connection task has handed off its socket. Constructed
+/// only on Linux (`SseSource::reactor_reg`).
+#[cfg(target_os = "linux")]
+pub struct SseReg {
+    pub st: Arc<crate::store::StreamState>,
+    pub start: u64,
+    pub encoding: crate::handlers::SseEncoding,
+    pub client_cursor: Option<u64>,
 }
 
 /// A streamed (chunked) response body plus an abort signal.

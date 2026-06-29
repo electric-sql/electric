@@ -179,6 +179,29 @@ pub struct StreamState {
     /// pass (between the intent meta-write and its clear). Persisted by
     /// `Meta::capture` so a crash mid-compaction is recoverable. See tier.rs.
     pub compaction: StdMutex<Option<PendingCompaction>>,
+    /// Reactor-served SSE subscribers of this stream (Linux). `None` while the
+    /// stream has none — the common case — so idle streams cost only the lock +
+    /// a null pointer; the list (and its allocation) exist only while subscribers
+    /// are attached. See sse_reactor.rs.
+    #[cfg(target_os = "linux")]
+    pub sse_subs: StdMutex<Option<Box<StreamSubs>>>,
+}
+
+/// Reactor subscriber list for one stream — populated only while subscribers are
+/// attached (kept behind `Option<Box<…>>` so idle streams pay nothing).
+#[cfg(target_os = "linux")]
+pub struct StreamSubs {
+    pub subs: Vec<SubHandle>,
+}
+
+/// Locates one reactor subscriber: which shard owns it, its slab key, and the
+/// slot generation (so a stale wake for a freed/reused slot is ignored).
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+pub struct SubHandle {
+    pub shard: u16,
+    pub key: u32,
+    pub gen: u32,
 }
 
 /// Crash-recovery intent for a live-file compaction in progress. While set, the
@@ -577,6 +600,8 @@ impl Store {
             // the file size each boot (see `file_base` above), so the in-memory
             // cell starts clear; the next meta write persists the cleared marker.
             compaction: StdMutex::new(None),
+            #[cfg(target_os = "linux")]
+            sse_subs: StdMutex::new(None),
             config: StreamConfig {
                 content_type: meta.content_type.clone(),
                 ttl_seconds: meta.ttl_seconds,
@@ -738,6 +763,8 @@ impl Store {
             tier: crate::tier::TierState::default(),
             blobstore: self.blobstore.clone(),
             compaction: StdMutex::new(None),
+            #[cfg(target_os = "linux")]
+            sse_subs: StdMutex::new(None),
             config,
         });
         match self.streams.entry(path.to_string()) {

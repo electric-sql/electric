@@ -774,6 +774,9 @@ fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
     // [tail - wire.len(), tail).
     st.set_last_chunk(tail - wire.len() as u64, wire.clone());
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
+    // Wake any reactor-served subscribers of this stream (no-op when none).
+    #[cfg(target_os = "linux")]
+    crate::sse_reactor::wake_stream(st);
 }
 
 // ---------- POST (append) ----------
@@ -1151,6 +1154,8 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             s.durable_tail
         };
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
+        #[cfg(target_os = "linux")]
+        crate::sse_reactor::wake_stream(&st);
     } else {
         st.schedule_meta_flush();
     }
@@ -1349,6 +1354,8 @@ where
         (tail, s.closed_durable)
     };
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
+    #[cfg(target_os = "linux")]
+    crate::sse_reactor::wake_stream(&st);
 
     // Shared response builder: captures `st`, `producer` by ref.
     let make_ok = || {
@@ -1839,7 +1846,7 @@ fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
 // ---------- SSE ----------
 
 #[derive(Clone, Copy)]
-enum SseEncoding {
+pub(crate) enum SseEncoding {
     Json,
     Text,
     Base64,
@@ -1855,9 +1862,30 @@ fn sse_encoding(st: &StreamState) -> SseEncoding {
     }
 }
 
+/// Encode a wire byte range as one SSE `data` event in the stream's encoding.
+/// Shared by the inline producer (`SseSource::next`) and the reactor so both
+/// emit byte-identical frames.
+pub(crate) fn sse_encode_data(out: &mut String, data: &[u8], encoding: SseEncoding) {
+    match encoding {
+        SseEncoding::Json => {
+            // wire bytes end with ','; strip it and wrap the records as an array
+            let inner = &data[..data.len().saturating_sub(1)];
+            let mut payload = String::with_capacity(inner.len() + 2);
+            payload.push('[');
+            payload.push_str(&String::from_utf8_lossy(inner));
+            payload.push(']');
+            sse_data_event(out, &payload);
+        }
+        SseEncoding::Text => sse_data_event(out, &String::from_utf8_lossy(data)),
+        SseEncoding::Base64 => {
+            sse_data_event(out, &crate::api::base64_encode(data, crate::api::BASE64_STD, true))
+        }
+    }
+}
+
 /// Write `payload` as one SSE `data` event, splitting on line terminators to
 /// prevent `data:` injection.
-fn sse_data_event(out: &mut String, payload: &str) {
+pub(crate) fn sse_data_event(out: &mut String, payload: &str) {
     out.push_str("event: data\n");
     for line in payload.split(['\n', '\r']) {
         out.push_str("data:");
@@ -1867,7 +1895,7 @@ fn sse_data_event(out: &mut String, payload: &str) {
     out.push('\n');
 }
 
-fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool, closed: bool) {
+pub(crate) fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool, closed: bool) {
     out.push_str("event: control\n");
     out.push_str("data:{\"streamNextOffset\":\"");
     out.push_str(&format_offset(next));
@@ -1941,26 +1969,7 @@ impl SseSource {
                 crate::telemetry::record_tail_cache(cache_hit, "sse");
                 crate::telemetry::record_read(read_t0.elapsed_secs(), "sse", cache_hit);
                 let mut ev = String::new();
-                match self.encoding {
-                    SseEncoding::Json => {
-                        // wire bytes end with ','; wrap as array
-                        let inner = &data[..data.len().saturating_sub(1)];
-                        let mut payload = String::with_capacity(inner.len() + 2);
-                        payload.push('[');
-                        payload.push_str(&String::from_utf8_lossy(inner));
-                        payload.push(']');
-                        sse_data_event(&mut ev, &payload);
-                    }
-                    SseEncoding::Text => {
-                        sse_data_event(&mut ev, &String::from_utf8_lossy(&data));
-                    }
-                    SseEncoding::Base64 => {
-                        sse_data_event(
-                            &mut ev,
-                            &crate::api::base64_encode(&data, crate::api::BASE64_STD, true),
-                        );
-                    }
-                }
+                sse_encode_data(&mut ev, &data, self.encoding);
                 self.pos = t.bytes;
                 let up_to_date = self.pos >= self.st.tail().bytes;
                 // If the stream closed atomically with this final data, fold the
@@ -2032,6 +2041,26 @@ impl crate::api::EventSource for SseSource {
         &mut self,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Bytes>> + Send + '_>> {
         Box::pin(self.next())
+    }
+
+    /// Live-tail subscribers (root stream, tiering off, start at/after the live
+    /// file base) are served by the epoll reactor: the connection task hands off
+    /// the socket and frees its future. Everything else (cold catch-up from a
+    /// forked/compacted/tiered range) stays on the inline hand-off path.
+    #[cfg(target_os = "linux")]
+    fn reactor_reg(&self) -> Option<crate::api::SseReg> {
+        if self.st.parent.is_some() || self.st.blobstore.is_some() {
+            return None;
+        }
+        if self.start < self.st.shared.read().unwrap().file_base {
+            return None;
+        }
+        Some(crate::api::SseReg {
+            st: self.st.clone(),
+            start: self.start,
+            encoding: self.encoding,
+            client_cursor: self.client_cursor,
+        })
     }
 }
 

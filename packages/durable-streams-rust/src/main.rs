@@ -3,6 +3,8 @@ mod blobstore;
 mod engine_raw;
 mod handlers;
 mod http1;
+#[cfg(target_os = "linux")]
+mod sse_reactor;
 mod store;
 mod telemetry;
 mod tier;
@@ -348,6 +350,10 @@ fn main() {
                 // Stop accepting (the serve future is dropped here), let in-flight
                 // requests — including their group-commit fsync — finish, then flush
                 // telemetry. Bounded so a stuck request can't block shutdown forever.
+                // Close reactor-served SSE subscribers first so their permits are
+                // released and `drain` doesn't wait out the full grace period.
+                #[cfg(target_os = "linux")]
+                sse_reactor::shutdown();
                 engine_raw::drain(std::time::Duration::from_secs(25)).await;
                 telemetry_guard.shutdown();
             }
