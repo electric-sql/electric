@@ -111,6 +111,15 @@ pub fn register(stream: tokio::net::TcpStream, head: Vec<u8>, reg: SseReg, permi
     };
     let _ = std_stream.set_nonblocking(true);
     let fd = std_stream.into_raw_fd();
+    // If shutdown has begun, the target reactor may already have run `close_all`
+    // and exited, which would leak this fd + permit. Close it and let the permit
+    // drop instead.
+    if SHUTDOWN.load(Ordering::Relaxed) {
+        unsafe {
+            libc::close(fd);
+        }
+        return;
+    }
     let pool = pool();
     let shard = &pool[(fd as usize) % pool.len()];
     shard.intake.lock().unwrap().push(Registration {
@@ -440,6 +449,14 @@ impl Reactor {
                 sub.sent += n as usize;
                 continue;
             }
+            if n == 0 {
+                // write(2) accepted nothing yet signalled no error: treat the peer
+                // as gone. Reading errno here would observe a stale value (the
+                // syscall succeeded), risking a spurious EAGAIN re-arm or an EINTR
+                // spin.
+                self.close(key);
+                return;
+            }
             let err = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
             if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
                 self.arm_epollout(key);
@@ -566,6 +583,16 @@ impl Reactor {
     fn close_all(&mut self) {
         for key in 0..self.slab.len() as u32 {
             self.close(key);
+        }
+        // Subscribers still queued for registration never became slab entries:
+        // close their sockets here (dropping each `Registration` releases its
+        // permit) so neither the fd nor the connection-limiter permit leaks — a
+        // held permit would make `drain` wait out its full grace period.
+        let intake = std::mem::take(&mut *self.shard.intake.lock().unwrap());
+        for reg in intake {
+            unsafe {
+                libc::close(reg.fd);
+            }
         }
     }
 }
