@@ -341,6 +341,21 @@ async fn conn_loop(
         // rather than a parked request state machine. The permit moves with it so
         // the connection stays counted; the stream closes when it ends (the client
         // reconnects from its last offset — SSE is already capped + reconnecting).
+        // SSE live-tail fast path (Linux): a reactor-eligible source hands its
+        // socket to the epoll reactor and frees this connection task's future
+        // entirely — the dominant per-subscriber cost. HEAD requests and cold
+        // catch-up fall through to the inline hand-off below.
+        #[cfg(target_os = "linux")]
+        if !is_head {
+            if let Body::Sse(ref src) = resp.body {
+                if let Some(reg) = src.reactor_reg() {
+                    let mut head: Vec<u8> = Vec::with_capacity(256);
+                    http1::write_head(&mut head, resp.status, &resp.headers, None, keep_alive);
+                    crate::sse_reactor::register(stream, head, reg, permit);
+                    return Ok(());
+                }
+            }
+        }
         if matches!(resp.body, Body::Sse(_)) {
             tokio::spawn(async move {
                 let _permit = permit; // keep the connection counted until it ends
