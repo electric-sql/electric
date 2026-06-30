@@ -179,6 +179,15 @@ pub struct StreamState {
     pub tail_tx: watch::Sender<Tail>,
     /// True while a debounced meta flush is pending.
     pub meta_dirty: AtomicBool,
+    /// **Lock-free WAL dirty-set marker** (Tier-1a). The shard's checkpoint epoch
+    /// at which this stream was last registered into its shard's dirty set. The
+    /// hot append path compares this against the shard's current epoch: equal ⇒
+    /// already registered this interval (no lock, no push); not-equal ⇒ CAS it to
+    /// the current epoch and, on the winning transition only, push this stream's
+    /// `Arc<StreamState>` into the shard's dirty collection. Initialised to `0`
+    /// (the shard's epoch starts at `1`), so the first append after creation always
+    /// registers. See `Shard::register_dirty`.
+    pub dirty_epoch: AtomicU64,
     /// Serializes sidecar writes for this stream. Concurrent writers (append
     /// flush, close, tiering offload flip, delete) otherwise race on the shared
     /// `.meta.tmp` file and can reorder their renames, letting a stale non-durable
@@ -613,6 +622,9 @@ impl Store {
             }),
             tail_tx,
             meta_dirty: AtomicBool::new(false),
+            // Epoch 0 < the shard's initial epoch (1), so the first append
+            // registers this stream into the dirty set.
+            dirty_epoch: AtomicU64::new(0),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),
             tier: crate::tier::TierState::from_meta(
@@ -783,6 +795,9 @@ impl Store {
             }),
             tail_tx,
             meta_dirty: AtomicBool::new(false),
+            // Epoch 0 < the shard's initial epoch (1), so the first append
+            // registers this stream into the dirty set.
+            dirty_epoch: AtomicU64::new(0),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),
             tier: crate::tier::TierState::default(),

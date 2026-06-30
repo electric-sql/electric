@@ -321,6 +321,10 @@ fn main() {
         //      per-shard committers, and start the checkpoint ticker. No append can
         //      run before this point (we have not begun serving yet), so no durable
         //      record is lost and no new append collides with un-recovered WAL data.
+        // Held so the shutdown path can stop + join the dedicated committer
+        // threads (Tier-2a) after draining in-flight requests. `None` in
+        // `--durability memory` mode (no committers spawned).
+        let mut wal_for_shutdown: Option<Arc<wal::walset::WalSet>> = None;
         if handlers::durability() == handlers::DurabilityMode::Wal {
             let open_res = match wal_segment_bytes {
                 Some(sz) => wal::walset::WalSet::open_with_segment_size(
@@ -361,6 +365,7 @@ fn main() {
             // distribution + durability gauges. No-op unless built with
             // `--features telemetry`; off the hot commit/append path.
             wal::telemetry::spawn_emitter(Arc::clone(&walset));
+            wal_for_shutdown = Some(walset);
         }
 
         let addr: SocketAddr = (host, port).into();
@@ -380,6 +385,12 @@ fn main() {
                 #[cfg(target_os = "linux")]
                 sse_reactor::shutdown();
                 engine_raw::drain(std::time::Duration::from_secs(25)).await;
+                // Stop + join the dedicated committer threads (Tier-2a) AFTER the
+                // request drain, so any commit a just-drained request staged is
+                // covered by each committer's final drain before the thread exits.
+                if let Some(walset) = wal_for_shutdown.take() {
+                    walset.stop_committers();
+                }
                 telemetry_guard.shutdown();
             }
         }

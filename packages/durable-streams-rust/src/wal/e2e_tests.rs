@@ -18,13 +18,13 @@ use std::io;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use tokio::task::JoinHandle;
 
 use crate::api::{Method, Req};
 use crate::handlers;
 use crate::handlers::test_support::DurabilityGuard;
 use crate::store::Store;
 use crate::tier::TierConfig;
+use crate::wal::shard::CommitterHandle;
 use crate::wal::walset::WalSet;
 
 /// A unique temp data dir for one test.
@@ -40,12 +40,15 @@ fn tmp(tag: &str) -> std::path::PathBuf {
 }
 
 /// A booted WAL-mode server harness: the store with its WAL attached and the
-/// per-shard committers running. Committer `JoinHandle`s are held so a test can
-/// `.abort()` them to simulate a crash (a graceful shutdown would drain them).
+/// per-shard committers running on their dedicated OS threads. Committer
+/// [`CommitterHandle`]s are held so a test can stop + join them to simulate a
+/// crash. (Every record a crash test relies on is already acked — hence durable —
+/// before the stop, so the final drain a graceful stop performs is a no-op for
+/// those records; the on-disk state matches an abrupt crash.)
 struct Harness {
     store: Arc<Store>,
     walset: Arc<WalSet>,
-    committers: Vec<JoinHandle<()>>,
+    committers: Vec<CommitterHandle>,
 }
 
 impl Harness {
@@ -69,23 +72,29 @@ impl Harness {
             .set(Arc::clone(&walset))
             .unwrap_or_else(|_| panic!("WAL already attached"));
         // Spawn committers ourselves (not `walset.spawn_committers()`) so we keep
-        // the JoinHandles and can abort them to simulate a crash.
+        // the handles and can stop them to simulate a crash.
         let mut committers = Vec::new();
         for shard in walset.shards() {
-            let shard = Arc::clone(shard);
-            committers.push(tokio::spawn(shard.run_committer()));
+            committers.push(shard.spawn_committer());
         }
         Ok(Harness { store, walset, committers })
     }
 
-    /// Simulate a crash: abort the committers (so no further `durable_lsn`
+    /// Stop + join every committer thread (so no further `durable_lsn` advance can
+    /// race the test's subsequent file surgery). All records the caller cares
+    /// about are already acked/durable, so each committer's final drain is a
+    /// no-op for them.
+    fn stop_committers(&mut self) {
+        for h in self.committers.drain(..) {
+            h.stop();
+        }
+    }
+
+    /// Simulate a crash: stop the committers (so no further `durable_lsn`
     /// advance) and drop the store + WalSet WITHOUT a graceful drain/shutdown.
     /// The data dir on disk is left exactly as the live process left it.
-    fn crash(self) {
-        for h in &self.committers {
-            h.abort();
-        }
-        drop(self.committers);
+    fn crash(mut self) {
+        self.stop_committers();
         drop(self.store);
         drop(self.walset);
     }
@@ -253,7 +262,7 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
 
     let dir = tmp("noloss-unacked");
 
-    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
     create_stream(&h.store, "s", OCTET).await;
 
     // Two genuinely-acked appends through the real path (durable in the WAL).
@@ -267,9 +276,7 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
     //   (a) append the un-acked bytes to the per-stream file (page-cache write).
     //   (b) plant a TORN partial WAL record right after the two whole durable
     //       records: only a few header bytes, never a full framed record.
-    for c in &h.committers {
-        c.abort();
-    }
+    h.stop_committers();
     let st = h.store.get("s").unwrap();
     let unacked: &[u8] = b"UNACKED-NEVER-DURABLE|";
     {
@@ -480,7 +487,7 @@ async fn e2e_sharding_below_file_base_record_skipped() {
     let _guard = DurabilityGuard::wal();
     let dir = tmp("below-base");
 
-    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
     // Parent with content so a fork can diverge at offset > 0.
     create_stream(&h.store, "parent", OCTET).await;
     append_acked(&h.store, "parent", OCTET, b"0123456789").await; // tail = 10
@@ -507,10 +514,8 @@ async fn e2e_sharding_below_file_base_record_skipped() {
     // Stage a WAL record for the fork BELOW its file_base (stream_offset 2 < 5):
     // the frontier-skip case. It must be skipped on replay (re-applying would be
     // an out-of-range / double-apply; those bytes live in the parent/sealed
-    // prefix). Abort the committer first so we don't perturb the acked frontier.
-    for c in &h.committers {
-        c.abort();
-    }
+    // prefix). Stop the committers first so we don't perturb the acked frontier.
+    h.stop_committers();
     let shard = h.walset.shard_for(child.id);
     shard
         .reserve_and_stage(
@@ -522,11 +527,10 @@ async fn e2e_sharding_below_file_base_record_skipped() {
         .unwrap();
     // Re-run a committer briefly so this staged record DOES become durable in the
     // WAL (proving the skip is in recovery's replay, not just an un-acked drop).
-    let shard_arc = Arc::clone(shard);
-    let c = tokio::spawn(async move { shard_arc.run_committer().await });
+    let c = shard.spawn_committer();
     // Wait until durable so the record is genuinely in the WAL's durable range.
     shard.wait_durable(shard.tail_lsn()).await;
-    c.abort();
+    c.stop();
 
     drop(child);
     let store = h.store;

@@ -135,10 +135,12 @@ pub struct ShardStats {
     /// The append throughput per shard; pairs with `fsync_count` to show the
     /// real coalescing ratio (`staged / fsync_count`).
     staged: AtomicU64,
-    /// Σ durability waiters woken across all commits (the `watch` receiver count
-    /// at each `publish_durable`). `avg_wakeups = woken / fsync_count` is the
-    /// thundering-herd fan-out: how many parked appenders each commit wakes
-    /// (most of which re-check their LSN and immediately re-park).
+    /// Σ durability waiters woken across all commits. After the Tier-1c coalesced
+    /// wakeup this is the count of waiters each `publish_durable` ACTUALLY fires —
+    /// only those whose lsn the new watermark satisfies, not every parked
+    /// subscriber. `avg_wakeups = woken / fsync_count` should sit near ~1 (versus
+    /// the old `watch`-broadcast thundering herd, where it tracked the parked
+    /// subscriber count).
     waiters_woken: AtomicU64,
 }
 
@@ -197,8 +199,8 @@ impl ShardStats {
         self.staged.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Record the durability waiters woken by one commit (`watch` receiver count
-    /// at `publish_durable`). Called once per successful commit.
+    /// Record the durability waiters woken by one commit (the coalesced count of
+    /// oneshots `publish_durable` fired). Called once per successful commit.
     pub fn record_waiters_woken(&self, n: u64) {
         self.waiters_woken.fetch_add(n, Ordering::Relaxed);
     }

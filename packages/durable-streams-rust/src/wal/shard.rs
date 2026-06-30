@@ -29,12 +29,14 @@
 //! the invariant the committer relies on. `lsn`s start at 1; `written_high == 0`
 //! means "nothing contiguous yet".
 
-use std::collections::{BTreeSet, HashMap};
+use std::cmp::Ordering as CmpOrdering;
+use std::collections::{BTreeSet, BinaryHeap, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 
-use tokio::sync::{watch, Notify};
+use tokio::sync::oneshot;
 
 use super::codec::{encode_into, Record, RecordKind};
 use super::segment::{seg_path, FileSegment, SegmentWriter, SEGMENT_BYTES};
@@ -104,13 +106,205 @@ impl ShardInner {
     }
 }
 
+/// A single parked `wait_durable(lsn)` caller: its target `lsn`, a monotonic
+/// `seq` (tie-break so equal-lsn waiters have a total order — `BinaryHeap`
+/// requires `Ord`), and the `oneshot` whose fire un-parks it.
+///
+/// Ordered as a **min-heap by `lsn`** (then `seq`): we reverse the natural
+/// comparison so [`BinaryHeap`] (a max-heap) yields the *smallest* lsn at the
+/// top. That lets [`Shard::publish_durable`] pop exactly the prefix of waiters
+/// with `lsn <= watermark` and stop — the coalesced wakeup — instead of the old
+/// `watch` broadcast that woke every parked subscriber.
+struct DurableWaiter {
+    lsn: u64,
+    seq: u64,
+    tx: oneshot::Sender<()>,
+}
+
+impl PartialEq for DurableWaiter {
+    fn eq(&self, other: &Self) -> bool {
+        self.lsn == other.lsn && self.seq == other.seq
+    }
+}
+impl Eq for DurableWaiter {}
+impl PartialOrd for DurableWaiter {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for DurableWaiter {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        // Reverse `(lsn, seq)` so the max-heap pops the LOWEST lsn first.
+        other
+            .lsn
+            .cmp(&self.lsn)
+            .then_with(|| other.seq.cmp(&self.seq))
+    }
+}
+
+/// Per-shard min-ordered registry of parked durability waiters (the coalesced
+/// replacement for the `watch` broadcast). Guarded by a short `Mutex` held only
+/// to push one waiter (`wait_durable`) or drain the satisfied prefix
+/// (`publish_durable`).
+struct WaiterReg {
+    heap: BinaryHeap<DurableWaiter>,
+    /// Monotonic id handed to each waiter for the heap tie-break.
+    next_seq: u64,
+}
+
+/// Stage→committer signalling for the **dedicated-OS-thread committer** (Tier-2a).
+///
+/// The committer no longer lives on the shared async runtime, so the wakeup can
+/// no longer be an async `tokio::sync::Notify`. This is a plain
+/// `Mutex<flags> + Condvar` the sync appender (`reserve_and_stage`) signals and
+/// the committer thread blocks on.
+///
+/// **Lost-wakeup safety (the load-bearing invariant):** `work_pending` is set
+/// **under the same mutex** the committer checks before parking, and the
+/// committer always *re-snapshots the watermark off-lock after waking* — so a
+/// stage that races the committer's park is never lost. Two cases: if the stage
+/// takes the mutex *after* the committer parks, the condvar wakes the committer
+/// (standard predicate-under-lock pattern), which then re-snapshots and commits;
+/// if the stage takes the mutex *before* the committer parks, the committer sees
+/// `work_pending == true` and does not park, looping to re-snapshot.
+///
+/// Because the watermark is always read fresh after the park (never carried
+/// across), cross-mutex ordering between `inner` (watermark) and this mutex
+/// cannot drop a staged record. This is the same guarantee the old
+/// `Notify`-registration-before-snapshot gave.
+struct CommitSignal {
+    state: Mutex<CommitState>,
+    cv: Condvar,
+}
+
+#[derive(Default)]
+struct CommitState {
+    /// A stage happened since the committer last cleared this — there may be new
+    /// contiguous-written work to fsync. Set under `state`, cleared by the
+    /// committer under `state` before it re-snapshots the watermark.
+    work_pending: bool,
+    /// Shutdown requested: the committer must do a final drain and exit.
+    stop: bool,
+}
+
+impl CommitSignal {
+    fn new() -> Self {
+        CommitSignal {
+            state: Mutex::new(CommitState::default()),
+            cv: Condvar::new(),
+        }
+    }
+
+    /// Appender → committer (hot path): mark work pending and wake the committer.
+    /// The flag is set under `state` so it can never be lost against the
+    /// committer's park (see type docs).
+    fn signal_work(&self) {
+        {
+            let mut g = self.state.lock().unwrap();
+            g.work_pending = true;
+        }
+        // Notify after releasing the lock so a woken committer doesn't immediately
+        // re-block on the mutex we still hold.
+        self.cv.notify_one();
+    }
+
+    /// Shutdown → committer: request a clean stop (committer drains then exits).
+    fn signal_stop(&self) {
+        {
+            let mut g = self.state.lock().unwrap();
+            g.stop = true;
+        }
+        self.cv.notify_one();
+    }
+
+    /// Block until a stage signals work or stop is requested; clear the
+    /// `work_pending` flag and return whether `stop` was requested. Called by the
+    /// committer when it has caught up (nothing left to commit).
+    fn wait_for_work(&self) -> bool {
+        let mut g = self.state.lock().unwrap();
+        while !g.work_pending && !g.stop {
+            g = self.cv.wait(g).unwrap();
+        }
+        g.work_pending = false;
+        g.stop
+    }
+
+    /// Error-backoff wait: park up to `timeout`, returning early if stop is
+    /// requested. Returns whether `stop` was requested. Does **not** clear
+    /// `work_pending` — we want to retry the same un-acked watermark, and a
+    /// pending stage should still drive the next wake. Using the condvar (rather
+    /// than `thread::sleep`) lets shutdown interrupt a long backoff.
+    fn backoff_wait(&self, timeout: std::time::Duration) -> bool {
+        let g = self.state.lock().unwrap();
+        if g.stop {
+            return true;
+        }
+        let (g, _timed_out) = self.cv.wait_timeout(g, timeout).unwrap();
+        g.stop
+    }
+}
+
+/// Handle to a shard's dedicated committer OS thread. Signalling stop + joining
+/// happens on `stop()` (or on `Drop`, so a handle dropped without an explicit
+/// stop still shuts the thread down cleanly rather than detaching it).
+pub struct CommitterHandle {
+    shard: Arc<Shard>,
+    join: Option<std::thread::JoinHandle<()>>,
+}
+
+impl CommitterHandle {
+    /// Signal the committer to stop (non-blocking; does not join). Idempotent.
+    pub fn signal_stop(&self) {
+        self.shard.commit_signal.signal_stop();
+    }
+
+    /// Join the committer thread (call after `signal_stop`). Consumes the handle.
+    pub fn join(mut self) {
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
+    }
+
+    /// Signal stop and join — the common single-handle path (the WalSet shutdown
+    /// path instead `signal_stop`s all shards then `join`s all, for a parallel
+    /// drain). Used by the test harnesses; allowed dead in the production binary.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn stop(self) {
+        self.signal_stop();
+        self.join();
+    }
+}
+
+impl Drop for CommitterHandle {
+    fn drop(&mut self) {
+        // Ensure the thread is asked to stop and reaped even if the handle is
+        // dropped without an explicit `stop()` (e.g. a test guard going out of
+        // scope, or the WalSet being torn down).
+        self.shard.commit_signal.signal_stop();
+        if let Some(j) = self.join.take() {
+            let _ = j.join();
+        }
+    }
+}
+
 /// One WAL shard: a segmented append-only log with its own committer.
 pub struct Shard {
     inner: Mutex<ShardInner>,
-    /// Publishes `durable_lsn` to `wait_durable` waiters.
-    durable_tx: watch::Sender<u64>,
-    /// Wakes the committer whenever a record is staged.
-    notify: Notify,
+    /// The highest lsn made durable + acked. Read cheaply (one relaxed-ish
+    /// atomic load) by `wait_durable`'s fast path, `checkpoint`, the committer,
+    /// and stats; advanced only by `publish_durable`. Replaces the `watch`
+    /// channel's value role — the WAKE role lives in `waiters` below. Storing an
+    /// atomic + firing oneshots both work from the dedicated committer thread
+    /// (Tier-2a), with no tokio runtime handle, so async `wait_durable` futures
+    /// are still woken across the thread boundary.
+    durable_lsn: AtomicU64,
+    /// Min-ordered (by lsn) registry of parked `wait_durable` waiters. A commit
+    /// drains only the waiters whose lsn the new watermark satisfies, instead of
+    /// broadcasting to every parked subscriber (the Tier-1c thundering-herd fix).
+    waiters: Mutex<WaiterReg>,
+    /// Wakes the dedicated committer thread whenever a record is staged (and
+    /// carries the shutdown signal). See [`CommitSignal`].
+    commit_signal: CommitSignal,
     /// `<data-dir>/wal/<shard>/` — where this shard's segments live.
     dir: PathBuf,
     /// The size each segment is `fallocate`'d to and the roll threshold. Defaults
@@ -119,17 +313,38 @@ pub struct Shard {
     /// Immutable for the shard's lifetime, so a plain field (no lock) is enough.
     segment_size: u64,
     /// **Dirty set** (spec §7): the per-stream `StreamState`s this shard has
-    /// *touched* since its last checkpoint, deduped by `stream_id`. The append
-    /// path (`maybe_sync_on_ack`) registers the touched stream's `Arc<StreamState>`
-    /// here. `checkpoint()` drains this set, reads each stream's current logical
-    /// `Shared.tail` and live `Shared.file`, `fdatasync`s exactly these files — no
-    /// double-fsync of untouched streams — *before* recycling the WAL, and records
-    /// each stream's durable tail (the tail at the moment its file is fsync'd) into
-    /// the persisted per-shard tail map (spec §7, task 11b). Holding the
-    /// `StreamState` (rather than a bare `Arc<File>`) lets checkpoint read the
-    /// logical tail it must record alongside the file it fsyncs. This stays
-    /// decoupled from `reserve_and_stage`, which never needs the `StreamState`.
-    dirty: Mutex<HashMap<u64, Arc<StreamState>>>,
+    /// *touched* since its last checkpoint. The append path (`maybe_sync_on_ack`)
+    /// registers the touched stream's `Arc<StreamState>` here via
+    /// `register_dirty`. `checkpoint()` drains this collection, reads each stream's
+    /// current logical `Shared.tail` and live `Shared.file`, `fdatasync`s exactly
+    /// these files — no double-fsync of untouched streams — *before* recycling the
+    /// WAL, and records each stream's durable tail (the tail at the moment its file
+    /// is fsync'd) into the persisted per-shard tail map (spec §7, task 11b).
+    /// Holding the `StreamState` (rather than a bare `Arc<File>`) lets checkpoint
+    /// read the logical tail it must record alongside the file it fsyncs. This
+    /// stays decoupled from `reserve_and_stage`, which never needs the
+    /// `StreamState`.
+    ///
+    /// **Lock-free hot path (Tier-1a):** dedup is no longer done by a per-append
+    /// `HashMap` insert under this lock. Instead each stream carries a
+    /// `StreamState.dirty_epoch`; `register_dirty` only takes this lock to `push`
+    /// on the winning 0→current-epoch CAS transition (at most once per stream per
+    /// checkpoint interval, ~3 s). The already-dirty hot path never touches this
+    /// lock — it is a `Vec` (not a map) because the epoch CAS already guarantees
+    /// each stream is pushed at most once per interval, so no in-collection dedup
+    /// is needed (a stale-epoch race can at worst push a stream twice, costing one
+    /// redundant — harmless — fdatasync, never a lost stream).
+    dirty: Mutex<Vec<Arc<StreamState>>>,
+    /// **Current checkpoint epoch** (Tier-1a), starts at `1` (StreamStates start at
+    /// `dirty_epoch == 0`, so the first append always registers). `checkpoint()`
+    /// `fetch_add(1)`s this and drains `dirty` in the same step. A stream's
+    /// `register_dirty` compares the stream's `dirty_epoch` to this: equal ⇒
+    /// already registered this interval (pure relaxed-load hot path, no lock);
+    /// otherwise CAS the stream to this epoch and, on the winning transition, push
+    /// it into `dirty`. Bumping BEFORE/with the drain is load-bearing: an append
+    /// racing the drain sees a stale stream epoch and re-registers into the next
+    /// interval's collection — no touched stream is ever dropped.
+    dirty_epoch: AtomicU64,
     /// Per-shard batch-size + durability counters (spec §11). Updated once per
     /// successful committer `fdatasync` (`record_batch`) — cheap relaxed atomics,
     /// no lock/alloc/syscall on the commit path. Read off-path by the 1 Hz
@@ -204,7 +419,6 @@ impl Shard {
         std::fs::create_dir_all(&dir)?;
         let seg_start_lsn = 1;
         let active = Arc::new(FileSegment::create(seg_path(&dir, seg_start_lsn), segment_size)?);
-        let (durable_tx, _durable_rx) = watch::channel(0u64);
         Ok(std::sync::Arc::new(Shard {
             inner: Mutex::new(ShardInner {
                 active,
@@ -215,11 +429,18 @@ impl Shard {
                 written_high: 0,
                 written_ahead: BTreeSet::new(),
             }),
-            durable_tx,
-            notify: Notify::new(),
+            durable_lsn: AtomicU64::new(0),
+            waiters: Mutex::new(WaiterReg {
+                heap: BinaryHeap::new(),
+                next_seq: 0,
+            }),
+            commit_signal: CommitSignal::new(),
             dir,
             segment_size,
-            dirty: Mutex::new(HashMap::new()),
+            dirty: Mutex::new(Vec::new()),
+            // Epoch starts at 1; StreamStates start at dirty_epoch 0, so the first
+            // append on every stream registers it (0 != 1).
+            dirty_epoch: AtomicU64::new(1),
             stats: ShardStats::default(),
             #[cfg(test)]
             on_stage: Mutex::new(None),
@@ -420,29 +641,65 @@ impl Shard {
             g.mark_written(lsn);
         }
         self.stats.record_staged();
-        self.notify.notify_one();
+        // Wake the dedicated committer thread. `work_pending` is set under the
+        // signal mutex (after `mark_written` above), so this can never be lost
+        // against the committer's park (see `CommitSignal` docs).
+        self.commit_signal.signal_work();
         Ok(lsn)
     }
 
     /// Register a touched stream's `Arc<StreamState>` into this shard's dirty set
     /// (spec §7). Called from the append path (`maybe_sync_on_ack`) BEFORE staging
     /// the WAL record (register-before-stage, CQ-1), since that is where the
-    /// stream's `Arc<StreamState>` is in hand. Deduped by `stream_id`: re-touching
-    /// a stream just refreshes the handle, so `checkpoint()` reads each touched
-    /// stream's current tail + `fdatasync`s its file exactly once.
+    /// stream's `Arc<StreamState>` is in hand.
     ///
-    /// `reserve_and_stage` itself stays ignorant of `StreamState` (it only ever
-    /// needs `stream_id`); the `StreamState` is needed solely by `checkpoint`, to
-    /// read the durable tail it records and the file it fsyncs.
-    pub fn register_dirty(&self, stream_id: u64, st: Arc<StreamState>) {
-        // Time the contended `dirty` acquisition (--wal-stats only; no clock read
-        // otherwise). This isolates the per-append global dirty-set lock — the
-        // Tier-1 lock-free-`register_dirty` target — from the `inner` lock.
-        let mut g = super::telemetry::timed_lock(
-            |ns| self.stats.record_dirty_lock_wait(ns),
-            || self.dirty.lock().unwrap(),
-        );
-        g.insert(stream_id, st);
+    /// **Lock-free hot path (Tier-1a).** Dedup is by epoch, not by a per-append
+    /// map insert under the shard's `dirty` lock:
+    ///
+    /// - **Hot path (already dirty this interval):** one relaxed load of the shard
+    ///   epoch + one relaxed load of the stream's `dirty_epoch`; if equal, return
+    ///   immediately. No lock, no push, no clock read, no allocation — this is the
+    ///   per-append common case (a stream is appended to many times between two
+    ///   ~3 s checkpoints).
+    /// - **Transition (first touch this interval):** CAS the stream's `dirty_epoch`
+    ///   to the current shard epoch. The unique winner of the 0/stale→epoch
+    ///   transition pushes the `Arc<StreamState>` into the shard's `dirty` Vec.
+    ///   Because that happens at most once per stream per checkpoint interval, the
+    ///   Vec's `Mutex` is off the hot path — taken only on the transition.
+    ///
+    /// The contention stat (`record_dirty_lock_wait`) is still wired, but only
+    /// around the rare transition lock, so `dirty_wait_load` collapses toward ~0
+    /// (the hot path records nothing). `reserve_and_stage` stays ignorant of
+    /// `StreamState`; the `StreamState` is needed solely by `checkpoint`.
+    pub fn register_dirty(&self, _stream_id: u64, st: Arc<StreamState>) {
+        let epoch = self.dirty_epoch.load(Ordering::Relaxed);
+        // Hot path: already registered for the current checkpoint interval. Pure
+        // relaxed loads + a branch — never touches the `dirty` lock.
+        if st.dirty_epoch.load(Ordering::Relaxed) == epoch {
+            return;
+        }
+        // Transition: claim this stream for the current epoch. Only the thread that
+        // wins the CAS (0/stale → epoch) pushes; a concurrent racer that lost (or
+        // already advanced the stream to `epoch`) does nothing. AcqRel so the push
+        // below is ordered after the claim is published. `compare_exchange` (not
+        // `_weak`) — we must not spuriously fail and double-push.
+        let cur = st.dirty_epoch.load(Ordering::Relaxed);
+        if cur == epoch {
+            return;
+        }
+        if st
+            .dirty_epoch
+            .compare_exchange(cur, epoch, Ordering::AcqRel, Ordering::Relaxed)
+            .is_ok()
+        {
+            // Off-hot-path: time the (now rare) dirty-set lock so `dirty_wait_load`
+            // still reports the residual transition-only contention (≈0).
+            let mut g = super::telemetry::timed_lock(
+                |ns| self.stats.record_dirty_lock_wait(ns),
+                || self.dirty.lock().unwrap(),
+            );
+            g.push(st);
+        }
     }
 
     /// **Checkpoint** (spec §7), per shard, non-blocking w.r.t. acks:
@@ -469,7 +726,7 @@ impl Shard {
     /// Returns the `checkpoint_lsn` persisted.
     pub async fn checkpoint(&self) -> io::Result<u64> {
         // 1. Snapshot the recycle floor = the highest durably-acked lsn.
-        let checkpoint_lsn = *self.durable_tx.borrow();
+        let checkpoint_lsn = self.durable_lsn.load(Ordering::Acquire);
 
         // 2. Drain the dirty set atomically, then fdatasync each touched file.
         //    Draining first means a concurrent append re-registers into a fresh
@@ -481,13 +738,23 @@ impl Shard {
         //    file's cache, so the file is durable up to AT LEAST this tail
         //    afterwards (a later concurrent append only extends past it and lands
         //    in the next checkpoint). Recording this tail is conservative-safe.
+        //    LOAD-BEARING ORDERING (Tier-1a): bump the checkpoint epoch and drain
+        //    the dirty Vec in the SAME `dirty`-lock critical section that
+        //    `register_dirty`'s push also takes. This serialization is what makes
+        //    the lock-free hot path safe: a stream registered for the OLD epoch is
+        //    in the Vec we take (and keeps its old `dirty_epoch`, so its next append
+        //    re-registers into the new interval); a stream whose `register_dirty`
+        //    observes the bumped epoch necessarily pushes AFTER we release this
+        //    lock, landing in the fresh post-take Vec for the next checkpoint. So no
+        //    touched stream is ever both drained here AND silently skipped next time.
         let touched: Vec<(u64, u64, Arc<std::fs::File>)> = {
             let mut g = self.dirty.lock().unwrap();
+            self.dirty_epoch.fetch_add(1, Ordering::AcqRel);
             std::mem::take(&mut *g)
                 .into_iter()
-                .map(|(id, st)| {
+                .map(|st| {
                     let s = st.shared.read().unwrap();
-                    (id, s.tail, Arc::clone(&s.file))
+                    (st.id, s.tail, Arc::clone(&s.file))
                 })
                 .collect()
         };
@@ -792,12 +1059,12 @@ impl Shard {
         self.stats.snapshot()
     }
 
-    /// Current `durable_lsn` — the highest lsn made durable + acked. Cheap
-    /// (`watch::borrow`), read by the emitter and by [`Shard::checkpoint`].
+    /// Current `durable_lsn` — the highest lsn made durable + acked. Cheap (one
+    /// atomic load), read by the emitter and by [`Shard::checkpoint`].
     /// Telemetry/test-only as a public accessor (see [`Shard::wal_size_bytes`]).
     #[cfg_attr(not(any(feature = "telemetry", test)), allow(dead_code))]
     pub fn durable_lsn_now(&self) -> u64 {
-        *self.durable_tx.borrow()
+        self.durable_lsn.load(Ordering::Acquire)
     }
 
     /// The shard's `tail_lsn` — the highest lsn **assigned** so far (`next_lsn - 1`,
@@ -810,19 +1077,51 @@ impl Shard {
     }
 
     /// Await until this shard's `durable_lsn >= lsn`.
+    ///
+    /// Coalesced wakeup (Tier-1c): instead of subscribing to a broadcast that
+    /// every commit wakes, we register a single `oneshot` keyed by `lsn` in the
+    /// min-ordered [`WaiterReg`]. [`Shard::publish_durable`] fires only the
+    /// waiters whose lsn the new watermark satisfies — so a parked waiter is
+    /// woken at most once, exactly when its lsn becomes durable.
+    ///
+    /// **Cross-thread wakeup (Tier-2a):** `publish_durable` runs on the dedicated
+    /// committer OS thread; `oneshot::Sender::send` fires the receiver's waker
+    /// from any thread, so an async `wait_durable` future parked on the runtime is
+    /// woken across the thread→async boundary with no tokio handle required.
+    ///
+    /// **Lost-wakeup safety (the register/publish race):** `publish_durable`
+    /// stores `durable_lsn` (Release) *before* it locks the heap to drain; we
+    /// push our waiter *before* re-loading `durable_lsn` (Acquire). The heap
+    /// `Mutex` orders the two heap critical sections, so for any interleaving
+    /// either (a) our push precedes the commit's drain — it fires our oneshot —
+    /// or (b) the commit's drain precedes our push — but then its `durable_lsn`
+    /// store happens-before our re-check load, which sees it and returns. No
+    /// commit can land in the gap between the check and the registration and
+    /// leave us parked forever.
     pub async fn wait_durable(&self, lsn: u64) {
-        let mut rx = self.durable_tx.subscribe();
-        if *rx.borrow_and_update() >= lsn {
+        // Fast path: already durable — return without touching the registry.
+        if self.durable_lsn.load(Ordering::Acquire) >= lsn {
             return;
         }
-        loop {
-            if rx.changed().await.is_err() {
-                return;
-            }
-            if *rx.borrow_and_update() >= lsn {
-                return;
-            }
+        let rx = {
+            let mut reg = self.waiters.lock().unwrap();
+            let (tx, rx) = oneshot::channel();
+            let seq = reg.next_seq;
+            reg.next_seq = reg.next_seq.wrapping_add(1);
+            reg.heap.push(DurableWaiter { lsn, seq, tx });
+            rx
+        };
+        // Re-check AFTER registering to close the race where a commit landed
+        // between the fast-path load and the push (see the doc comment). If it is
+        // now durable, return; our heap entry's receiver is dropped, so a later
+        // drain firing it is a silent no-op.
+        if self.durable_lsn.load(Ordering::Acquire) >= lsn {
+            return;
         }
+        // Park until our oneshot fires. A `RecvError` (sender dropped without
+        // firing) only happens at shard teardown — treat as "return", matching
+        // the old `watch::changed()`-errored behaviour.
+        let _ = rx.await;
     }
 
     /// Current contiguous-written watermark (`written_high`). Snapshot this
@@ -846,43 +1145,102 @@ impl Shard {
     /// is the committer's Ok-branch; callers MUST pass a watermark snapshotted
     /// BEFORE the covering fsync (never re-snapshot afterwards).
     pub fn publish_durable(&self, watermark: u64) {
-        let durable = *self.durable_tx.borrow();
+        let durable = self.durable_lsn.load(Ordering::Acquire);
         if watermark <= durable {
             return;
         }
         self.stats.record_batch(watermark - durable);
-        // Thundering-herd fan-out: the `watch` send below wakes EVERY currently-
-        // parked `wait_durable` subscriber on this shard, most of which re-check
-        // their LSN and immediately re-park. Record how many this commit wakes
-        // (the coalesced-wakeup Tier-1 target). receiver_count == parked waiters.
-        self.stats
-            .record_waiters_woken(self.durable_tx.receiver_count() as u64);
-        // Use send_replace (unconditional write) so the watermark is stored even
-        // when no receivers exist yet — `durable_tx` sits at 0 receivers between
-        // appends because the constructor drops `_durable_rx` and a waiter only
-        // subscribes inside `wait_durable` AFTER `reserve_and_stage` returns.
-        // `send()` silently no-ops when receiver_count == 0, which would drop the
-        // durable watermark; a waiter that subscribes afterwards reads a stale
-        // value and waits forever for an already-durable record.
-        self.durable_tx.send_replace(watermark);
+        // Publish the new watermark (Release) BEFORE draining the waiter heap.
+        // This ordering is load-bearing for lost-wakeup safety: a `wait_durable`
+        // that registers concurrently re-checks `durable_lsn` after pushing, and
+        // the heap `Mutex` guarantees it either observes this store or is drained
+        // below (see `wait_durable`'s doc comment). Storing the atomic + firing the
+        // oneshots below both work from the dedicated committer OS thread (Tier-2a)
+        // with no tokio runtime handle.
+        self.durable_lsn.store(watermark, Ordering::Release);
+        // Coalesced wakeup (Tier-1c): under the short lock, pop ONLY the prefix of
+        // waiters whose lsn <= the new watermark and fire their oneshots. The heap
+        // is min-ordered by lsn, so the first entry above the watermark stops the
+        // drain — every still-parked waiter has a strictly higher lsn. This
+        // replaces the `watch` broadcast that woke every parked subscriber (most
+        // of which re-checked and immediately re-parked — the thundering herd).
+        let mut fired = 0u64;
+        {
+            let mut reg = self.waiters.lock().unwrap();
+            while let Some(top) = reg.heap.peek() {
+                if top.lsn > watermark {
+                    break;
+                }
+                let w = reg.heap.pop().expect("peek just confirmed a top entry");
+                // `send` fails silently if the receiver was dropped (a cancelled
+                // wait_durable — timeout/connection drop); count only live waiters
+                // actually woken, so `waiters_woken_avg` reflects real wakeups.
+                if w.tx.send(()).is_ok() {
+                    fired += 1;
+                }
+            }
+        }
+        // Record how many waiters this commit ACTUALLY woke — now just the few
+        // satisfied by this watermark, not every parked subscriber. This is the
+        // proof of the coalescing: `waiters_woken_avg` collapses toward ~1.
+        self.stats.record_waiters_woken(fired);
         let mut g = self.inner.lock().unwrap();
         g.sealed_pending.retain(|(end_lsn, _)| *end_lsn > watermark);
     }
 
-    /// The shard's group-commit committer: wait for staged work, `fdatasync` the
-    /// active segment, advance `durable_lsn` to the contiguous-written watermark,
-    /// and publish it to waiters. Runs forever (the caller `abort`s it).
+    /// One group-commit attempt: snapshot the contiguous-written watermark,
+    /// `fdatasync` the segments that cover it (sealed-pending first, then active),
+    /// then publish it as `durable_lsn`. Returns `Ok(Some(watermark))` when an
+    /// advance was published, `Ok(None)` when already caught up (nothing to do),
+    /// and `Err` when an fsync failed.
     ///
-    /// **Lost-wakeup safety:** we register the `Notified` future *before*
-    /// snapshotting the watermark. `Notify` stores one permit, so a `notify_one`
-    /// racing between our snapshot and the `await` is captured by the already-
-    /// registered future and returns immediately on the next iteration — no
-    /// staged record can sit un-committed waiting for a wakeup that already fired.
+    /// **No-loss / watermark invariants (load-bearing):** the watermark is
+    /// snapshotted **before** the covering fsync and published **exactly** (never
+    /// re-snapshotted after the fsync — see [`Shard::publish_durable`]). On fsync
+    /// error we return `Err` and do **not** publish, so `durable_lsn` never
+    /// advances over un-fsync'd bytes (records stay un-acked). `sealed_pending`
+    /// segments are fsync'd before `publish_durable` retires them.
     ///
-    /// **fsync-error path:** if `fdatasync` fails we do **not** advance
-    /// `durable_lsn` and do **not** publish — the staged records stay un-acked,
-    /// exactly as the no-loss invariant requires (spec §6).
-    pub async fn run_committer(self: std::sync::Arc<Self>) {
+    /// Runs the `fdatasync` **synchronously on the committer's own OS thread** —
+    /// no `spawn_blocking` round-trip onto the shared runtime (the Tier-2a win).
+    fn commit_once(&self) -> io::Result<Option<u64>> {
+        let watermark = self.snapshot_watermark();
+        let durable = self.durable_lsn.load(Ordering::Acquire);
+        if watermark <= durable {
+            return Ok(None);
+        }
+        let (seg, sealed) = self.collect_fsync_targets();
+        for s in &sealed {
+            s.fdatasync()?;
+        }
+        seg.fdatasync()?;
+        // Snapshotted-before-fsync watermark, published exactly.
+        self.publish_durable(watermark);
+        Ok(Some(watermark))
+    }
+
+    /// The shard's group-commit committer, run on a **dedicated OS thread** (one
+    /// per shard, spawned by [`Shard::spawn_committer`]) — off the shared async
+    /// runtime, so committers don't time-share the network/reactor worker threads
+    /// and pay no per-commit `spawn_blocking` hop (Tier-2a). It blocks on the
+    /// [`CommitSignal`] condvar for staged work, `fdatasync`s synchronously, and
+    /// advances/publishes `durable_lsn`. Firing the per-waiter `oneshot`s from
+    /// `publish_durable` (driven from this thread) still wakes async
+    /// `wait_durable` futures across the thread→async boundary.
+    ///
+    /// **Lost-wakeup safety:** when caught up we park in `wait_for_work`, which
+    /// checks `work_pending` **under the same mutex** a stage sets it under, and
+    /// we always re-snapshot the watermark off-lock after waking. A stage racing
+    /// the park is therefore never lost (see [`CommitSignal`]).
+    ///
+    /// **fsync-error path:** on `fdatasync` failure we do **not** advance
+    /// `durable_lsn` (no ack) and back off with bounded exponential delay
+    /// (interruptible by shutdown), exactly as the no-loss invariant requires.
+    ///
+    /// **Shutdown:** on a stop signal the loop performs a **final drain**
+    /// (commits everything already contiguous-written, so in-flight commits are
+    /// not dropped) and then returns so the thread can be joined.
+    pub fn run_committer(&self) {
         // Backoff state for the fsync-error path: a persistently failing disk
         // (ENOSPC/EIO/read-only volume) must not busy-spin a core, hammer the disk,
         // and flood stderr. The no-loss invariant holds throughout — `durable_lsn`
@@ -893,71 +1251,121 @@ impl Shard {
         let mut backoff = RETRY_BACKOFF_MIN;
         let mut consecutive_errors: u64 = 0;
         loop {
-            // Register interest BEFORE reading state (lost-wakeup safety).
-            let notified = self.notify.notified();
-
-            let watermark = self.snapshot_watermark();
-            let durable = *self.durable_tx.borrow();
-
-            if watermark > durable {
-                let (seg, sealed) = self.collect_fsync_targets();
-                let fsync_res: io::Result<()> = tokio::task::spawn_blocking(move || {
-                    for s in &sealed {
-                        s.fdatasync()?;
-                    }
-                    seg.fdatasync()?;
-                    Ok(())
-                })
-                .await
-                .unwrap_or_else(|e| Err(io::Error::other(format!("committer fsync task panicked: {e}"))));
-                match fsync_res {
-                    Ok(()) => {
-                        self.publish_durable(watermark);
-                        consecutive_errors = 0;
-                        backoff = RETRY_BACKOFF_MIN;
-                        continue;
-                    }
-                    Err(e) => {
-                        // Rate-limited log + bounded exponential backoff. We SLEEP
-                        // (rather than await `notified`) so a stream of concurrent
-                        // appends — each leaving a `Notify` permit — cannot turn the
-                        // retry into a hot loop. A recovered disk costs at most one
-                        // backoff interval of extra latency. Dropping the registered
-                        // `notified` here is safe: an un-polled `Notified` does not
-                        // consume the stored permit, so no stage wakeup is lost.
-                        consecutive_errors += 1;
-                        if consecutive_errors == 1 || consecutive_errors % LOG_EVERY == 0 {
-                            eprintln!(
-                                "WAL committer fdatasync failed (attempt {consecutive_errors}): {e}"
-                            );
+            match self.commit_once() {
+                Ok(Some(_)) => {
+                    // Advanced — re-snapshot immediately; more may have arrived
+                    // while we were fsyncing (group commit naturally batches them).
+                    consecutive_errors = 0;
+                    backoff = RETRY_BACKOFF_MIN;
+                    continue;
+                }
+                Ok(None) => {
+                    // Caught up — reset the error backoff and park for the next
+                    // stage (or a stop signal).
+                    consecutive_errors = 0;
+                    backoff = RETRY_BACKOFF_MIN;
+                    if self.commit_signal.wait_for_work() {
+                        // Stop requested: drain any records that became
+                        // contiguous-written before/at the stop, then exit. We do
+                        // NOT retry fsync errors forever here — on error we log and
+                        // give up (no-loss holds: durable_lsn is not advanced, so
+                        // the un-drained tail simply stays un-acked, exactly as a
+                        // crash would leave it).
+                        loop {
+                            match self.commit_once() {
+                                Ok(Some(_)) => continue,
+                                Ok(None) => break,
+                                Err(e) => {
+                                    eprintln!(
+                                        "WAL committer final-drain fdatasync failed: {e}"
+                                    );
+                                    break;
+                                }
+                            }
                         }
-                        tokio::time::sleep(backoff).await;
-                        backoff = (backoff * 2).min(RETRY_BACKOFF_MAX);
-                        continue;
+                        return;
                     }
                 }
+                Err(e) => {
+                    // Rate-limited log + bounded exponential backoff. The backoff
+                    // parks on the condvar (not a raw sleep) so shutdown can
+                    // interrupt it; a stream of concurrent stages cannot turn the
+                    // retry into a hot loop (we do not clear `work_pending` here,
+                    // so the same un-acked watermark is retried).
+                    consecutive_errors += 1;
+                    if consecutive_errors == 1 || consecutive_errors % LOG_EVERY == 0 {
+                        eprintln!(
+                            "WAL committer fdatasync failed (attempt {consecutive_errors}): {e}"
+                        );
+                    }
+                    if self.commit_signal.backoff_wait(backoff) {
+                        // Stop requested during backoff: exit without acking the
+                        // failing watermark (no-loss preserved).
+                        return;
+                    }
+                    backoff = (backoff * 2).min(RETRY_BACKOFF_MAX);
+                }
             }
+        }
+    }
 
-            // Nothing new to commit — caught up, so reset the error backoff and
-            // wait for the next stage.
-            consecutive_errors = 0;
-            backoff = RETRY_BACKOFF_MIN;
-            notified.await;
+    /// Spawn this shard's committer on a dedicated OS thread and return a
+    /// [`CommitterHandle`] for clean shutdown. The thread holds an `Arc<Shard>`
+    /// clone so it stays alive until stopped + joined.
+    pub fn spawn_committer(self: &Arc<Self>) -> CommitterHandle {
+        let me = Arc::clone(self);
+        let join = std::thread::Builder::new()
+            .name("wal-committer".to_string())
+            .spawn(move || me.run_committer())
+            .expect("spawn WAL committer thread");
+        CommitterHandle {
+            shard: Arc::clone(self),
+            join: Some(join),
         }
     }
 
     /// Test-only: current `durable_lsn`.
     #[cfg(test)]
     pub fn durable_lsn(&self) -> u64 {
-        *self.durable_tx.borrow()
+        self.durable_lsn.load(Ordering::Acquire)
     }
 
-    /// Test-only: whether `stream_id` is currently in the dirty set. Used to
-    /// prove the append path registers a stream BEFORE its lsn can become
+    /// Test-only: number of currently-parked durability waiters in the registry.
+    /// Lets the coalesced-wakeup tests assert that the fast path registers no
+    /// waiter and that a commit drains exactly the satisfied prefix.
+    #[cfg(test)]
+    pub fn waiter_count(&self) -> usize {
+        self.waiters.lock().unwrap().heap.len()
+    }
+
+    /// Test-only: whether `stream_id` is currently in the dirty set (i.e. its
+    /// `Arc<StreamState>` is present in the shard's pending dirty collection). Used
+    /// to prove the append path registers a stream BEFORE its lsn can become
     /// durable (the checkpoint recycle-before-fsync ordering invariant, spec §7).
+    /// Updated for the Tier-1a representation: a scan of the dirty `Vec` (a stream
+    /// is pushed at most once per checkpoint interval), not a `HashMap` lookup.
     #[cfg(test)]
     pub fn is_dirty(&self, stream_id: u64) -> bool {
-        self.dirty.lock().unwrap().contains_key(&stream_id)
+        self.dirty
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|st| st.id == stream_id)
+    }
+
+    /// Test-only: number of entries currently in the dirty collection. Because the
+    /// Tier-1a epoch CAS pushes each stream at most once per checkpoint interval,
+    /// this counts distinct touched streams (modulo a rare drain-race duplicate) —
+    /// used to prove the already-dirty hot path does NOT re-push.
+    #[cfg(test)]
+    pub fn dirty_len(&self) -> usize {
+        self.dirty.lock().unwrap().len()
+    }
+
+    /// Test-only: the shard's current checkpoint epoch (Tier-1a).
+    #[cfg(test)]
+    pub fn dirty_epoch_now(&self) -> u64 {
+        self.dirty_epoch.load(Ordering::Relaxed)
     }
 
     /// Test-only: arm the next `reserve_and_stage` to simulate a `write_at`
@@ -1045,10 +1453,7 @@ mod tests {
         const SEG: u64 = 4096;
         let dir = tmp("roll-multi");
         let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
 
         // ~200-byte records → ~20 per 4 KiB segment; 80 records ⇒ ≥3 segments.
         let payload = vec![b'x'; 200 - crate::wal::codec::HEADER_LEN];
@@ -1057,7 +1462,7 @@ mod tests {
             last = sh.reserve_and_stage(RecordKind::Append, 1, i * 200, &payload).unwrap();
         }
         sh.wait_durable(last).await;
-        h.abort();
+        h.stop();
 
         let segs = segs_on_disk(&dir);
         assert!(segs.len() >= 3, "rolled to ≥3 segments, got {}", segs.len());
@@ -1093,10 +1498,7 @@ mod tests {
         const SEG: u64 = 4096;
         let dir = tmp("roll-durable");
         let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         let payload = vec![b'y'; 150];
         let mut last = 0;
         for i in 0..100u64 {
@@ -1105,7 +1507,7 @@ mod tests {
         sh.wait_durable(last).await;
         assert_eq!(sh.durable_lsn(), last, "every record across rolls is durable");
         assert!(segs_on_disk(&dir).len() >= 3, "spanned ≥3 segments");
-        h.abort();
+        h.stop();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1116,10 +1518,7 @@ mod tests {
         const SEG: u64 = 4096;
         let dir = tmp("roll-replay");
         let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         let mut expect: Vec<(u64, u64, Vec<u8>)> = Vec::new();
         let mut last = 0;
         for i in 0..120u64 {
@@ -1129,7 +1528,7 @@ mod tests {
             expect.push((last, i * 7, p));
         }
         sh.wait_durable(last).await;
-        h.abort();
+        h.stop();
         assert!(segs_on_disk(&dir).len() >= 3, "spanned ≥3 segments");
 
         // Replay in lsn order across segments; collect every record.
@@ -1155,10 +1554,7 @@ mod tests {
         const SEG: u64 = 4096;
         let dir = tmp("roll-recycle");
         let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         let payload = vec![b'z'; 180];
         let mut last = 0;
         for i in 0..120u64 {
@@ -1179,7 +1575,7 @@ mod tests {
         assert_eq!(after.len(), 1, "all sealed segments recycled below the floor");
         assert_eq!(after[0].0, active_start, "the active segment is retained");
         assert!(seg_path(&dir, active_start).exists(), "active segment file remains");
-        h.abort();
+        h.stop();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1196,10 +1592,7 @@ mod tests {
         assert_eq!(total, 64);
         const SEG: u64 = 128; // exactly 2 records per segment
         let sh = Shard::open_with_segment_size(dir.clone(), SEG).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         // 5 records: r1,r2 fill seg0 exactly (write_pos 64 then 128 == SEG, no roll
         // on r2 since 64+64==128 is NOT > 128). r3 rolls (128+64 > 128). r4 fills
         // the new seg. r5 rolls again.
@@ -1208,7 +1601,7 @@ mod tests {
             last = sh.reserve_and_stage(RecordKind::Append, 5, i, &payload).unwrap();
         }
         sh.wait_durable(last).await;
-        h.abort();
+        h.stop();
 
         let segs = segs_on_disk(&dir);
         assert_eq!(segs.len(), 3, "r1r2 | r3r4 | r5 ⇒ 3 segments");
@@ -1250,16 +1643,13 @@ mod tests {
         let l1 = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"a").unwrap();
         let _l2 = sh.reserve_only(); // #[cfg(test)] hook: assigns lsn, no write
         let l3 = sh.reserve_and_stage(RecordKind::Append, 1, 2, b"c").unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         sh.wait_durable(l1).await;
         // give the committer a beat to (incorrectly) over-advance if the watermark is broken
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert!(sh.durable_lsn() >= l1, "l1 (and its contiguous prefix) is durable");
         assert!(sh.durable_lsn() < l3, "MUST NOT advance past the unwritten l2 gap to l3");
-        h.abort();
+        h.stop();
     }
 
     #[tokio::test]
@@ -1279,17 +1669,14 @@ mod tests {
         // advance durable_lsn past the gap at lsn 1.
         let l2 = sh.reserve_and_stage(RecordKind::Append, 1, 4, b"ok").unwrap();
         assert_eq!(l2, 2, "the failed stage still consumed lsn 1 (it stays a gap)");
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(
             sh.durable_lsn(),
             0,
             "durable_lsn cannot advance past the unwritten (failed) lsn-1 gap"
         );
-        h.abort();
+        h.stop();
     }
 
     #[tokio::test]
@@ -1339,10 +1726,7 @@ mod tests {
 
         // A new append now lands at lsn 1 / offset 0 into the clean segment; the
         // committer makes it durable and nothing past it decodes as a record.
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         let lsn = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"new").unwrap();
         assert_eq!(lsn, 1, "fresh WAL starts at lsn 1");
         sh.wait_durable(lsn).await;
@@ -1360,7 +1744,7 @@ mod tests {
             }
             other => panic!("fresh record did not decode: {other:?}"),
         }
-        h.abort();
+        h.stop();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1370,10 +1754,7 @@ mod tests {
         let sh = Shard::open(dir.clone()).unwrap();
 
         // Spawn the committer so staged records become durable (advances durable_lsn).
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
 
         // Build a real stream via the store so the dirty set can hold its
         // `Arc<StreamState>` (checkpoint reads `Shared.tail` + `Shared.file`).
@@ -1438,7 +1819,7 @@ mod tests {
         assert!(seg_path(&dir, 1).exists(), "active segment never recycled");
 
         let _ = l1;
-        h.abort();
+        h.stop();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1449,10 +1830,7 @@ mod tests {
         // as records accumulate (a lagging checkpoint only delays recycling).
         let dir = tmp("ckpt-nonblock");
         let sh = Shard::open(dir.clone()).unwrap();
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
 
         let size_before = sh.wal_size_bytes();
         let mut last = 0;
@@ -1471,7 +1849,7 @@ mod tests {
         );
         assert!(seg_path(&dir, 1).exists(), "WAL segment retained (not recycled)");
 
-        h.abort();
+        h.stop();
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1492,12 +1870,9 @@ mod tests {
         assert_eq!(sh.durable_lsn_now(), 0, "nothing durable until the committer runs");
 
         // Now run the committer: one fdatasync should make all K durable at once.
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
         sh.wait_durable(last).await;
-        h.abort();
+        h.stop();
 
         let snap = sh.stats_snapshot();
         assert_eq!(snap.fsync_count, 1, "a single fdatasync committed the whole batch");
@@ -1519,10 +1894,7 @@ mod tests {
         let dir = tmp("shard-pos");
         let sh = Shard::open(dir.clone()).unwrap();
 
-        let h = tokio::spawn({
-            let s = sh.clone();
-            async move { s.run_committer().await }
-        });
+        let h = sh.spawn_committer();
 
         let mut lsns = Vec::new();
         let mut payloads = Vec::new();
@@ -1535,7 +1907,7 @@ mod tests {
         let last = *lsns.last().unwrap();
         sh.wait_durable(last).await;
         assert!(sh.durable_lsn() >= last, "durable_lsn reached the last staged lsn");
-        h.abort();
+        h.stop();
 
         // Every record's bytes are on disk and decode correctly, back-to-back.
         let raw = std::fs::read(seg_path(&dir, 1)).unwrap();
@@ -1552,6 +1924,48 @@ mod tests {
                 other => panic!("record {idx} did not decode: {other:?}"),
             }
         }
+    }
+
+    #[tokio::test]
+    async fn dedicated_thread_committer_makes_durable_and_stops_cleanly() {
+        // The committer runs on its OWN dedicated OS thread (Tier-2a), NOT the
+        // tokio runtime. It must (a) make staged records durable while running,
+        // and (b) on a stop signal perform a FINAL DRAIN so even a batch staged
+        // immediately before the stop becomes durable, then exit so the thread
+        // joins cleanly (no detach, no hang).
+        let dir = tmp("dedicated-thread");
+        let sh = Shard::open(dir.clone()).unwrap();
+        let h = sh.spawn_committer();
+
+        // (a) Records made durable while the committer thread runs.
+        let mut last = 0;
+        for i in 0..10u64 {
+            last = sh.reserve_and_stage(RecordKind::Append, 1, i, b"live").unwrap();
+        }
+        sh.wait_durable(last).await;
+        assert!(sh.durable_lsn() >= last, "records durable while committer runs");
+
+        // (b) Stage a final batch, then stop WITHOUT awaiting durability — the
+        // committer's final drain must still make them durable before it exits.
+        // `reserve_and_stage` returns only after `mark_written`, so by the time
+        // this loop finishes every record is contiguous-written; the final drain
+        // snapshots that watermark and fsyncs it.
+        let mut last2 = last;
+        for i in 0..5u64 {
+            last2 = sh
+                .reserve_and_stage(RecordKind::Append, 1, 100 + i, b"tail")
+                .unwrap();
+        }
+        // `stop()` signals stop and JOINS the thread — blocks until it has drained
+        // and exited.
+        h.stop();
+        assert_eq!(
+            sh.durable_lsn(),
+            last2,
+            "final drain on shutdown made the just-staged batch durable before the thread exited"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// CQ-1 invariant: `register_dirty` must happen-before `reserve_and_stage`.
@@ -1628,5 +2042,229 @@ mod tests {
         assert!(sh.is_dirty(stream_id), "stream stays dirty until checkpoint drains it");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Tier-1a hot path: re-registering an ALREADY-dirty stream within the same
+    /// checkpoint epoch must NOT re-push into the dirty collection. The first
+    /// `register_dirty` wins the 0→epoch CAS and pushes once; every subsequent
+    /// touch of that stream (the common per-append case) is a pure relaxed-load
+    /// branch that returns without taking the `dirty` lock or growing the Vec.
+    #[tokio::test]
+    async fn register_dirty_is_idempotent_within_an_epoch() {
+        let dir = tmp("dirty-idem");
+        let sh = Shard::open(dir.clone()).unwrap();
+        let store = crate::store::Store::new_with_tier(
+            dir.clone(),
+            crate::tier::TierConfig::default(),
+        )
+        .unwrap();
+        let st = match store.create("idem-stream", ckpt_test_cfg(), None, 0).unwrap() {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let sid = st.id;
+
+        assert_eq!(sh.dirty_len(), 0, "precondition: empty dirty set");
+
+        // First touch this epoch: wins the CAS, pushes exactly once.
+        sh.register_dirty(sid, Arc::clone(&st));
+        assert_eq!(sh.dirty_len(), 1, "first registration pushes once");
+        assert!(sh.is_dirty(sid));
+
+        // Many re-touches in the SAME epoch: every one is the hot path (no push).
+        for _ in 0..1000 {
+            sh.register_dirty(sid, Arc::clone(&st));
+        }
+        assert_eq!(
+            sh.dirty_len(),
+            1,
+            "re-registering an already-dirty stream in the same epoch must NOT re-push"
+        );
+
+        // A DIFFERENT stream in the same epoch is a distinct first-touch → one push.
+        let st2 = match store.create("idem-stream-2", ckpt_test_cfg(), None, 0).unwrap() {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        sh.register_dirty(st2.id, Arc::clone(&st2));
+        assert_eq!(sh.dirty_len(), 2, "a distinct stream still registers once");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Tier-1a no-loss: a stream re-touched AFTER a checkpoint drains the dirty set
+    /// must re-register (the checkpoint bumped the epoch, so the stream's stale
+    /// `dirty_epoch` no longer matches) and therefore land in the NEXT checkpoint.
+    /// This is the property that makes the lock-free hot path safe: draining never
+    /// silently swallows a stream's subsequent appends.
+    #[tokio::test]
+    async fn touched_after_checkpoint_drain_lands_in_next_checkpoint() {
+        let dir = tmp("dirty-next");
+        let sh = Shard::open(dir.clone()).unwrap();
+        let h = sh.spawn_committer();
+        let store = crate::store::Store::new_with_tier(
+            dir.clone(),
+            crate::tier::TierConfig::default(),
+        )
+        .unwrap();
+        let st = match store.create("next-stream", ckpt_test_cfg(), None, 0).unwrap() {
+            crate::store::CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        };
+        let sid = st.id;
+
+        let epoch0 = sh.dirty_epoch_now();
+
+        // Interval 1: append + register, make the record durable so checkpoint has
+        // a non-zero floor, then checkpoint (drains the stream, bumps the epoch).
+        sh.register_dirty(sid, Arc::clone(&st));
+        let l1 = sh.reserve_and_stage(RecordKind::Append, sid, 0, b"first").unwrap();
+        // Reflect a logical tail so checkpoint records it (file already exists).
+        st.shared.write().unwrap().tail = 5;
+        sh.wait_durable(l1).await;
+        assert!(sh.is_dirty(sid), "registered in interval 1");
+
+        sh.checkpoint().await.unwrap();
+        assert_eq!(
+            sh.dirty_epoch_now(),
+            epoch0 + 1,
+            "checkpoint bumped the epoch"
+        );
+        assert!(!sh.is_dirty(sid), "checkpoint drained the dirty set");
+        assert_eq!(sh.dirty_len(), 0, "dirty set empty after drain");
+
+        // Interval 2: the SAME stream is touched again after the drain. Its
+        // dirty_epoch is stale (== old epoch), so register_dirty must re-push it.
+        sh.register_dirty(sid, Arc::clone(&st));
+        assert!(
+            sh.is_dirty(sid),
+            "a stream touched after the drain re-registers (not lost)"
+        );
+        assert_eq!(sh.dirty_len(), 1, "re-registered into the next interval's set");
+
+        // The next checkpoint drains it again — proving the post-drain append is
+        // covered, never dropped.
+        let l2 = sh.reserve_and_stage(RecordKind::Append, sid, 5, b"second").unwrap();
+        st.shared.write().unwrap().tail = 11;
+        sh.wait_durable(l2).await;
+        sh.checkpoint().await.unwrap();
+        assert!(!sh.is_dirty(sid), "second checkpoint drained the re-registration");
+        assert_eq!(sh.dirty_epoch_now(), epoch0 + 2, "epoch bumped again");
+
+        h.stop();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Tier-1c (a): a waiter for lsn=K is woken EXACTLY when durable reaches >= K,
+    /// and NEVER before. We drive `publish_durable` directly (no committer) to set
+    /// the watermark precisely: a commit to K-1 must leave the waiter parked; the
+    /// commit to K must wake it.
+    #[tokio::test]
+    async fn waiter_woken_only_when_durable_reaches_its_lsn() {
+        use std::time::Duration;
+        let sh = Shard::open(tmp("wd-exact")).unwrap();
+
+        let waiter = tokio::spawn({
+            let s = sh.clone();
+            async move { s.wait_durable(10).await }
+        });
+        // Let it register and park.
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(sh.waiter_count(), 1, "waiter parked while durable (0) < lsn (10)");
+        assert!(!waiter.is_finished(), "waiter must not be woken before its lsn");
+
+        // Advance durable BELOW the waiter's lsn: must NOT wake it.
+        sh.publish_durable(9);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(!waiter.is_finished(), "durable=9 < lsn=10 ⇒ still parked");
+        assert_eq!(sh.waiter_count(), 1, "waiter not drained below its lsn");
+
+        // Reach the waiter's lsn: it must wake now.
+        sh.publish_durable(10);
+        tokio::time::timeout(Duration::from_millis(500), waiter)
+            .await
+            .expect("waiter woken when durable reaches its lsn")
+            .unwrap();
+        assert_eq!(sh.waiter_count(), 0, "the satisfied waiter was drained");
+    }
+
+    /// Tier-1c (b): committing watermark=K wakes EVERY waiter with lsn <= K in one
+    /// pass but leaves every lsn > K parked — and `waiters_woken` counts only the
+    /// satisfied ones (the coalescing proof: not a broadcast to all parked).
+    #[tokio::test]
+    async fn commit_wakes_only_satisfied_waiters_and_counts_them() {
+        use std::time::Duration;
+        let sh = Shard::open(tmp("wd-coalesce")).unwrap();
+
+        let lo = tokio::spawn({
+            let s = sh.clone();
+            async move { s.wait_durable(3).await }
+        });
+        let mid = tokio::spawn({
+            let s = sh.clone();
+            async move { s.wait_durable(5).await }
+        });
+        let hi = tokio::spawn({
+            let s = sh.clone();
+            async move { s.wait_durable(8).await }
+        });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(sh.waiter_count(), 3, "all three waiters parked");
+
+        // Commit watermark = 5: wakes lsn 3 and 5; lsn 8 stays parked.
+        sh.publish_durable(5);
+        tokio::time::timeout(Duration::from_millis(500), lo)
+            .await
+            .expect("lsn=3 woken (<= watermark 5)")
+            .unwrap();
+        tokio::time::timeout(Duration::from_millis(500), mid)
+            .await
+            .expect("lsn=5 woken (== watermark 5)")
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(!hi.is_finished(), "lsn=8 stays parked above the watermark");
+        assert_eq!(sh.waiter_count(), 1, "only the unsatisfied (lsn=8) waiter remains");
+
+        // Coalescing proof: this commit woke exactly the 2 satisfied waiters, not
+        // all 3 parked subscribers (the old broadcast would have recorded 3).
+        assert_eq!(
+            sh.stats_snapshot().waiters_woken,
+            2,
+            "waiters_woken counts only the satisfied prefix, not every parked waiter"
+        );
+
+        // Advancing to 8 finally wakes the last one.
+        sh.publish_durable(8);
+        tokio::time::timeout(Duration::from_millis(500), hi)
+            .await
+            .expect("lsn=8 woken once durable reaches it")
+            .unwrap();
+        assert_eq!(sh.waiter_count(), 0, "all waiters drained");
+    }
+
+    /// Tier-1c (c): a waiter whose lsn is ALREADY durable returns immediately via
+    /// the fast path, WITHOUT registering in the heap (no park, no oneshot).
+    #[tokio::test]
+    async fn already_durable_waiter_returns_without_parking() {
+        use std::time::Duration;
+        let sh = Shard::open(tmp("wd-fast")).unwrap();
+
+        // Make lsn 5 durable up front (no waiters registered yet → fires nothing).
+        sh.publish_durable(5);
+        assert_eq!(sh.waiter_count(), 0, "no waiters before the fast-path call");
+
+        // A wait for an already-durable lsn must return immediately and register
+        // nothing in the heap.
+        tokio::time::timeout(Duration::from_millis(200), sh.wait_durable(3))
+            .await
+            .expect("already-durable (3 <= 5) waiter returns without parking");
+        tokio::time::timeout(Duration::from_millis(200), sh.wait_durable(5))
+            .await
+            .expect("already-durable (5 == 5) waiter returns without parking");
+        assert_eq!(
+            sh.waiter_count(),
+            0,
+            "the fast path registers no waiter in the heap"
+        );
     }
 }

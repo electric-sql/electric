@@ -797,9 +797,10 @@ mod tests {
 
     /// Drive a real shard so the committer makes records durable. Used by the 11b
     /// tests to checkpoint (recording per-stream durable tails) and roll/recycle.
-    fn spawn_committer(shard: &std::sync::Arc<crate::wal::shard::Shard>) -> tokio::task::JoinHandle<()> {
-        let s = std::sync::Arc::clone(shard);
-        tokio::spawn(async move { s.run_committer().await })
+    fn spawn_committer(
+        shard: &std::sync::Arc<crate::wal::shard::Shard>,
+    ) -> crate::wal::shard::CommitterHandle {
+        shard.spawn_committer()
     }
 
     /// CRITICAL (11b): a stream X whose durable WAL records are ALL recycled
@@ -886,7 +887,7 @@ mod tests {
         // segment below it (incl. X's original `1.wal`) is recycled.
         let ckpt2 = shard.checkpoint().await.unwrap();
         assert_eq!(ckpt2, last);
-        h.abort();
+        h.stop();
 
         // X must now have NO retained WAL record: replay sees nothing for X.
         let mut x_records_in_wal = 0usize;
@@ -1020,7 +1021,7 @@ mod tests {
         }
         let l3 = shard.reserve_and_stage(RecordKind::Append, x_id, after_r2, r3).unwrap();
         shard.wait_durable(l3).await;
-        h.abort();
+        h.stop();
 
         // Torn page-cache tail past r3 (un-acked).
         {
