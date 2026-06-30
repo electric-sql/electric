@@ -652,6 +652,18 @@ defmodule Electric.Replication.PublicationManagerTest do
       relation_tracker_name = PublicationManager.RelationTracker.name(ctx.stack_id)
       GenServer.stop(relation_tracker_name)
 
+      # Wait for the supervisor to restart and re-register the RelationTracker,
+      # then for it to finish restoring filters from ShapeStatus.
+      #
+      # The assert_pub_tables below is NOT a sufficient barrier on its own: the
+      # relation is already in the publication and is not removed during the
+      # restart, so the assertion passes immediately - potentially before the
+      # restarted process has re-registered. Calling remove_shape in that window
+      # races with a "no process" exit, which is the flakiness this guards
+      # against.
+      assert wait_until(fn -> is_pid(GenServer.whereis(relation_tracker_name)) end, 2_000)
+      :ok = PublicationManager.wait_for_restore(ctx.stack_id, timeout: 2_000)
+
       # After restart, the publication manager should repopulate from ShapeStatus.
       # The publication should still have the relation.
       assert_pub_tables(ctx, [ctx.relation], 2_000)

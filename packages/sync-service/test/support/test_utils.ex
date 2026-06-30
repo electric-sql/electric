@@ -138,6 +138,30 @@ defmodule Support.TestUtils do
     Electric.StatusMonitor.mark_pg_lock_as_errored(stack_id, error_message)
   end
 
+  @doc """
+  Poll `fun` every 10ms until it returns a truthy value or `timeout_ms` elapses.
+
+  Returns `true` if the condition was met within the timeout, `false` otherwise.
+  """
+  def wait_until(fun, timeout_ms \\ 500)
+      when is_function(fun, 0) and is_integer(timeout_ms) do
+    do_wait_until(fun, timeout_ms, System.monotonic_time(:millisecond))
+  end
+
+  defp do_wait_until(fun, timeout_ms, started_at) do
+    cond do
+      fun.() ->
+        true
+
+      System.monotonic_time(:millisecond) - started_at >= timeout_ms ->
+        false
+
+      true ->
+        Process.sleep(10)
+        do_wait_until(fun, timeout_ms, started_at)
+    end
+  end
+
   def generate_shape(relation, where_clause \\ nil, selected_columns \\ nil) do
     all_columns = Enum.uniq(["id", "value", "foo_enum"] ++ (selected_columns || []))
     selected_columns = selected_columns || all_columns
