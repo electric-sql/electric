@@ -73,10 +73,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: integration-tests/lux
-          key: '${{ runner.os }}-lux-develop-${{ steps.setup_beam.outputs.otp-version }}'
+          key: '${{ runner.os }}-lux-629e45c-${{ steps.setup_beam.outputs.otp-version }}'
           restore-keys: |
-            ${{ runner.os }}-lux-develop-${{ steps.setup_beam.outputs.otp-version }}
-            ${{ runner.os }}-lux-develop
+            ${{ runner.os }}-lux-629e45c-${{ steps.setup_beam.outputs.otp-version }}
+            ${{ runner.os }}-lux-629e45c
 
       - name: Setup lux
         run: make
