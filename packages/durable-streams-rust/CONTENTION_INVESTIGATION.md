@@ -63,6 +63,23 @@ diskutil erasevolume HFS+ dsram "$DEV"          # → /Volumes/dsram
 TMPDIR=/Volumes/dsram scripts/contention-repro.sh --shards 1 --connections 256
 ```
 
+## Baseline (Linux harness, 6 server cores / 4 client cores, tmpfs, conn=256)
+
+Reproduces the findings' signature — a hard throughput ceiling at **~80% CPU**
+(480–500 of 600), barely helped by more shards, with CPU left on the table:
+
+| shards | ops/s  | cpu%  | fsync/s | batch | inner_wait_load | waiters_woken |
+|--------|--------|-------|---------|-------|-----------------|---------------|
+| 1      | 45,543 | 482   | 6,113   | 7.5   | 0.02            | 25.8          |
+| 2      | 46,905 | 504   | 12,384  | 3.8   | 0.01            | 12.4          |
+| 6      | 48,825 | 495   | 24,177  | 2.0   | 0.01            | 5.2           |
+
+Read: fsync is cheap (tmpfs), the inner lock is not yet the gate at 6 cores
+(`inner_wait_load`≈0.02), so the ceiling here is the **commit + durability-wakeup
+coordination machinery** burning CPU/scheduling (25.8 waiters woken per commit at
+1 shard). The lock itself becomes the gate at the findings' 32-core scale; both
+are targeted below. (Numbers are this dev box; use deltas, not absolutes.)
+
 ## How to judge a candidate change
 
 A change is good if it **lifts the Linux throughput ceiling** AND drives the

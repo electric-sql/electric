@@ -139,8 +139,8 @@ with open(client_json) as f:
     c = json.load(f)
 ops = c.get("aggregate_ops_per_sec", 0.0)
 lat = c.get("latency_ms", {}) or {}
-p50 = lat.get("p50", lat.get("p50_ms", 0.0))
-p99 = lat.get("p99", lat.get("p99_ms", 0.0))
+p50 = lat.get("p50_ms", lat.get("p50", 0.0))
+p99 = lat.get("p99_ms", lat.get("p99", 0.0))
 errs = sum(e.get("count", 0) for e in (c.get("errors") or []))
 
 # WAL_CONT steady-state: drop the first `warmup` lines (warmup window), average.
