@@ -48,6 +48,25 @@ pub struct SseReg {
     pub client_cursor: Option<u64>,
 }
 
+/// Caught-up long-poll registration: everything the reactor needs to wait at the
+/// tail and write the single long-poll response once data arrives (or on close /
+/// timeout). Constructed only on Linux, by `handle_long_poll` when the poll would
+/// block on a reactor-eligible stream (root, no tiering); see `Body::LongPollWait`.
+#[cfg(target_os = "linux")]
+pub struct LongPollReg {
+    pub st: Arc<crate::store::StreamState>,
+    /// Offset the poll is caught up at: the response delivers `from..tail` once
+    /// the tail advances past it.
+    pub from: u64,
+    pub client_cursor: Option<u64>,
+    /// Honour HTTP keep-alive: when set, the reactor hands the socket back to the
+    /// async connection loop after writing the response instead of closing it, so
+    /// a polling client's next request reuses the connection (no per-poll churn).
+    /// Filled in by the engine at hand-off — the handler can't see the
+    /// connection's keep-alive state.
+    pub keep_alive: bool,
+}
+
 /// A streamed (chunked) response body plus an abort signal.
 ///
 /// `rx` carries the body frames. `failed` is set by the producer if it ends the
@@ -128,6 +147,13 @@ pub enum Body {
     /// Pull-based streaming body driven inline on the connection task (SSE).
     /// No spawned task, no channel — see `EventSource`.
     Sse(Box<dyn EventSource>),
+    /// Linux: a caught-up long-poll that would block at the tail. The engine
+    /// hands the socket to the epoll reactor (freeing this connection task's
+    /// future for the up-to-30s wait, the dominant per-poll cost) instead of
+    /// awaiting inline; the reactor writes the single response when data arrives
+    /// or on close/timeout. Never serialized by `write_response`.
+    #[cfg(target_os = "linux")]
+    LongPollWait(LongPollReg),
     /// Byte ranges of data files plus optional framing (JSON `[` / `]`).
     /// Total body length is prefix + Σ segment.len + suffix.
     FileRange {
@@ -150,6 +176,8 @@ impl Body {
             Body::Full(b) => Some(b.len() as u64),
             Body::Channel(_) => None,
             Body::Sse(_) => None,
+            #[cfg(target_os = "linux")]
+            Body::LongPollWait(_) => None,
             Body::FileRange {
                 segments,
                 prefix,
