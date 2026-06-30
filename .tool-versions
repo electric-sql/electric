@@ -1,5 +1,5 @@
 caddy 2.10.0
-elixir 1.20.1
-erlang 29.0.1
+elixir 1.20.2
+erlang 29.0.2
 nodejs 24.11.1
 pnpm 10.12.1
