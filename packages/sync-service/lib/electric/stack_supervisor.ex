@@ -422,6 +422,8 @@ defmodule Electric.StackSupervisor do
         {Registry,
          name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
         Electric.ShapeCache.Storage.stack_child_spec(storage),
+        {Task.Supervisor,
+         name: Electric.Postgres.Inspector.EtsInspector.task_supervisor_name(stack_id)},
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
         {Electric.MonitoredCoreSupervisor,
