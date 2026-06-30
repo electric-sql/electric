@@ -103,7 +103,7 @@ defmodule Electric do
     enable tracking of instance usage metrics across restarts, otherwise will be
     randomly generated at boot (default: a randomly generated UUID).
   - `telemetry_statsd_host` (`t:String.t/0`) - If set, send telemetry data to the given StatsD reporting endpoint (default: `#{default.(:telemetry_statsd_host)}`)
-  - `prometheus_port` (`t:integer/0`) - If set, expose a prometheus reporter for telemetry data on the specified port (default: `#{default.(:prometheus_port)}`)
+  - `prometheus_port` (`t:integer/0`) - If set, expose a prometheus reporter for telemetry data on the specified port (default: `#{default.(:prometheus_port)}`). The `/metrics` endpoint must be scraped regularly when enabled: distribution metrics buffer in memory between scrapes, so an enabled-but-unscraped endpoint grows without bound and can eventually crash the service. Leave unset if nothing is scraping it.
   - `call_home_telemetry?` (`t:boolean/0`) - Allow [anonymous usage
     data](https://electric-sql.com/docs/reference/telemetry#anonymous-usage-data)
     about the instance being sent to a central checkpoint service (default: `true` for production)

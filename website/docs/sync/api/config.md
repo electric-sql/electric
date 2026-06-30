@@ -615,6 +615,8 @@ Name of your Honeycomb Dataset.
 
 Expose a prometheus reporter for telemetry data on the specified port.
 
+The `/metrics` endpoint exposed on this port **must be scraped regularly** (for example by a Prometheus server). Distribution metrics accumulate in memory between scrapes, so enabling this port without a scraper actively collecting from it causes unbounded memory growth that can eventually crash the service. Leave it unset if nothing is scraping it &mdash; for example, if you only use OpenTelemetry.
+
 </EnvVarConfig>
 
 ### ELECTRIC_STATSD_HOST
