@@ -346,7 +346,13 @@ impl Shard {
 
         // --- Phase 1: (maybe roll, then) reserve under the short lock. ---
         let (lsn, off, seg) = {
-            let mut g = self.inner.lock().unwrap();
+            // Time the contended `inner` acquisition (--wal-stats only). This is
+            // the headline per-shard write-serialization signal: every stream on
+            // this shard funnels through this one lock.
+            let mut g = super::telemetry::timed_lock(
+                |ns| self.stats.record_inner_lock_wait(ns),
+                || self.inner.lock().unwrap(),
+            );
 
             // Segment roll (spec §4): if this record would overflow the active
             // segment's `fallocate`'d region, SEAL the current segment (truncate to
@@ -407,9 +413,13 @@ impl Shard {
 
         seg.write_at(off, &buf)?;
         {
-            let mut g = self.inner.lock().unwrap();
+            let mut g = super::telemetry::timed_lock(
+                |ns| self.stats.record_inner_lock_wait(ns),
+                || self.inner.lock().unwrap(),
+            );
             g.mark_written(lsn);
         }
+        self.stats.record_staged();
         self.notify.notify_one();
         Ok(lsn)
     }
@@ -425,7 +435,14 @@ impl Shard {
     /// needs `stream_id`); the `StreamState` is needed solely by `checkpoint`, to
     /// read the durable tail it records and the file it fsyncs.
     pub fn register_dirty(&self, stream_id: u64, st: Arc<StreamState>) {
-        self.dirty.lock().unwrap().insert(stream_id, st);
+        // Time the contended `dirty` acquisition (--wal-stats only; no clock read
+        // otherwise). This isolates the per-append global dirty-set lock — the
+        // Tier-1 lock-free-`register_dirty` target — from the `inner` lock.
+        let mut g = super::telemetry::timed_lock(
+            |ns| self.stats.record_dirty_lock_wait(ns),
+            || self.dirty.lock().unwrap(),
+        );
+        g.insert(stream_id, st);
     }
 
     /// **Checkpoint** (spec §7), per shard, non-blocking w.r.t. acks:
@@ -834,6 +851,12 @@ impl Shard {
             return;
         }
         self.stats.record_batch(watermark - durable);
+        // Thundering-herd fan-out: the `watch` send below wakes EVERY currently-
+        // parked `wait_durable` subscriber on this shard, most of which re-check
+        // their LSN and immediately re-park. Record how many this commit wakes
+        // (the coalesced-wakeup Tier-1 target). receiver_count == parked waiters.
+        self.stats
+            .record_waiters_woken(self.durable_tx.receiver_count() as u64);
         // Use send_replace (unconditional write) so the watermark is stored even
         // when no receivers exist yet — `durable_tx` sits at 0 receivers between
         // appends because the constructor drops `_durable_rx` and a waiter only

@@ -124,6 +124,12 @@ fn main() {
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
     // Useful for forcing rolls in tests and benches without writing a full 128 MiB segment.
     let mut wal_segment_bytes: Option<u64> = None;
+    // `--wal-stats N`: every N seconds print a `WAL_CONT` line of per-interval WAL
+    // contention rates (lock-wait, wakeup fan-out, coalescing) to stderr, and arm
+    // the hot-path timing that feeds it. OFF by default (no clock reads on the
+    // append path). Dependency-free — the measurement vehicle for the contention
+    // investigation, independent of the heavy `telemetry` OTLP feature.
+    let mut wal_stats_secs: Option<u64> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -198,6 +204,14 @@ fn main() {
                     std::process::exit(2);
                 }
                 wal_segment_bytes = Some(n);
+            }
+            "--wal-stats" => {
+                let n: u64 = parse_val(args.next(), "--wal-stats");
+                if n == 0 {
+                    eprintln!("--wal-stats must be ≥ 1 (seconds)");
+                    std::process::exit(2);
+                }
+                wal_stats_secs = Some(n);
             }
             "--durability" => {
                 let v = val(args.next(), "--durability");
@@ -326,6 +340,17 @@ fn main() {
                 .wal
                 .set(Arc::clone(&walset))
                 .unwrap_or_else(|_| panic!("WAL already attached"));
+            // Arm the contention timing + spawn the dependency-free stderr
+            // emitter BEFORE committers/serving start, so every acquisition from
+            // the first append is timed. No-op (and no clock reads) when the flag
+            // is absent.
+            if let Some(secs) = wal_stats_secs {
+                wal::telemetry::set_stats_enabled(true);
+                wal::telemetry::spawn_stats_emitter(
+                    Arc::clone(&walset),
+                    std::time::Duration::from_secs(secs),
+                );
+            }
             walset.spawn_committers();
             // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
             // shard's touched per-stream files and recycle its WAL below the

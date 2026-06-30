@@ -117,8 +117,33 @@ impl FileSegment {
 /// preserves the ORIGINAL F_FULLFSYNC errno in context — the fallback's errno
 /// alone would mislead durability diagnostics. (Shared by `seal_to` and
 /// `FileSegment::fdatasync`; mirrors `store::barrier_fsync`.)
+/// BENCH-ONLY: whether `DS_BENCH_FAST_FSYNC` requests plain `fsync` over
+/// `F_FULLFSYNC` on macOS. Read once and cached. Mirrors the gate in
+/// `store::barrier_fsync`.
+#[cfg(target_os = "macos")]
+fn fast_fsync_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("DS_BENCH_FAST_FSYNC").is_some())
+}
+
 #[cfg(target_os = "macos")]
 fn macos_full_fsync(fd: libc::c_int) -> io::Result<()> {
+    // BENCH-ONLY (`DS_BENCH_FAST_FSYNC`): plain `fsync` instead of the
+    // `F_FULLFSYNC` drive barrier so the committer's hot fsync is cheap on a RAM
+    // disk and the per-shard LOCK becomes the bottleneck (the Linux+NVMe regime
+    // this build studies). NOT power-loss durable; never set in production. See
+    // `store::barrier_fsync` for the rationale.
+    if fast_fsync_enabled() {
+        // SAFETY: `fd` is a valid open fd for the lifetime of the call.
+        return unsafe {
+            if libc::fsync(fd) == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        };
+    }
     // SAFETY: callers pass a valid open fd for the lifetime of the call.
     unsafe {
         if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {

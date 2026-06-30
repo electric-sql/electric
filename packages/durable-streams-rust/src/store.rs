@@ -106,10 +106,35 @@ pub struct Appender {
 /// Returns the fsync result: a failure (e.g. EIO writeback error) MUST be
 /// surfaced to the caller so an append is never acked as durable when the data
 /// did not reach stable storage.
+/// BENCH-ONLY: whether `DS_BENCH_FAST_FSYNC` requests plain `fsync` over
+/// `F_FULLFSYNC` on macOS (see [`barrier_fsync`]). Read once and cached — the env
+/// is fixed for the process lifetime.
+#[cfg(target_os = "macos")]
+fn fast_fsync_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("DS_BENCH_FAST_FSYNC").is_some())
+}
+
 pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
     #[cfg(target_os = "macos")]
     unsafe {
+        // BENCH-ONLY escape hatch (NOT for production durability): when
+        // `DS_BENCH_FAST_FSYNC` is set, use a plain `fsync` instead of
+        // `F_FULLFSYNC`. On macOS `F_FULLFSYNC` forces a true drive-cache barrier
+        // (~tens of ms even on a RAM disk), which dominates the commit path and
+        // masks the per-shard LOCK contention this build is meant to study. Plain
+        // `fsync` on a RAM disk is ~free, reproducing the cheap-fsync (Linux +
+        // NVMe) regime where the lock is the bottleneck. Never set this where data
+        // must survive power loss.
+        if fast_fsync_enabled() {
+            return if libc::fsync(fd) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            };
+        }
         // Force a true flush to platter; fall back to a plain fsync. Only error
         // if the final fallback also fails.
         if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
