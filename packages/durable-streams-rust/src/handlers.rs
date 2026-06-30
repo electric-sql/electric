@@ -774,6 +774,9 @@ fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
     // [tail - wire.len(), tail).
     st.set_last_chunk(tail - wire.len() as u64, wire.clone());
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
+    // Wake any reactor-served subscribers of this stream (no-op when none).
+    #[cfg(target_os = "linux")]
+    crate::sse_reactor::wake_stream(st);
 }
 
 // ---------- POST (append) ----------
@@ -1151,6 +1154,8 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             s.durable_tail
         };
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
+        #[cfg(target_os = "linux")]
+        crate::sse_reactor::wake_stream(&st);
     } else {
         st.schedule_meta_flush();
     }
@@ -1349,6 +1354,8 @@ where
         (tail, s.closed_durable)
     };
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
+    #[cfg(target_os = "linux")]
+    crate::sse_reactor::wake_stream(&st);
 
     // Shared response builder: captures `st`, `producer` by ref.
     let make_ok = || {
@@ -1628,7 +1635,7 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
         ),
         // SSE records its own read metric per emitted batch (streaming, no single
         // dispatch latency); the dispatch here just sets up the channel.
-        Some("sse") => return handle_sse(st, offset, q.cursor).await,
+        Some("sse") => return handle_sse(st, offset, q.cursor),
         Some(_) => return text_response(400, "invalid live mode"),
         None => (
             handle_catchup(st, offset, &req, &mut cache_hit).await,
@@ -1838,7 +1845,8 @@ fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
 
 // ---------- SSE ----------
 
-enum SseEncoding {
+#[derive(Clone, Copy)]
+pub(crate) enum SseEncoding {
     Json,
     Text,
     Base64,
@@ -1854,9 +1862,30 @@ fn sse_encoding(st: &StreamState) -> SseEncoding {
     }
 }
 
+/// Encode a wire byte range as one SSE `data` event in the stream's encoding.
+/// Shared by the inline producer (`SseSource::next`) and the reactor so both
+/// emit byte-identical frames.
+pub(crate) fn sse_encode_data(out: &mut String, data: &[u8], encoding: SseEncoding) {
+    match encoding {
+        SseEncoding::Json => {
+            // wire bytes end with ','; strip it and wrap the records as an array
+            let inner = &data[..data.len().saturating_sub(1)];
+            let mut payload = String::with_capacity(inner.len() + 2);
+            payload.push('[');
+            payload.push_str(&String::from_utf8_lossy(inner));
+            payload.push(']');
+            sse_data_event(out, &payload);
+        }
+        SseEncoding::Text => sse_data_event(out, &String::from_utf8_lossy(data)),
+        SseEncoding::Base64 => {
+            sse_data_event(out, &crate::api::base64_encode(data, crate::api::BASE64_STD, true))
+        }
+    }
+}
+
 /// Write `payload` as one SSE `data` event, splitting on line terminators to
 /// prevent `data:` injection.
-fn sse_data_event(out: &mut String, payload: &str) {
+pub(crate) fn sse_data_event(out: &mut String, payload: &str) {
     out.push_str("event: data\n");
     for line in payload.split(['\n', '\r']) {
         out.push_str("data:");
@@ -1866,7 +1895,7 @@ fn sse_data_event(out: &mut String, payload: &str) {
     out.push('\n');
 }
 
-fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool, closed: bool) {
+pub(crate) fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool, closed: bool) {
     out.push_str("event: control\n");
     out.push_str("data:{\"streamNextOffset\":\"");
     out.push_str(&format_offset(next));
@@ -1885,7 +1914,157 @@ fn sse_control_event(out: &mut String, next: u64, cursor: u64, up_to_date: bool,
     out.push_str("}\n\n");
 }
 
-async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: Option<u64>) -> Resp {
+/// Inline SSE producer state. Driven by the connection task via `EventSource`
+/// (one `next_chunk` call per emitted SSE event) instead of a spawned task
+/// feeding an mpsc channel: an idle subscriber then costs only its connection,
+/// not an extra task future + channel buffer (the per-subscriber memory that
+/// made fan-out grow linearly). All caught-up subscribers still share the one
+/// resident tail chunk, so the fan-out read stays O(1).
+struct SseSource {
+    st: Arc<StreamState>,
+    rxw: tokio::sync::watch::Receiver<Tail>,
+    pos: u64,
+    start: u64,
+    deadline: Instant,
+    client_cursor: Option<u64>,
+    encoding: SseEncoding,
+    sent_initial: bool,
+    done: bool,
+}
+
+impl SseSource {
+    /// Produce the next SSE event, or `None` to end the stream. Mirrors the
+    /// original producer loop, but returns one frame per call (state persists in
+    /// `self`) so it can run inline without a channel.
+    async fn next(&mut self) -> Option<Bytes> {
+        if self.done {
+            return None;
+        }
+        loop {
+            let t = *self.rxw.borrow_and_update();
+            if t.bytes > self.pos {
+                // Read new range and emit data + control. Caught-up subscribers
+                // share the resident tail chunk — one read for all of them —
+                // and fall back to a file read only when behind it.
+                let read_t0 = crate::telemetry::Timer::start();
+                let cache_hit;
+                let data = match self.st.tail_chunk_slice(self.pos, t.bytes) {
+                    Some(b) => {
+                        cache_hit = true;
+                        b
+                    }
+                    None => {
+                        cache_hit = false;
+                        match read_range_bytes(&self.st, self.pos, t.bytes).await {
+                            Ok(d) => d,
+                            // End the stream without advancing `pos`: the client
+                            // reconnects from its last offset, never skipping a gap.
+                            Err(_) => {
+                                self.done = true;
+                                return None;
+                            }
+                        }
+                    }
+                };
+                crate::telemetry::record_tail_cache(cache_hit, "sse");
+                crate::telemetry::record_read(read_t0.elapsed_secs(), "sse", cache_hit);
+                let mut ev = String::new();
+                sse_encode_data(&mut ev, &data, self.encoding);
+                self.pos = t.bytes;
+                let up_to_date = self.pos >= self.st.tail().bytes;
+                // If the stream closed atomically with this final data, fold the
+                // close into this control event (streamClosed:true) rather than
+                // emitting a plain up-to-date control followed by a separate close
+                // event — the reference server / TS client expect the close signal
+                // on the control immediately after the final data.
+                let closed_now = t.closed && self.pos >= t.bytes;
+                sse_control_event(
+                    &mut ev,
+                    self.pos,
+                    compute_cursor(self.client_cursor),
+                    up_to_date,
+                    closed_now,
+                );
+                if closed_now {
+                    self.done = true;
+                }
+                return Some(Bytes::from(ev));
+            }
+            if t.closed && self.pos >= t.bytes {
+                let mut ev = String::new();
+                sse_control_event(&mut ev, self.pos, compute_cursor(self.client_cursor), true, true);
+                self.done = true;
+                return Some(Bytes::from(ev));
+            }
+            // Initial control event when starting caught-up (once).
+            if !self.sent_initial
+                && self.pos == self.start
+                && t.bytes == self.start
+                && !t.closed
+                && self.pos == self.st.tail().bytes
+            {
+                let mut ev = String::new();
+                sse_control_event(&mut ev, self.pos, compute_cursor(self.client_cursor), true, false);
+                self.sent_initial = true;
+                return Some(Bytes::from(ev));
+            }
+            // Idle wait: bounded by the total SSE duration, but woken early by new
+            // data and broken into keep-alive intervals so an idle stream still
+            // emits a periodic up-to-date control (liveness for proxies/clients).
+            let now = Instant::now();
+            if now >= self.deadline {
+                self.done = true;
+                return None; // total cap reached; client reconnects
+            }
+            let wait = SSE_KEEPALIVE.min(self.deadline - now);
+            tokio::select! {
+                r = self.rxw.changed() => {
+                    if r.is_err() {
+                        self.done = true;
+                        return None;
+                    }
+                }
+                _ = tokio::time::sleep(wait) => {
+                    // No new data within the keep-alive window: emit a heartbeat
+                    // control (still open here — the close path returns above).
+                    let mut ev = String::new();
+                    sse_control_event(&mut ev, self.pos, compute_cursor(self.client_cursor), true, false);
+                    return Some(Bytes::from(ev));
+                }
+            }
+        }
+    }
+}
+
+impl crate::api::EventSource for SseSource {
+    fn next_chunk(
+        &mut self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Bytes>> + Send + '_>> {
+        Box::pin(self.next())
+    }
+
+    /// Live-tail subscribers (root stream, tiering off, start at/after the live
+    /// file base) are served by the epoll reactor: the connection task hands off
+    /// the socket and frees its future. Everything else (cold catch-up from a
+    /// forked/compacted/tiered range) stays on the inline hand-off path.
+    #[cfg(target_os = "linux")]
+    fn reactor_reg(&self) -> Option<crate::api::SseReg> {
+        if self.st.parent.is_some() || self.st.blobstore.is_some() {
+            return None;
+        }
+        if self.start < self.st.shared.read().unwrap().file_base {
+            return None;
+        }
+        Some(crate::api::SseReg {
+            st: self.st.clone(),
+            start: self.start,
+            encoding: self.encoding,
+            client_cursor: self.client_cursor,
+        })
+    }
+}
+
+fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: Option<u64>) -> Resp {
     let t0 = st.tail();
     // A beyond-tail numeric offset starts caught-up at the tail (see
     // `resolve_start`): emit the initial up-to-date control event, then wait.
@@ -1893,147 +2072,36 @@ async fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: O
     let encoding = sse_encoding(&st);
     let is_b64 = matches!(encoding, SseEncoding::Base64);
 
-    let (tx, rx) = mpsc::channel::<Bytes>(8);
-    let stc = st.clone();
-    // Propagate the request span into the detached producer task so its emitted
-    // read events stay parented to the originating `ds.request` span. We attach
-    // via `.instrument` rather than holding an `Entered` guard, which must never
-    // be held across an `.await`.
-    let sse_span = tracing::Span::current();
-    tokio::spawn(
-        async move {
-        let st = stc;
-        let mut pos = start;
-        let mut rxw = st.tail_tx.subscribe();
-        let deadline = Instant::now() + SSE_MAX_DURATION;
-        // Emit the initial caught-up control exactly once; subsequent liveness is
-        // carried by the periodic keep-alive in the idle wait below.
-        let mut sent_initial = false;
-        loop {
-            let t = *rxw.borrow_and_update();
-            if t.bytes > pos {
-                // Read new range and emit data + control. Caught-up subscribers
-                // share the resident tail chunk — one read for all of them —
-                // and fall back to a file read only when behind it.
-                let read_t0 = crate::telemetry::Timer::start();
-                let cache_hit;
-                let data = match st.tail_chunk_slice(pos, t.bytes) {
-                    Some(b) => {
-                        cache_hit = true;
-                        b
-                    }
-                    None => {
-                        cache_hit = false;
-                        match read_range_bytes(&st, pos, t.bytes).await {
-                            Ok(d) => d,
-                            // End the stream without advancing `pos`: the client
-                            // reconnects from its last offset, never skipping a gap.
-                            Err(_) => return,
-                        }
-                    }
-                };
-                crate::telemetry::record_tail_cache(cache_hit, "sse");
-                crate::telemetry::record_read(read_t0.elapsed_secs(), "sse", cache_hit);
-                let mut ev = String::new();
-                match sse_encoding(&st) {
-                    SseEncoding::Json => {
-                        // wire bytes end with ','; wrap as array
-                        let inner = &data[..data.len().saturating_sub(1)];
-                        let mut payload = String::with_capacity(inner.len() + 2);
-                        payload.push('[');
-                        payload.push_str(&String::from_utf8_lossy(inner));
-                        payload.push(']');
-                        sse_data_event(&mut ev, &payload);
-                    }
-                    SseEncoding::Text => {
-                        sse_data_event(&mut ev, &String::from_utf8_lossy(&data));
-                    }
-                    SseEncoding::Base64 => {
-                        sse_data_event(
-                            &mut ev,
-                            &crate::api::base64_encode(&data, crate::api::BASE64_STD, true),
-                        );
-                    }
-                }
-                pos = t.bytes;
-                let up_to_date = pos >= st.tail().bytes;
-                // If the stream closed atomically with this final data, fold the
-                // close into this control event (streamClosed:true) rather than
-                // emitting a plain up-to-date control followed by a separate close
-                // event — the reference server / TS client expect the close signal
-                // on the control immediately after the final data.
-                let closed_now = t.closed && pos >= t.bytes;
-                sse_control_event(
-                    &mut ev,
-                    pos,
-                    compute_cursor(client_cursor),
-                    up_to_date,
-                    closed_now,
-                );
-                if tx.send(Bytes::from(ev)).await.is_err() {
-                    return;
-                }
-                if closed_now {
-                    return;
-                }
-            }
-            if t.closed && pos >= t.bytes {
-                let mut ev = String::new();
-                sse_control_event(&mut ev, pos, compute_cursor(client_cursor), true, true);
-                let _ = tx.send(Bytes::from(ev)).await;
-                return;
-            }
-            if t.bytes > pos {
-                continue;
-            }
-            // Initial control event when starting caught-up (once).
-            if !sent_initial && pos == start && t.bytes == start && !t.closed && pos == st.tail().bytes {
-                let mut ev = String::new();
-                sse_control_event(&mut ev, pos, compute_cursor(client_cursor), true, false);
-                if tx.send(Bytes::from(ev)).await.is_err() {
-                    return;
-                }
-                sent_initial = true;
-            }
-            // Idle wait: bounded by the total SSE duration, but woken early by new
-            // data and broken into keep-alive intervals so an idle stream still
-            // emits a periodic up-to-date control (liveness for proxies/clients).
-            let now = Instant::now();
-            if now >= deadline {
-                return; // total cap reached; client reconnects
-            }
-            let wait = SSE_KEEPALIVE.min(deadline - now);
-            tokio::select! {
-                r = rxw.changed() => {
-                    if r.is_err() {
-                        return;
-                    }
-                }
-                _ = tokio::time::sleep(wait) => {
-                    // No new data within the keep-alive window: emit a heartbeat
-                    // control (still open here — the close path returns above).
-                    let mut ev = String::new();
-                    sse_control_event(&mut ev, pos, compute_cursor(client_cursor), true, false);
-                    if tx.send(Bytes::from(ev)).await.is_err() {
-                        return;
-                    }
-                }
-            }
-        }
-        }
-        .instrument(sse_span),
-    );
+    let src = SseSource {
+        rxw: st.tail_tx.subscribe(),
+        st,
+        pos: start,
+        start,
+        deadline: Instant::now() + SSE_MAX_DURATION,
+        client_cursor,
+        encoding,
+        sent_initial: false,
+        done: false,
+    };
 
     let mut b = ResponseBuilder::new(200)
         .hs("content-type", "text/event-stream")
         .hs("cache-control", "no-cache")
-        .hs("connection", "keep-alive");
+        // SSE responses are single-use: the server unilaterally closes the socket
+        // when the stream closes (or at SSE_MAX_DURATION), so we must NOT advertise
+        // keep-alive. If we did, the client (e.g. undici) would return the socket to
+        // its pool and pipeline the next request onto it; the server's close() would
+        // then see unread request bytes in the recv buffer and send a RST instead of
+        // a FIN, discarding the still-in-flight SSE response (data + close frames)
+        // and surfacing as an UND_ERR_SOCKET "other side closed" on the client.
+        .hs("connection", "close");
     if is_b64 {
         b = b.hs(H_SSE_ENCODING, "base64");
     }
-    // SSE is a live feed: a mid-stream hiccup just ends the event stream and the
-    // client reconnects from its last offset, so there is no abort signal here.
-    b.body(Body::Channel(crate::api::StreamBody::infallible(rx)))
+    // SSE is a live feed driven inline on the connection task: a mid-stream
+    // hiccup just ends the event stream and the client reconnects from its last
+    // offset, so there is no abort signal here.
+    b.body(Body::Sse(Box::new(src)))
 }
 
 /// Read a logical byte range fully into memory (SSE batches are small).

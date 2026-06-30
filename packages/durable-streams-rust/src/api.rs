@@ -5,6 +5,8 @@
 // optional framing bytes, and the engine decides how to serve them (buffered
 // copy, or sendfile where the platform can).
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -12,6 +14,39 @@ use bytes::Bytes;
 use tokio::sync::mpsc;
 
 use crate::store::Segment;
+
+/// A pull-based streaming body, driven INLINE on the connection task: the engine
+/// calls `next_chunk` in a loop and writes each returned frame, ending when it
+/// yields `None`. Unlike `Body::Channel` (a spawned producer task feeding an
+/// mpsc channel), this adds NO per-response task and NO channel — the producer
+/// runs on the connection's own task. SSE fan-out uses it so each subscriber
+/// costs only its connection's existing footprint, not an extra ~4–5 KiB of
+/// resident task+channel heap (the source of per-subscriber linear memory).
+pub trait EventSource: Send {
+    /// Produce the next framed chunk, or `None` to end the stream. The returned
+    /// future borrows `self`, so state lives in the source (no channel buffer).
+    fn next_chunk(&mut self) -> Pin<Box<dyn Future<Output = Option<Bytes>> + Send + '_>>;
+
+    /// Reactor eligibility (Linux). When this returns `Some`, the connection task
+    /// hands the socket to the epoll reactor instead of driving the stream
+    /// inline, freeing its future — the per-subscriber cost. Default: not
+    /// eligible (inline / hand-off, as for every non-SSE source).
+    #[cfg(target_os = "linux")]
+    fn reactor_reg(&self) -> Option<SseReg> {
+        None
+    }
+}
+
+/// Live-tail SSE registration: everything the reactor needs to serve a
+/// subscriber once the connection task has handed off its socket. Constructed
+/// only on Linux (`SseSource::reactor_reg`).
+#[cfg(target_os = "linux")]
+pub struct SseReg {
+    pub st: Arc<crate::store::StreamState>,
+    pub start: u64,
+    pub encoding: crate::handlers::SseEncoding,
+    pub client_cursor: Option<u64>,
+}
 
 /// A streamed (chunked) response body plus an abort signal.
 ///
@@ -25,16 +60,6 @@ use crate::store::Segment;
 pub struct StreamBody {
     pub rx: mpsc::Receiver<Bytes>,
     pub failed: Arc<AtomicBool>,
-}
-
-impl StreamBody {
-    /// A stream with no failure path (e.g. SSE, where the client reconnects).
-    pub fn infallible(rx: mpsc::Receiver<Bytes>) -> Self {
-        StreamBody {
-            rx,
-            failed: Arc::new(AtomicBool::new(false)),
-        }
-    }
 }
 
 /// Maximum accepted request body size; larger bodies get `413 Payload Too
@@ -95,10 +120,14 @@ impl Req {
 pub enum Body {
     Empty,
     Full(Bytes),
-    /// Streaming body (SSE / large dynamic responses); engine frames it
-    /// (e.g. chunked transfer-encoding) and ends when the channel closes. The
-    /// `failed` flag tells the engine to abort rather than terminate cleanly.
+    /// Streaming body for large dynamic responses (e.g. cold-tier reads): a
+    /// spawned producer feeds frames over a channel. The `failed` flag tells the
+    /// engine to abort rather than terminate cleanly. For SSE fan-out, prefer
+    /// `Body::Sse`, which avoids the per-response task + channel.
     Channel(StreamBody),
+    /// Pull-based streaming body driven inline on the connection task (SSE).
+    /// No spawned task, no channel — see `EventSource`.
+    Sse(Box<dyn EventSource>),
     /// Byte ranges of data files plus optional framing (JSON `[` / `]`).
     /// Total body length is prefix + Σ segment.len + suffix.
     FileRange {
@@ -120,6 +149,7 @@ impl Body {
             Body::Empty => Some(0),
             Body::Full(b) => Some(b.len() as u64),
             Body::Channel(_) => None,
+            Body::Sse(_) => None,
             Body::FileRange {
                 segments,
                 prefix,
