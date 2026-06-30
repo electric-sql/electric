@@ -16,6 +16,27 @@ defmodule ElectricTelemetry.ProcessesTest do
       assert "GET /v1/health" = proc_type(pid)
     end
 
+    test "groups request labels with a non-default-length request id (e.g. a proxy-supplied UUID)" do
+      pid =
+        spawn_with_label(
+          "Request 123e4567-e89b-12d3-a456-426614174000 - GET /v1/shape?table=users&offset=-1"
+        )
+
+      assert "GET /v1/shape" = proc_type(pid)
+    end
+
+    test "groups request labels with a shorter-than-default request id" do
+      pid = spawn_with_label("Request abc123 - GET /v1/health")
+
+      assert "GET /v1/health" = proc_type(pid)
+    end
+
+    test "request label with no \" - \" delimiter is truncated" do
+      pid = spawn_with_label("Request something-without-delimiter")
+
+      assert "Request something-wi" = proc_type(pid)
+    end
+
     test "non-request binary labels are truncated to 20 chars" do
       pid = spawn_with_label("some_long_label_that_exceeds_twenty_characters")
 

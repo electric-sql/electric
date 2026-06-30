@@ -1579,10 +1579,13 @@ defmodule Electric.ShapeCacheTest do
       # explicit `start_consumer_for_handle/2` call is required. The
       # continue runs asynchronously after `start_supervised!` returns,
       # so we wait for the registry to populate.
-      assert wait_until(1000, fn ->
-               not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) and
-                 not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle))
-             end)
+      assert wait_until(
+               fn ->
+                 not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) and
+                   not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle))
+               end,
+               1000
+             )
 
       # Materializer should be started
       assert Process.alive?(
