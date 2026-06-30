@@ -456,8 +456,6 @@ defmodule Electric.Shapes.Consumer do
     %{state | suspend_timer: ref}
   end
 
-  defp cancel_suspend_timer(%{suspend_timer: nil} = state), do: state
-
   defp cancel_suspend_timer(%{suspend_timer: ref} = state) do
     :erlang.cancel_timer(ref)
     %{state | suspend_timer: nil}
