@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.7.5
+
+### Patch Changes
+
+- 86bb70f: Fix a race condition in the PublicationManager relation tracker restart test that caused intermittent failures.
+- f245417: Test-only: make the StackSupervisor telemetry test synchronous to avoid serve_shape counter contamination from concurrently running tests. No runtime changes.
+
 ## 1.7.4
 
 ### Patch Changes

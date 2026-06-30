@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.3.1
+
+### Patch Changes
+
+- 044a8d5: Fix `process_type` parsing for request processes that have a request id that is not the standard 20 bytes.
+
 ## 0.3.0
 
 ### Minor Changes
