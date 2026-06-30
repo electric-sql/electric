@@ -2087,7 +2087,14 @@ fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: Option<
     let mut b = ResponseBuilder::new(200)
         .hs("content-type", "text/event-stream")
         .hs("cache-control", "no-cache")
-        .hs("connection", "keep-alive");
+        // SSE responses are single-use: the server unilaterally closes the socket
+        // when the stream closes (or at SSE_MAX_DURATION), so we must NOT advertise
+        // keep-alive. If we did, the client (e.g. undici) would return the socket to
+        // its pool and pipeline the next request onto it; the server's close() would
+        // then see unread request bytes in the recv buffer and send a RST instead of
+        // a FIN, discarding the still-in-flight SSE response (data + close frames)
+        // and surfacing as an UND_ERR_SOCKET "other side closed" on the client.
+        .hs("connection", "close");
     if is_b64 {
         b = b.hs(H_SSE_ENCODING, "base64");
     }
