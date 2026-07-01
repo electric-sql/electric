@@ -317,6 +317,16 @@ export interface ShapeStreamOptions<T = never> {
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
+
+  /**
+   * Maximum time in milliseconds to wait for a live long-poll request before
+   * aborting it and reconnecting. This guards against runtimes (notably some
+   * React Native fetch implementations) where an in-flight fetch can hang
+   * indefinitely across app lifecycle or network transitions.
+   *
+   * Set to `false` to disable the watchdog.
+   */
+  liveRequestTimeoutMs?: number | false
   parser?: Parser<T>
 
   /**
@@ -628,6 +638,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
+  #liveRequestTimeoutMs: number | false
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
@@ -708,6 +719,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
+    this.#liveRequestTimeoutMs = this.options.liveRequestTimeoutMs ?? 45_000
 
     const baseFetchClient =
       options.fetchClient ??
@@ -1546,16 +1558,48 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShapeLongPoll(opts)
   }
 
+  async #withLiveRequestTimeout<T>(
+    promise: Promise<T>,
+    requestAbortController: AbortController,
+    fetchUrl: URL
+  ): Promise<T> {
+    const timeoutMs = this.#liveRequestTimeoutMs
+    const isLiveRequest = fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`
+
+    if (timeoutMs === false || !isLiveRequest) return promise
+
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        if (!requestAbortController.signal.aborted) {
+          this.#restartAbortControllers.add(requestAbortController)
+          requestAbortController.abort(SYSTEM_WAKE)
+        }
+        reject(new FetchBackoffAbortError())
+      }, timeoutMs)
+    })
+
+    try {
+      return await Promise.race([promise, timeoutPromise])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
+  }
+
   async #requestShapeLongPoll(opts: {
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    const response = await this.#fetchClient(fetchUrl.toString(), {
-      signal: requestAbortController.signal,
-      headers,
-    })
+    const response = await this.#withLiveRequestTimeout(
+      this.#fetchClient(fetchUrl.toString(), {
+        signal: requestAbortController.signal,
+        headers,
+      }),
+      requestAbortController,
+      fetchUrl
+    )
 
     this.#connected = true
     const shouldProcessBody = await this.#onInitialResponse(response)

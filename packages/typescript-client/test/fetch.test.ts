@@ -1,4 +1,12 @@
-import { describe, beforeEach, it, expect, vi, type Mock } from 'vitest'
+import {
+  describe,
+  beforeEach,
+  afterEach,
+  it,
+  expect,
+  vi,
+  type Mock,
+} from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { FetchError, FetchBackoffAbortError } from '../src/error'
 import {
@@ -9,7 +17,6 @@ import {
   parseRetryAfterHeader,
 } from '../src/fetch'
 import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
-import { afterEach } from 'node:test'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -18,6 +25,10 @@ describe(`createFetchWithBackoff`, () => {
 
   beforeEach(() => {
     mockFetchClient = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it(`should return a successful response on the first attempt`, async () => {
@@ -135,6 +146,35 @@ describe(`createFetchWithBackoff`, () => {
       fetchWithBackoff(`https://example.com`, { signal })
     ).rejects.toThrow(FetchBackoffAbortError)
 
+    expect(mockFetchClient).toHaveBeenCalledTimes(1)
+  })
+
+  it(`should abort retry backoff immediately when the signal aborts`, async () => {
+    vi.useFakeTimers()
+
+    const mockAbortController = new AbortController()
+    const signal = mockAbortController.signal
+    mockFetchClient.mockRejectedValue(new TypeError(`Network request failed`))
+
+    const fetchWithBackoff = createFetchWithBackoff(mockFetchClient, {
+      initialDelay: 10_000,
+      maxDelay: 10_000,
+      multiplier: 1,
+      maxRetries: Infinity,
+    })
+
+    const fetchPromise = fetchWithBackoff(`https://example.com`, { signal })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockFetchClient).toHaveBeenCalledTimes(1)
+
+    const rejectionExpectation = expect(fetchPromise).rejects.toThrow(
+      FetchBackoffAbortError
+    )
+
+    mockAbortController.abort()
+    await vi.advanceTimersByTimeAsync(0)
+
+    await rejectionExpectation
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
   })
 

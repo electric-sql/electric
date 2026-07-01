@@ -77,6 +77,28 @@ export function parseRetryAfterHeader(retryAfter: string | undefined): number {
   return 0
 }
 
+async function abortableSleep(
+  waitMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  if (waitMs <= 0 || signal?.aborted) return
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const done = (err?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener(`abort`, onAbort)
+      err ? reject(err) : resolve()
+    }
+    const onAbort = () => done(new FetchBackoffAbortError())
+    const timer = setTimeout(() => done(), waitMs)
+    signal?.addEventListener(`abort`, onAbort, { once: true })
+    if (signal?.aborted) onAbort()
+  })
+}
+
 export function createFetchWithBackoff(
   fetchClient: typeof fetch,
   backoffOptions: BackoffOptions = BackoffDefaults
@@ -155,8 +177,9 @@ export function createFetchWithBackoff(
             )
           }
 
-          // Wait for the calculated duration
-          await new Promise((resolve) => setTimeout(resolve, waitMs))
+          // Wait for the calculated duration, but let stream-level aborts
+          // interrupt the backoff immediately (e.g. system wake reconnects).
+          await abortableSleep(waitMs, options?.signal ?? undefined)
 
           // Increase the delay for the next attempt (capped at maxDelay)
           delay = Math.min(delay * multiplier, maxDelay)
