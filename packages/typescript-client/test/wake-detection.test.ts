@@ -171,6 +171,65 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  it(`should restart after a live request timeout even when fetch ignores abort`, async () => {
+    vi.useFakeTimers()
+
+    let fetchCallCount = 0
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      fetchCallCount++
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      const isLive = input.toString().includes(`live=true`)
+      if (!isLive) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      // Simulate React Native fetch getting wedged across app lifecycle:
+      // it never resolves/rejects, and aborting the signal does not settle it.
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 100,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchCallCount).toBe(2)
+
+    await vi.advanceTimersByTimeAsync(101)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchCallCount).toBeGreaterThan(2)
+
+    unsub()
+    aborter.abort()
+  })
+
   it(`should re-arm wake detection after snapshot pause and resume`, async () => {
     vi.useFakeTimers()
 
