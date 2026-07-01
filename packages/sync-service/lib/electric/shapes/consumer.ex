@@ -588,7 +588,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # Skip transactions already applied and persisted (e.g. replayed from the persistent
-  # replication slot on restart) - ones at or below `latest_offset`. 
+  # replication slot on restart) - ones at or below `latest_offset`.
   #
   # This skips whole transactions, relying on a replayed transaction being entirely
   # at-or-below or entirely above `latest_offset`, never straddling it. In-memory
