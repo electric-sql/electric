@@ -587,12 +587,8 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
-  # A transaction already applied and persisted (e.g. replayed from the persistent
-  # replication slot on restart) sits at or below `latest_offset`. Skip it here so
-  # the dedup covers every path — including the complete-transaction fast paths
-  # below, which short-circuit before reaching `process_txn_fragment/2`. Re-applying
-  # such a transaction would duplicate ops in the shape log and, for dependent
-  # subquery materializers, re-apply and crash them.
+  # Skip transactions already applied and persisted (e.g. replayed from the persistent
+  # replication slot on restart) - ones at or below `latest_offset`. 
   #
   # This relies on a transaction's fragments being entirely at-or-below or entirely
   # above `latest_offset` (it only advances at commit boundaries).
