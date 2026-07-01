@@ -223,6 +223,92 @@ defmodule Electric.Shapes.ConsumerTest do
       [consumers: consumers]
     end
 
+    test "sheds a live subscriber whose mailbox grows without bound", ctx do
+      # Regression: a live `GET /v1/shape` subscriber that can't drain its
+      # mailbox (stalled/dead socket) while changes keep streaming accumulates
+      # one `{:new_changes, _}` message per transaction with no upper bound.
+      # Each message pins reference-counted binary, so memory grows unbounded
+      # until the node OOMs. The consumer must shed such a subscriber once its
+      # mailbox crosses a watermark instead of notifying it forever.
+      Electric.StackConfig.put(ctx.stack_id, :slow_subscriber_max_queue_len, 5)
+
+      xmin = snapshot_xmin(@shape_handle1, ctx)
+      base_lsn = lsn(@shape_handle1, ctx)
+      test_pid = self()
+
+      # A subscriber that registers for changes but never drains its mailbox.
+      subscriber =
+        spawn(fn ->
+          {:ok, _} = Registry.register(ctx.registry, @shape_handle1, make_ref())
+          send(test_pid, :subscribed)
+          Process.sleep(:infinity)
+        end)
+
+      monitor = Process.monitor(subscriber)
+      assert_receive :subscribed, @receive_timeout
+
+      # Stream a steady series of transactions that all match the shape.
+      for i <- 1..50 do
+        txn_lsn = Lsn.increment(base_lsn, i)
+
+        txn =
+          complete_txn_fragment(xmin + i, txn_lsn, [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(txn_lsn, 0)
+            }
+          ])
+
+        assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      end
+
+      # The non-draining subscriber must be shed once its mailbox crosses the
+      # watermark, rather than being allowed to grow without bound.
+      assert_receive {:DOWN, ^monitor, :process, ^subscriber, _reason}, @receive_timeout
+    end
+
+    test "does not shed a healthy subscriber whose backlog stays under the watermark", ctx do
+      # The shedding safety net must not disturb normal live clients that drain
+      # their mailbox and never approach the watermark.
+      Electric.StackConfig.put(ctx.stack_id, :slow_subscriber_max_queue_len, 100)
+
+      xmin = snapshot_xmin(@shape_handle1, ctx)
+      base_lsn = lsn(@shape_handle1, ctx)
+      test_pid = self()
+
+      # A subscriber that drains every notification promptly.
+      subscriber =
+        spawn(fn ->
+          {:ok, _} = Registry.register(ctx.registry, @shape_handle1, ref = make_ref())
+          send(test_pid, :subscribed)
+          drain = fn drain -> receive(do: ({^ref, :new_changes, _} -> drain.(drain))) end
+          drain.(drain)
+        end)
+
+      monitor = Process.monitor(subscriber)
+      on_exit(fn -> Process.exit(subscriber, :kill) end)
+      assert_receive :subscribed, @receive_timeout
+
+      for i <- 1..50 do
+        txn_lsn = Lsn.increment(base_lsn, i)
+
+        txn =
+          complete_txn_fragment(xmin + i, txn_lsn, [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(txn_lsn, 0)
+            }
+          ])
+
+        assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      end
+
+      refute_receive {:DOWN, ^monitor, :process, ^subscriber, _reason}, 200
+      assert Process.alive?(subscriber)
+    end
+
     test "appends to log when xid >= xmin", ctx do
       xid = 150
       xmin = snapshot_xmin(@shape_handle1, ctx)
