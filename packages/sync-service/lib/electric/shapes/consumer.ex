@@ -587,17 +587,18 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
-  # On restart the persistent replication slot can replay transactions we have
-  # already applied and persisted. The multi-fragment path skips those via
-  # `fragment_already_processed?/2` (see `process_txn_fragment/2`), but the
-  # complete-transaction fast paths below did not — so a replayed single-fragment
-  # transaction was re-written to the shape log (duplicating ops) and re-notified
-  # to dependent materializers, which re-apply it and crash. Skip it here, so the
-  # dedup is applied on every path.
+  # A transaction already applied and persisted (e.g. replayed from the persistent
+  # replication slot on restart) sits at or below `latest_offset`. Skip it here so
+  # the dedup covers every path — including the complete-transaction fast paths
+  # below, which short-circuit before reaching `process_txn_fragment/2`. Re-applying
+  # such a transaction would duplicate ops in the shape log and, for dependent
+  # subquery materializers, re-apply and crash them.
+  #
+  # This relies on a transaction's fragments being entirely at-or-below or entirely
+  # above `latest_offset` (it only advances at commit boundaries).
   defp handle_txn_fragment(%TransactionFragment{last_log_offset: offset} = txn_fragment, state)
-       when TransactionFragment.complete_transaction?(txn_fragment) and
-              LogOffset.is_log_offset_lte(offset, state.latest_offset) do
-    consider_flushed(state, offset)
+       when LogOffset.is_log_offset_lte(offset, state.latest_offset) do
+    skip_txn_fragment(state, txn_fragment)
   end
 
   # Short-circuit clauses for the most common case of a single-fragment transaction
@@ -670,8 +671,10 @@ defmodule Electric.Shapes.Consumer do
          %State{pending_txn: txn} = state
        ) do
     cond do
-      # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
-      txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) ->
+      # Fragments of a transaction whose xid is already in the initial snapshot are
+      # skipped here. (Offset-based dedup of replayed transactions is handled earlier,
+      # in `handle_txn_fragment/2`.)
+      txn.consider_flushed? ->
         skip_txn_fragment(state, txn_fragment)
 
       # With write_unit=txn all fragments are buffered until the Commit change is seen. At that
@@ -1108,10 +1111,6 @@ defmodule Electric.Shapes.Consumer do
     # Since the lag is only useful when it becomes significant, a slight skew doesn't matter.
     now = DateTime.utc_now()
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
-  end
-
-  defp fragment_already_processed?(%TransactionFragment{last_log_offset: offset}, state) do
-    LogOffset.is_log_offset_lte(offset, state.latest_offset)
   end
 
   defp consider_flushed(%State{} = state, log_offset) do
