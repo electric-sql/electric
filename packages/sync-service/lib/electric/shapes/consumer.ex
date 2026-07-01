@@ -590,8 +590,14 @@ defmodule Electric.Shapes.Consumer do
   # Skip transactions already applied and persisted (e.g. replayed from the persistent
   # replication slot on restart) - ones at or below `latest_offset`. 
   #
-  # This relies on a transaction's fragments being entirely at-or-below or entirely
-  # above `latest_offset` (it only advances at commit boundaries).
+  # This skips whole transactions, relying on a replayed transaction being entirely
+  # at-or-below or entirely above `latest_offset`, never straddling it. In-memory
+  # `latest_offset` advances per written fragment (see `write_txn_fragment_to_storage/2`),
+  # not only at commit — but on the replay path the guarantee holds: after a restart
+  # `latest_offset` is restored from storage at a commit boundary
+  # (`Storage.fetch_latest_offset/1`, from `last_{seen,persisted}_txn_offset`), and the
+  # replication slot replays whole transactions from a commit boundary
+  # (`confirmed_flush_lsn`).
   defp handle_txn_fragment(%TransactionFragment{last_log_offset: offset} = txn_fragment, state)
        when LogOffset.is_log_offset_lte(offset, state.latest_offset) do
     skip_txn_fragment(state, txn_fragment)
