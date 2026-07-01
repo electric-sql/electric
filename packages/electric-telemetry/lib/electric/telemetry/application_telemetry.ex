@@ -42,9 +42,19 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   defp exporter_child_specs(opts) do
     metrics = metrics(opts)
 
-    # Metrics that should reach Prometheus only, e.g. stack-level metrics that the other
-    # reporters already export per-stack. Appending them here avoids double-reporting.
-    prometheus_metrics = metrics ++ Map.get(opts, :additional_prometheus_metrics, [])
+    # `ets.table.*` are high-cardinality per-table gauges tagged by the raw table name
+    # (which embeds per-shape/stack ids). That rotating top-N set is the intended trade-off
+    # for OTel/Honeycomb (the exporter clears its series between exports) and is harmless for
+    # StatsD (each value is pushed as it's emitted, so nothing accumulates in-process). But
+    # `TelemetryMetricsPrometheus.Core` keeps every series in its registry
+    # with no TTL — so a rotating top-N set would accumulate stale series indefinitely. Keep
+    # these off the Prometheus `/metrics` path; its `ets.memory.total` (by `table_type`) stays.
+    #
+    # `additional_prometheus_metrics` are, conversely, Prometheus-only extras (stack-level
+    # metrics the other reporters already export per-stack) appended to avoid double-reporting.
+    prometheus_metrics =
+      Enum.reject(metrics, &prometheus_excluded?/1) ++
+        Map.get(opts, :additional_prometheus_metrics, [])
 
     [
       Reporters.CallHomeReporter.child_spec(
@@ -56,6 +66,11 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       Reporters.Statsd.child_spec(opts, metrics: metrics)
     ]
   end
+
+  # Per-table ETS gauges are excluded from the (TTL-less) Prometheus registry; see
+  # `exporter_child_specs/1`. They still flow to OTel and StatsD.
+  defp prometheus_excluded?(%{name: [:ets, :table | _]}), do: true
+  defp prometheus_excluded?(_), do: false
 
   @impl ElectricTelemetry.Poller
   def builtin_periodic_measurements(telemetry_opts) do
@@ -82,6 +97,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           :process_memory,
           :process_bin_memory,
           :ets_memory,
+          :ets_table_memory,
           :get_system_load_average,
           :get_system_memory_usage
         ],
@@ -98,6 +114,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("process.bin_memory.max_ref_count", tags: [:process_type]),
       last_value("process.bin_memory.avg_ref_count", tags: [:process_type]),
       last_value("ets.memory.total", tags: [:table_type], unit: :byte),
+      last_value("ets.table.memory", tags: [:table_name, :table_type], unit: :byte),
+      last_value("ets.table.size", tags: [:table_name, :table_type]),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
       last_value("system.load_percent.avg1"),
@@ -186,7 +204,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       :telemetry.execute(
         [:process, :memory],
         %{total: map.proc_mem},
-        %{process_type: to_string(map.type)}
+        %{process_type: map.type}
       )
     end
   end
@@ -202,7 +220,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           max_ref_count: map.max_ref_count,
           avg_ref_count: map.avg_ref_count
         },
-        %{process_type: to_string(map.type)}
+        %{process_type: map.type}
       )
     end
   end
@@ -210,7 +228,20 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def ets_memory(%{intervals_and_thresholds: %{top_ets_table_count: ets_table_count}}) do
     for %{type: type, memory: memory} <-
           ElectricTelemetry.EtsTables.top_by_type(ets_table_count) do
-      :telemetry.execute([:ets, :memory], %{total: memory}, %{table_type: to_string(type)})
+      :telemetry.execute([:ets, :memory], %{total: memory}, %{table_type: type})
+    end
+  end
+
+  def ets_table_memory(%{
+        intervals_and_thresholds: %{top_ets_individual_count: individual_count}
+      }) do
+    for %{name: name, type: type, memory: memory, size: size} <-
+          ElectricTelemetry.EtsTables.top_tables(individual_count) do
+      :telemetry.execute(
+        [:ets, :table],
+        %{memory: memory, size: size},
+        %{table_name: name, table_type: type}
+      )
     end
   end
 
