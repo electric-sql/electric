@@ -890,6 +890,93 @@ defmodule Electric.Shapes.ConsumerTest do
       refute_receive {^ref, :new_changes, _}
     end
 
+    @tag allow_subqueries: false
+    test "skips an already-applied multi-fragment transaction replayed past a fresh log collector",
+         ctx do
+      # Multi-fragment variant of "skips an already-applied transaction replayed
+      # past a fresh log collector". On restart the persistent slot can replay a
+      # multi-statement transaction the consumer has already applied. This drives
+      # the offset-dedup on the multi-fragment path (BEGIN / middle / COMMIT
+      # fragments), not the single-fragment fast path — the consumer must skip
+      # every fragment without re-writing or re-notifying.
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      [f1, f2, f3] =
+        txn_fragments(xid, lsn, [
+          %{
+            has_begin?: true,
+            changes: [
+              %Changes.NewRecord{
+                relation: {"public", "test_table"},
+                record: %{"id" => "1"},
+                log_offset: LogOffset.new(lsn, 0)
+              }
+            ]
+          },
+          %{
+            changes: [
+              %Changes.NewRecord{
+                relation: {"public", "test_table"},
+                record: %{"id" => "2"},
+                log_offset: LogOffset.new(lsn, 2)
+              }
+            ]
+          },
+          %{
+            has_commit?: true,
+            changes: [
+              %Changes.NewRecord{
+                relation: {"public", "test_table"},
+                record: %{"id" => "3"},
+                log_offset: LogOffset.new(lsn, 4)
+              }
+            ]
+          }
+        ])
+
+      consumer_pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      # First delivery via the collector: applied normally, advancing latest_offset
+      # to the commit offset.
+      Enum.each([f1, f2, f3], &assert(:ok = ShapeLogCollector.handle_event(&1, ctx.stack_id)))
+
+      commit_offset = LogOffset.new(lsn, 4)
+      assert_receive {^ref, :new_changes, ^commit_offset}
+
+      assert [_, _, _] =
+               ops =
+               get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+
+      # Replay every fragment straight to the consumer, bypassing the collector's
+      # offset de-dup (as on restart with a fresh collector). The consumer's restored
+      # latest_offset is already at the commit, so all fragments — including the
+      # BEGIN fragment, which now skips without ever setting up `pending_txn` — must
+      # be skipped: no storage writes, no notification, log unchanged.
+      enable_storage_tracer_for(consumer_pid)
+
+      Enum.each([f1, f2, f3], fn f ->
+        assert :ok =
+                 GenServer.call(
+                   Shapes.Consumer.name(ctx.stack_id, shape_handle),
+                   {:handle_event, f, Electric.Telemetry.OpenTelemetry.get_current_context()},
+                   :infinity
+                 )
+      end)
+
+      assert [] == Support.Trace.collect_traced_calls()
+      refute_receive {^ref, :new_changes, _}
+
+      assert ops ==
+               get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+    end
+
     @tag pg_snapshot: {10, 13, [10, 12]},
          delay_snapshot_creation?: true,
          with_pure_file_storage_opts: [flush_period: 1]
