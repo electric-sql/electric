@@ -668,6 +668,21 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
 
+  # Defensive: this is only ever reached with a `pending_txn` set — a transaction's
+  # BEGIN fragment creates it (see the `has_begin?` clauses above) before any fragment
+  # gets here. The only way to arrive with `pending_txn: nil` is a transaction that
+  # straddled `latest_offset`: its BEGIN fragment skipped by the already-applied clause
+  # while a later fragment was not. The commit-aligned restore + whole-transaction replay
+  # invariant (documented on that clause) rules this out; fail loudly with a clear message
+  # rather than crash on `nil.consider_flushed?` if it is ever violated.
+  defp process_txn_fragment(%TransactionFragment{last_log_offset: offset}, %State{
+         pending_txn: nil
+       }) do
+    raise "consumer received a transaction fragment at #{inspect(offset)} with no pending " <>
+            "transaction — a transaction straddling latest_offset was partially skipped, " <>
+            "which should be impossible"
+  end
+
   defp process_txn_fragment(
          %TransactionFragment{} = txn_fragment,
          %State{pending_txn: txn} = state
