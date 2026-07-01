@@ -255,6 +255,92 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  it(`should restart a hung wake catch-up request`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      // Simulate a foreground catch-up request that reaches native networking but
+      // never resolves or rejects. This was observed in the customer PR build:
+      // wake recovery sent non-live requests, then polling stopped at those URLs.
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls).toHaveLength(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[2]?.aborted).toBe(true)
+    expect(fetchSignals[2]?.reason).toBe(`live-request-timeout`)
+    expect(fetchUrls.length).toBeGreaterThan(3)
+    expect(fetchUrls[3]).not.toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
   it(`should issue a non-live refresh after system wake even when URL construction yields`, async () => {
     vi.useFakeTimers()
 

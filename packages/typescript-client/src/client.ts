@@ -321,10 +321,11 @@ export interface ShapeStreamOptions<T = never> {
   backoffOptions?: BackoffOptions
 
   /**
-   * Maximum time in milliseconds to wait for a live long-poll request before
-   * aborting it and reconnecting. This guards against runtimes (notably some
-   * React Native fetch implementations) where an in-flight fetch can hang
-   * indefinitely across app lifecycle or network transitions.
+   * Maximum time in milliseconds to wait for a live long-poll request or
+   * refresh catch-up request before aborting it and reconnecting. This guards
+   * against runtimes (notably some React Native fetch implementations) where an
+   * in-flight fetch can hang indefinitely across app lifecycle or network
+   * transitions.
    *
    * Must be a positive finite number. Set to `false` to disable the watchdog.
    */
@@ -1561,15 +1562,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShapeLongPoll(opts)
   }
 
-  async #withLiveRequestTimeout<T>(
+  async #withRequestTimeout<T>(
     promise: Promise<T>,
     requestAbortController: AbortController,
     fetchUrl: URL
   ): Promise<T> {
     const timeoutMs = this.#liveRequestTimeoutMs
     const isLiveRequest = fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`
+    const isRefreshCatchUpRequest = this.#isRefreshing
 
-    if (timeoutMs === false || !isLiveRequest) return promise
+    if (timeoutMs === false || (!isLiveRequest && !isRefreshCatchUpRequest)) {
+      return promise
+    }
 
     let timeout: ReturnType<typeof setTimeout> | undefined
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1595,7 +1599,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    const response = await this.#withLiveRequestTimeout(
+    const response = await this.#withRequestTimeout(
       this.#fetchClient(fetchUrl.toString(), {
         signal: requestAbortController.signal,
         headers,
