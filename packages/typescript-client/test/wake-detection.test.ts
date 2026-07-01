@@ -171,6 +171,30 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  it(`should reject invalid live request timeout values`, () => {
+    for (const liveRequestTimeoutMs of [0, -1, Number.NaN, Infinity]) {
+      expect(
+        () =>
+          new ShapeStream({
+            url: shapeUrl,
+            params: { table: `foo` },
+            liveRequestTimeoutMs,
+          })
+      ).toThrow(
+        `Invalid shape options: liveRequestTimeoutMs must be a positive finite number or false`
+      )
+    }
+
+    expect(
+      () =>
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          liveRequestTimeoutMs: false,
+        })
+    ).not.toThrow()
+  })
+
   it(`should restart after a live request timeout even when fetch ignores abort`, async () => {
     vi.useFakeTimers()
 
@@ -224,7 +248,79 @@ describe(`Wake detection`, () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`live-request-timeout`)
     expect(fetchCallCount).toBeGreaterThan(2)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should issue a non-live refresh after system wake even when URL construction yields`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      headers: {
+        authorization: async () => {
+          await Promise.resolve()
+          return `Bearer token`
+        },
+      },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchUrls.length).toBeGreaterThanOrEqual(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
 
     unsub()
     aborter.abort()

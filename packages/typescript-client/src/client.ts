@@ -27,6 +27,7 @@ import {
   MissingShapeUrlError,
   InvalidSignalError,
   MissingShapeHandleError,
+  InvalidShapeOptionsError,
   ReservedParamError,
   MissingHeadersError,
   StaleCacheError,
@@ -57,6 +58,7 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
   SYSTEM_WAKE,
+  LIVE_REQUEST_TIMEOUT,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
@@ -324,7 +326,7 @@ export interface ShapeStreamOptions<T = never> {
    * React Native fetch implementations) where an in-flight fetch can hang
    * indefinitely across app lifecycle or network transitions.
    *
-   * Set to `false` to disable the watchdog.
+   * Must be a positive finite number. Set to `false` to disable the watchdog.
    */
   liveRequestTimeoutMs?: number | false
   parser?: Parser<T>
@@ -990,7 +992,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         requestAbortController.signal.aborted &&
         (isMarkedRestartAbort ||
           abortReason === FORCE_DISCONNECT_AND_REFRESH ||
-          abortReason === SYSTEM_WAKE)
+          abortReason === SYSTEM_WAKE ||
+          abortReason === LIVE_REQUEST_TIMEOUT)
 
       if (
         (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
@@ -1573,7 +1576,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       timeout = setTimeout(() => {
         if (!requestAbortController.signal.aborted) {
           this.#restartAbortControllers.add(requestAbortController)
-          requestAbortController.abort(SYSTEM_WAKE)
+          requestAbortController.abort(LIVE_REQUEST_TIMEOUT)
         }
         reject(new FetchBackoffAbortError())
       }, timeoutMs)
@@ -1804,11 +1807,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#tickPromiseResolver = resolve
       this.#tickPromiseRejecter = reject
     })
-    this.#tickPromise.finally(() => {
-      this.#tickPromise = undefined
-      this.#tickPromiseResolver = undefined
-      this.#tickPromiseRejecter = undefined
-    })
+    this.#tickPromise
+      .finally(() => {
+        this.#tickPromise = undefined
+        this.#tickPromiseResolver = undefined
+        this.#tickPromiseRejecter = undefined
+      })
+      .catch(() => {
+        // The original tick promise is returned to callers; this chained promise
+        // is only for cleanup, so consume rejections to avoid unhandled errors.
+      })
     return this.#tickPromise
   }
 
@@ -1924,6 +1932,33 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * detection, in-flight HTTP requests (long-poll or SSE) may hang until
    * the OS TCP timeout.
    */
+  #forceDisconnectAndRefreshFromWake() {
+    const requestAbortController = this.#requestAbortController
+    if (
+      this.#pauseLock.isPaused ||
+      !requestAbortController ||
+      requestAbortController.signal.aborted ||
+      this.options.signal?.aborted
+    ) {
+      return
+    }
+
+    this.#refreshCount++
+    // Track restart intent ourselves instead of relying only on
+    // AbortSignal.reason, which is missing in some React Native runtimes.
+    this.#restartAbortControllers.add(requestAbortController)
+    requestAbortController.abort(SYSTEM_WAKE)
+
+    this.#nextTick()
+      .catch(() => {
+        // Teardown or user abort can reject the tick promise. Wake recovery runs
+        // from a timer callback, so avoid surfacing that as an unhandled rejection.
+      })
+      .finally(() => {
+        this.#refreshCount--
+      })
+  }
+
   #subscribeToWakeDetection() {
     if (this.#hasBrowserVisibilityAPI()) return
     if (this.#unsubscribeFromWakeDetection) return
@@ -1939,26 +1974,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       lastTickTime = now
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
-        const requestAbortController = this.#requestAbortController
-        if (
-          !this.#pauseLock.isPaused &&
-          requestAbortController &&
-          !requestAbortController.signal.aborted
-        ) {
-          this.#refreshCount++
-          // Track restart intent ourselves instead of relying only on
-          // AbortSignal.reason, which is missing in some React Native runtimes.
-          this.#restartAbortControllers.add(requestAbortController)
-          requestAbortController.abort(SYSTEM_WAKE)
-          // Wake handler is synchronous (setInterval callback) so we can't
-          // use try/finally + await like forceDisconnectAndRefresh. Instead,
-          // decrement via queueMicrotask — safe because the abort triggers
-          // #requestShape to re-run, which reads #isRefreshing synchronously
-          // before the microtask fires.
-          queueMicrotask(() => {
-            this.#refreshCount--
-          })
-        }
+        this.#forceDisconnectAndRefreshFromWake()
       }
     }, INTERVAL_MS)
 
@@ -2353,6 +2369,17 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new InvalidSignalError()
+  }
+
+  if (
+    options.liveRequestTimeoutMs !== undefined &&
+    options.liveRequestTimeoutMs !== false &&
+    (!Number.isFinite(options.liveRequestTimeoutMs) ||
+      options.liveRequestTimeoutMs <= 0)
+  ) {
+    throw new InvalidShapeOptionsError(
+      `Invalid shape options: liveRequestTimeoutMs must be a positive finite number or false`
+    )
   }
 
   if (

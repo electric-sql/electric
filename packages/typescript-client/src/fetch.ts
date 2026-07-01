@@ -81,7 +81,8 @@ async function abortableSleep(
   waitMs: number,
   signal?: AbortSignal
 ): Promise<void> {
-  if (waitMs <= 0 || signal?.aborted) return
+  if (waitMs <= 0) return
+  if (signal?.aborted) throw new FetchBackoffAbortError()
 
   await new Promise<void>((resolve, reject) => {
     let settled = false
