@@ -34,6 +34,7 @@ defmodule Support.OracleHarness do
   """
 
   alias Support.OracleHarness.ShapeChecker
+  alias Support.OracleHarness.RestartStrategy
 
   @type shape :: %{
           name: String.t(),
@@ -56,7 +57,10 @@ defmodule Support.OracleHarness do
   # ----------------------------------------------------------------------------
 
   def default_opts_from_env do
-    [oracle_pool_size: env_int("ORACLE_POOL_SIZE") || @default_oracle_pool_size]
+    [
+      oracle_pool_size: env_int("ORACLE_POOL_SIZE") || @default_oracle_pool_size,
+      restart_type: env_string("RESTART_TYPE") || "graceful"
+    ]
   end
 
   @doc """
@@ -73,6 +77,9 @@ defmodule Support.OracleHarness do
     - :timeout_ms - timeout for waiting on shapes (default: 10_000)
     - :restart_server_every - restart the StackSupervisor every N batches to
       exercise restore-from-disk (default: 0, disabled)
+    - :restart_type - how the server restart is performed: "graceful" (default),
+      "brutal" (crash + recover), or "rolling" (rolling deploy). See
+      `Support.OracleHarness.RestartStrategy`. Env: RESTART_TYPE.
     - :restart_client_every - throw away and recreate the shape clients every
       M batches to exercise fresh-poll consistency (default: 0, disabled)
   """
@@ -82,6 +89,7 @@ defmodule Support.OracleHarness do
     timeout_ms = opts[:timeout_ms] || env_int("CHECK_TIMEOUT") || @default_timeout_ms
     restart_server_every = opts[:restart_server_every] || 0
     restart_client_every = opts[:restart_client_every] || 0
+    restart_strategy = RestartStrategy.for_type(opts[:restart_type] || "graceful")
 
     log_test_config(shapes, batches)
 
@@ -121,7 +129,15 @@ defmodule Support.OracleHarness do
             # server about to go down) and recreates them after the stack is
             # back up. If a client restart is also due this batch, it's
             # subsumed by the recreate that follows the server restart.
-            restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx)
+            restart_server(
+              ctx,
+              pids,
+              shapes,
+              oracle_pool,
+              timeout_ms,
+              batch_idx,
+              restart_strategy
+            )
 
           restart_client? ->
             new_pids = recreate_checkers(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx)
@@ -172,12 +188,12 @@ defmodule Support.OracleHarness do
   # Restarts the Electric stack (server-side restore-from-file test) and
   # reconnects the clients. Old checkers are stopped because their polls are
   # against the server that is about to go down.
-  defp restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx) do
-    log("Restarting server after batch_#{batch_idx}")
+  defp restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx, strategy) do
+    log("Restarting server (#{inspect(strategy)}) after batch_#{batch_idx}")
 
     Enum.each(pids, &GenServer.stop/1)
 
-    new_ctx = Map.merge(ctx, Support.ComponentSetup.restart_complete_stack(ctx))
+    new_ctx = Map.merge(ctx, strategy.restart(ctx))
 
     new_pids = recreate_checkers(new_ctx, [], shapes, oracle_pool, timeout_ms, batch_idx)
 
@@ -302,6 +318,18 @@ defmodule Support.OracleHarness do
           {int, ""} -> int
           _ -> raise "Invalid integer for #{name}=#{inspect(value)}"
         end
+    end
+  end
+
+  @doc """
+  Reads an environment variable as a string.
+  Returns nil if unset or empty.
+  """
+  def env_string(name) do
+    case System.get_env(name) do
+      nil -> nil
+      "" -> nil
+      value -> value
     end
   end
 

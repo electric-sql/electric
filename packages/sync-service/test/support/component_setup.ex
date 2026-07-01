@@ -484,14 +484,212 @@ defmodule Support.ComponentSetup do
     %{stack_supervisor: stack_supervisor}
   end
 
-  defp start_stack_supervisor!(
-         ctx,
-         stack_id,
-         kv,
-         storage,
-         stack_events_registry,
-         publication_name
-       ) do
+  @doc """
+  Like `restart_complete_stack/1`, but simulates a crash: the running
+  `Electric.StackSupervisor` is killed outright (`Process.exit(pid, :kill)`,
+  no terminate callbacks) rather than shut down gracefully. A fresh stack is
+  then started on the same `stack_id`/storage so recovery from on-disk state
+  (possibly torn writes, an orphaned replication slot, a stale advisory lock)
+  is exercised.
+
+  Returns a map with the updated `:stack_supervisor` pid.
+  """
+  def brutally_restart_complete_stack(ctx) do
+    pid = ctx.stack_supervisor
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      5_000 -> flunk("stack supervisor #{inspect(pid)} did not die after :kill")
+    end
+
+    # The child was `restart: :temporary`, so ExUnit does not restart it; its
+    # spec lingers with an :undefined pid. Remove it so the id is free to reuse.
+    case stop_supervised(Electric.StackSupervisor) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+    end
+
+    # A brutal kill propagates asynchronously; wait for the stack's registered
+    # processes (and their ETS tables) to actually be gone before starting a
+    # new stack with the same stack_id, else the new stack races name/table
+    # reuse and crashes on boot.
+    wait_for_stack_processes_down(ctx.stack_id)
+
+    stack_supervisor =
+      start_stack_supervisor!(
+        ctx,
+        ctx.stack_id,
+        ctx.persistent_kv,
+        ctx.storage,
+        ctx.stack_events_registry,
+        ctx.publication_name
+      )
+
+    # Generous timeout: worst case the stale advisory lock is only cleared on
+    # the periodic lock-breaker cycle (~10s), not immediately on kill.
+    :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 15_000)
+
+    %{stack_supervisor: stack_supervisor}
+  end
+
+  @doc """
+  Performs a rolling deploy: a brand new stack (its own `stack_id`, storage and
+  HTTP server) is brought up that contends on the *same* replication slot as
+  the running stack via the Postgres advisory lock. The new stack boots to
+  `read_only` (blocked acquiring the lock the old stack holds), then the old
+  stack is gracefully stopped — releasing the lock and leaving the persistent
+  slot and publication in place — and the new stack takes over as the single
+  active writer.
+
+  Returns a ctx-merge map swapping in the new stack: `stack_id`, `storage`,
+  `persistent_kv`, `registry`, `inspector`, `shape_cache`, `stack_supervisor`,
+  `stack_supervisor_id`, plus a new `client`/`base_url`/`server_pid`/`port` and
+  `server_id`/`rolling_gen` bookkeeping.
+  """
+  def rolling_restart_complete_stack(ctx) do
+    old_stack_id = ctx.stack_id
+    old_sup_id = Map.get(ctx, :stack_supervisor_id, Electric.StackSupervisor)
+    old_server_id = Map.get(ctx, :server_id, Bandit)
+
+    # The old stack derived its slot name from its stack_id in
+    # start_stack_supervisor!/7; force the new stack onto the same slot so they
+    # contend on one advisory lock.
+    old_slot_name = "electric_test_slot_#{:erlang.phash2(old_stack_id)}"
+
+    gen = Map.get(ctx, :rolling_gen, 0) + 1
+    new_stack_id = "#{old_stack_id}_roll#{gen}"
+    new_sup_id = {Electric.StackSupervisor, new_stack_id}
+    new_server_id = {Bandit, new_stack_id}
+
+    new_kv = %Electric.PersistentKV.Memory{
+      parent: self(),
+      pid:
+        start_supervised!(Electric.PersistentKV.Memory,
+          id: {Electric.PersistentKV.Memory, new_stack_id},
+          restart: :temporary
+        )
+    }
+
+    new_storage = {PureFileStorage, stack_id: new_stack_id, storage_dir: ctx.tmp_dir}
+
+    # (1) Start the new stack forced onto the old slot + same publication. It
+    #     will block acquiring the advisory lock (held by the old stack), so it
+    #     never emits :ready — don't wait for it.
+    start_ctx =
+      Map.put(
+        ctx,
+        :replication_opts_overrides,
+        Keyword.merge(
+          List.wrap(ctx[:replication_opts_overrides]),
+          slot_name: old_slot_name,
+          slot_temporary?: false
+        )
+      )
+
+    new_stack_supervisor =
+      start_stack_supervisor!(
+        start_ctx,
+        new_stack_id,
+        new_kv,
+        new_storage,
+        ctx.stack_events_registry,
+        ctx.publication_name,
+        id: new_sup_id,
+        await_ready?: false
+      )
+
+    # (2) read_only is reachable without the lock (shape metadata is loaded
+    #     before lock acquisition), confirming the new tree booted.
+    {:ok, :read_only} =
+      Electric.StatusMonitor.wait_until(new_stack_id, :read_only, timeout: 5_000)
+
+    new_ctx =
+      Map.merge(ctx, %{
+        stack_id: new_stack_id,
+        storage: new_storage,
+        persistent_kv: new_kv,
+        registry: Electric.StackSupervisor.registry_name(new_stack_id),
+        inspector:
+          {EtsInspector,
+           stack_id: new_stack_id, server: EtsInspector.name(stack_id: new_stack_id)},
+        shape_cache: {ShapeCache, [stack_id: new_stack_id]},
+        stack_supervisor: new_stack_supervisor,
+        stack_supervisor_id: new_sup_id
+      })
+
+    # (3) New Bandit + client pointed at the new stack (no readiness wait — the
+    #     new stack is still lock-blocked). Reuse the shared Finch pool.
+    server =
+      Support.IntegrationSetup.start_bandit_client(new_ctx,
+        id: new_server_id,
+        router_opts: Keyword.get(Map.get(ctx, :electric_client_opts, []), :router_opts, []),
+        client_opts: Support.IntegrationSetup.finch_client_opts(Map.get(ctx, :finch_name))
+      )
+
+    # (4) Gracefully stop the old stack: releases the advisory lock; the
+    #     persistent slot and publication survive (no drop on a normal stop).
+    :ok = stop_supervised(old_sup_id)
+    _ = stop_supervised(old_server_id)
+
+    # (5) The new stack now acquires the lock, finds the existing slot +
+    #     publication (duplicate → no shape purge) and becomes active.
+    :ok = Electric.StatusMonitor.wait_until_active(new_stack_id, timeout: 10_000)
+
+    new_ctx
+    |> Map.merge(server)
+    |> Map.merge(%{server_id: new_server_id, rolling_gen: gen})
+  end
+
+  # Polls until the stack's registered processes are gone. Uses
+  # ProcessRegistry.alive?/2 which tolerates the per-stack registry itself
+  # being torn down (returns false rather than raising).
+  defp wait_for_stack_processes_down(stack_id, deadline \\ nil) do
+    deadline = deadline || System.monotonic_time(:millisecond) + 5_000
+
+    down? =
+      not Electric.ProcessRegistry.alive?(stack_id, Electric.StatusMonitor) and
+        not Electric.ProcessRegistry.alive?(stack_id, Electric.Connection.Manager) and
+        GenServer.whereis(Electric.ProcessRegistry.registry_name(stack_id)) == nil
+
+    cond do
+      down? ->
+        :ok
+
+      System.monotonic_time(:millisecond) > deadline ->
+        flunk("stack #{stack_id} did not fully terminate after brutal kill")
+
+      true ->
+        Process.sleep(10)
+        wait_for_stack_processes_down(stack_id, deadline)
+    end
+  end
+
+  @doc """
+  Starts an `Electric.StackSupervisor` under the test supervision tree.
+
+  Options:
+    - `:id` - ExUnit child id (default `Electric.StackSupervisor`). Must be
+      distinct when running two stacks concurrently (e.g. a rolling deploy).
+    - `:await_ready?` - block until the `{:stack_status, :ready}` event fires
+      (default `true`). Pass `false` for a stack that is expected to block
+      acquiring the replication advisory lock and therefore never reach `:ready`
+      until another stack releases it.
+  """
+  def start_stack_supervisor!(
+        ctx,
+        stack_id,
+        kv,
+        storage,
+        stack_events_registry,
+        publication_name,
+        opts \\ []
+      ) do
+    id = Keyword.get(opts, :id, Electric.StackSupervisor)
+    await_ready? = Keyword.get(opts, :await_ready?, true)
+
     ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
 
     connection_opts =
@@ -541,13 +739,14 @@ defmodule Support.ComponentSetup do
          shape_db_opts: [
            storage_dir: ctx.tmp_dir
          ]},
+        id: id,
         restart: :temporary,
         significant: false
       )
 
     # allow a reasonable time for full stack setup to account for
     # potential CI slowness, including PG
-    assert_receive {:stack_status, ^ref, :ready}, 2000
+    if await_ready?, do: assert_receive({:stack_status, ^ref, :ready}, 2000)
 
     stack_supervisor
   end

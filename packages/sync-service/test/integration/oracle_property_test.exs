@@ -16,6 +16,11 @@ defmodule Electric.Integration.OraclePropertyTest do
       test server-side restore-from-file (default: 0, disabled). After each
       restart, fresh clients reconnect and check_initial_state asserts the
       restored state matches the oracle.
+    - RESTART_TYPE: How the RESTART_SERVER_EVERY restart is performed:
+      "graceful" (default, clean shutdown + restore from disk), "brutal"
+      (kill -9 style crash + recover), or "rolling" (rolling deploy: a new
+      stack takes over the replication slot before the old one is stopped).
+      See `Support.OracleHarness.RestartStrategy`.
     - RESTART_CLIENT_EVERY: Throw away clients (poll cursors, materialized
       rows) and reconnect every M batches to test that fresh polls correctly
       assemble snapshot + log (default: 0, disabled). Independent of
