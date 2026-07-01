@@ -725,6 +725,62 @@ defmodule Electric.Shapes.ConsumerTest do
                get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
 
+    test "skips an already-applied transaction replayed past a fresh log collector", ctx do
+      # Simulates a restart: the persistent replication slot replays a transaction
+      # the consumer has already applied and persisted. A freshly-started
+      # ShapeLogCollector hasn't seen the offset, so (unlike the test above) it
+      # won't drop it — the consumer itself must skip it, because its restored
+      # `latest_offset` is already at/past the transaction. Otherwise the fragment
+      # is re-written to the log (duplicating ops) and re-notified to dependent
+      # materializers, which re-apply it and crash.
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        complete_txn_fragment(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      consumer_pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      # First delivery: applied normally, advancing the consumer's latest_offset.
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      last_log_offset = LogOffset.new(lsn, 0)
+      assert_receive {^ref, :new_changes, ^last_log_offset}
+
+      assert [op1] =
+               get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+
+      # Replay the same, already-applied transaction straight to the consumer,
+      # bypassing the collector's own offset de-dup (as happens on restart with a
+      # fresh collector). The consumer must skip it: no storage write, no
+      # notification, log unchanged.
+      enable_storage_tracer_for(consumer_pid)
+
+      assert :ok =
+               GenServer.call(
+                 Shapes.Consumer.name(ctx.stack_id, shape_handle),
+                 {:handle_event, txn, Electric.Telemetry.OpenTelemetry.get_current_context()},
+                 :infinity
+               )
+
+      assert [] == Support.Trace.collect_traced_calls()
+      refute_receive {^ref, :new_changes, _}
+
+      assert [op1] ==
+               get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+    end
+
     @tag allow_subqueries: false
     test "duplicate txn fragment handling is idempotent", ctx do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)

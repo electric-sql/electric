@@ -587,6 +587,19 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
+  # On restart the persistent replication slot can replay transactions we have
+  # already applied and persisted. The multi-fragment path skips those via
+  # `fragment_already_processed?/2` (see `process_txn_fragment/2`), but the
+  # complete-transaction fast paths below did not — so a replayed single-fragment
+  # transaction was re-written to the shape log (duplicating ops) and re-notified
+  # to dependent materializers, which re-apply it and crash. Skip it here, so the
+  # dedup is applied on every path.
+  defp handle_txn_fragment(%TransactionFragment{last_log_offset: offset} = txn_fragment, state)
+       when TransactionFragment.complete_transaction?(txn_fragment) and
+              LogOffset.is_log_offset_lte(offset, state.latest_offset) do
+    consider_flushed(state, offset)
+  end
+
   # Short-circuit clauses for the most common case of a single-fragment transaction
   defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
        when TransactionFragment.complete_transaction?(txn_fragment) and
