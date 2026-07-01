@@ -120,6 +120,13 @@ fn main() {
     // core count; on an existing one reuse the persisted N. A value ≠ the persisted
     // N is rejected with exit 2 (spec §5).
     let mut wal_shards: Option<usize> = None;
+    // `--worker-threads N` sizes the tokio runtime's worker-thread pool (and the
+    // default WAL shard count). `None` ⇒ `available_parallelism()`. This is
+    // load-bearing under a cgroup cpu limit: `available_parallelism()` reads
+    // `cpu.max`, so on a big node with a small limit it would under-size the pool;
+    // an explicit value (e.g. the ds-bench pool suites' `--worker-threads 32`)
+    // pins the pool to the intended core count regardless.
+    let mut worker_threads: Option<usize> = None;
     // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
     // Useful for forcing rolls in tests and benches without writing a full 128 MiB segment.
@@ -196,6 +203,14 @@ fn main() {
                     std::process::exit(2);
                 }
                 wal_shards = Some(n);
+            }
+            "--worker-threads" => {
+                let n: usize = parse_val(args.next(), "--worker-threads");
+                if n == 0 {
+                    eprintln!("--worker-threads must be ≥ 1");
+                    std::process::exit(2);
+                }
+                worker_threads = Some(n);
             }
             "--wal-segment-bytes" => {
                 let n: u64 = parse_val(args.next(), "--wal-segment-bytes");
@@ -275,9 +290,9 @@ fn main() {
             .ok();
     }
 
-    let workers = std::thread::available_parallelism()
+    let workers = worker_threads.unwrap_or_else(|| std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(4);
+        .unwrap_or(4));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(workers)
         .enable_all()
