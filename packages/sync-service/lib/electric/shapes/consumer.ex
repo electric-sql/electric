@@ -587,6 +587,22 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
+  # Skip transactions already applied and persisted (e.g. replayed from the persistent
+  # replication slot on restart) - ones at or below `latest_offset`.
+  #
+  # This skips whole transactions, relying on a replayed transaction being entirely
+  # at-or-below or entirely above `latest_offset`, never straddling it. In-memory
+  # `latest_offset` advances per written fragment (see `write_txn_fragment_to_storage/2`),
+  # not only at commit — but on the replay path the guarantee holds: after a restart
+  # `latest_offset` is restored from storage at a commit boundary
+  # (`Storage.fetch_latest_offset/1`, from `last_{seen,persisted}_txn_offset`), and the
+  # replication slot replays whole transactions from a commit boundary
+  # (`confirmed_flush_lsn`).
+  defp handle_txn_fragment(%TransactionFragment{last_log_offset: offset} = txn_fragment, state)
+       when LogOffset.is_log_offset_lte(offset, state.latest_offset) do
+    skip_txn_fragment(state, txn_fragment)
+  end
+
   # Short-circuit clauses for the most common case of a single-fragment transaction
   defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
        when TransactionFragment.complete_transaction?(txn_fragment) and
@@ -652,13 +668,30 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
 
+  # Defensive: this is only ever reached with a `pending_txn` set — a transaction's
+  # BEGIN fragment creates it (see the `has_begin?` clauses above) before any fragment
+  # gets here. The only way to arrive with `pending_txn: nil` is a transaction that
+  # straddled `latest_offset`: its BEGIN fragment skipped by the already-applied clause
+  # while a later fragment was not. The commit-aligned restore + whole-transaction replay
+  # invariant (documented on that clause) rules this out; fail loudly with a clear message
+  # rather than crash on `nil.consider_flushed?` if it is ever violated.
+  defp process_txn_fragment(%TransactionFragment{last_log_offset: offset}, %State{
+         pending_txn: nil
+       }) do
+    raise "consumer received a transaction fragment at #{inspect(offset)} with no pending " <>
+            "transaction — a transaction straddling latest_offset was partially skipped, " <>
+            "which should be impossible"
+  end
+
   defp process_txn_fragment(
          %TransactionFragment{} = txn_fragment,
          %State{pending_txn: txn} = state
        ) do
     cond do
-      # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
-      txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) ->
+      # Fragments of a transaction whose xid is already in the initial snapshot are
+      # skipped here. (Offset-based dedup of replayed transactions is handled earlier,
+      # in `handle_txn_fragment/2`.)
+      txn.consider_flushed? ->
         skip_txn_fragment(state, txn_fragment)
 
       # With write_unit=txn all fragments are buffered until the Commit change is seen. At that
@@ -1095,10 +1128,6 @@ defmodule Electric.Shapes.Consumer do
     # Since the lag is only useful when it becomes significant, a slight skew doesn't matter.
     now = DateTime.utc_now()
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
-  end
-
-  defp fragment_already_processed?(%TransactionFragment{last_log_offset: offset}, state) do
-    LogOffset.is_log_offset_lte(offset, state.latest_offset)
   end
 
   defp consider_flushed(%State{} = state, log_offset) do
