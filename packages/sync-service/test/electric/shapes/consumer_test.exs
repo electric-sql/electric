@@ -2684,9 +2684,19 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
-      # Once the move-in splice completes and the pipeline is fully drained, the
+      # The splice has been applied to the writer buffer, but the moves-position
+      # is only *staged* — it must not be persisted ahead of a durable flush, or
+      # a restart could leave it pointing past storage. So until the writer
+      # confirms the flush, the persisted position has not advanced.
+      {:ok, staged_positions} = Storage.fetch_move_positions(shape_storage)
+      refute Map.get(staged_positions, dep_handle) == move_lsn
+
+      # Once the writer confirms a flush at/after the move's splice, the
       # per-dependency moves-position is advanced to the move's source LSN and
       # persisted to storage.
+      send(consumer_pid, {Storage, :flushed, LogOffset.new(1_000_000_000, 0)})
+      :sys.get_state(consumer_pid)
+
       {:ok, applied_positions} = Storage.fetch_move_positions(shape_storage)
       assert Map.get(applied_positions, dep_handle) == move_lsn
     end
