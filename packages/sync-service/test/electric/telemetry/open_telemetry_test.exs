@@ -201,12 +201,13 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
     end
 
     test "rejects phase values other than :start or :end" do
+      # apply/3 hides the intentionally invalid arguments from the type checker.
       assert_raise FunctionClauseError, fn ->
-        OpenTelemetry.process_memory_attributes(nil)
+        apply(OpenTelemetry, :process_memory_attributes, [nil])
       end
 
       assert_raise FunctionClauseError, fn ->
-        OpenTelemetry.process_memory_attributes("start")
+        apply(OpenTelemetry, :process_memory_attributes, ["start"])
       end
     end
   end

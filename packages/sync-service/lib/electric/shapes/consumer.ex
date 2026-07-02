@@ -456,8 +456,6 @@ defmodule Electric.Shapes.Consumer do
     %{state | suspend_timer: ref}
   end
 
-  defp cancel_suspend_timer(%{suspend_timer: nil} = state), do: state
-
   defp cancel_suspend_timer(%{suspend_timer: ref} = state) do
     :erlang.cancel_timer(ref)
     %{state | suspend_timer: nil}
@@ -961,12 +959,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_apply_event_result(state, {:error, reason}) do
     state = handle_event_error(state, reason)
-
-    if state.terminating? do
-      {:noreply, state, {:continue, :stop_and_clean}}
-    else
-      stop_and_clean(state)
-    end
+    {:noreply, state, {:continue, :stop_and_clean}}
   end
 
   defp handle_apply_event_result(_old_state, {state, notification, _num_changes, _total_size}) do

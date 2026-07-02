@@ -43,11 +43,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-deps-
 
       - name: Cache compiled code
         uses: actions/cache@v4
@@ -55,11 +55,11 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-build-
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-sync-service-build-
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile
@@ -73,10 +73,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: integration-tests/lux
-          key: '${{ runner.os }}-lux-${{ steps.setup_beam.outputs.otp-version }}'
+          key: '${{ runner.os }}-lux-629e45c-${{ steps.setup_beam.outputs.otp-version }}'
           restore-keys: |
-            ${{ runner.os }}-lux-${{ steps.setup_beam.outputs.otp-version }}
-            ${{ runner.os }}-lux
+            ${{ runner.os }}-lux-629e45c-${{ steps.setup_beam.outputs.otp-version }}
+            ${{ runner.os }}-lux-629e45c
 
       - name: Setup lux
         run: make
