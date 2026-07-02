@@ -272,7 +272,7 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
             Method::Post => handle_append(store, req, path).await,
             Method::Get => handle_read(store, req, path).await,
             Method::Head => handle_head(store, path),
-            Method::Delete => handle_delete(store, path),
+            Method::Delete => handle_delete(store, path).await,
             Method::Options => ResponseBuilder::new(204).body(empty()),
             Method::Other => text_response(405, "method not allowed"),
         }
@@ -2174,7 +2174,7 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
 
 // ---------- DELETE ----------
 
-fn handle_delete(store: Arc<Store>, path: String) -> Resp {
+async fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
         None => return text_response(404, "stream not found"),
@@ -2182,8 +2182,16 @@ fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
-    store.delete_or_soft_delete(&st);
-    ResponseBuilder::new(204).body(empty())
+    // The 204 is a durability promise: once acked, a crash must never
+    // resurrect the stream. Await the on-disk removal (unlinks + parent-dir
+    // fsync, or the soft-delete meta flag) before responding — a detached
+    // removal task can be lost to a crash after the ack.
+    let store2 = Arc::clone(&store);
+    let st2 = Arc::clone(&st);
+    match tokio::task::spawn_blocking(move || store2.delete_or_soft_delete_durable(&st2)).await {
+        Ok(Ok(())) => ResponseBuilder::new(204).body(empty()),
+        _ => text_response(500, "delete not durable"),
+    }
 }
 
 #[cfg(test)]

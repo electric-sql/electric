@@ -681,7 +681,27 @@ impl Store {
     }
 
     /// Hard-delete when nothing references the stream; soft-delete otherwise.
+    ///
+    /// NON-durable, detached variant for the expiry sweep on the read path: the
+    /// on-disk removals / soft-meta write run on a fire-and-forget blocking
+    /// task, so a crash can undo them (an expired stream re-expires on the next
+    /// access — harmless). The DELETE handler must NOT use this: an acked
+    /// DELETE undone by a crash resurrects the stream with all its data — use
+    /// [`Store::delete_or_soft_delete_durable`] there.
     pub fn delete_or_soft_delete(&self, st: &Arc<StreamState>) {
+        let _ = self.delete_impl(st, false);
+    }
+
+    /// [`Store::delete_or_soft_delete`] with the DELETE-ack durability contract:
+    /// the file + sidecar unlinks (and their parent-directory entry) — or the
+    /// soft-delete meta flag — are durable on disk before this returns, so a
+    /// post-ack crash can never resurrect the stream. Synchronous file I/O +
+    /// fsync: call from a blocking context.
+    pub fn delete_or_soft_delete_durable(&self, st: &Arc<StreamState>) -> std::io::Result<()> {
+        self.delete_impl(st, true)
+    }
+
+    fn delete_impl(&self, st: &Arc<StreamState>, durable: bool) -> std::io::Result<()> {
         let soft = {
             let mut s = st.shared.write().unwrap();
             if s.ref_count > 0 {
@@ -692,10 +712,14 @@ impl Store {
             }
         };
         if soft {
-            let st2 = st.clone();
-            tokio::task::spawn_blocking(move || {
-                let _ = write_meta_sync(&st2, true);
-            });
+            if durable {
+                write_meta_sync(st, true)?;
+            } else {
+                let st2 = st.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _ = write_meta_sync(&st2, true);
+                });
+            }
         } else {
             self.streams
                 .remove_if(&st.path, |_, v| Arc::ptr_eq(v, st));
@@ -704,12 +728,21 @@ impl Store {
             // with no remaining fork references.
             self.gc_remote_segments(st);
             let fp = st.file_path.clone();
-            tokio::task::spawn_blocking(move || {
+            if durable {
+                // Both unlinks live in the same directory; one dir fsync makes
+                // them crash-durable together.
                 let _ = std::fs::remove_file(meta_path(&fp));
-                let _ = std::fs::remove_file(fp);
-            });
+                let _ = std::fs::remove_file(&fp);
+                fsync_parent_dir(&fp)?;
+            } else {
+                tokio::task::spawn_blocking(move || {
+                    let _ = std::fs::remove_file(meta_path(&fp));
+                    let _ = std::fs::remove_file(fp);
+                });
+            }
             self.release_parent(st);
         }
+        Ok(())
     }
 
     /// Decrement the parent's fork refcount; cascade-collect soft-deleted parents

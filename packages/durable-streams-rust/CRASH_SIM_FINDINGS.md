@@ -112,10 +112,29 @@ field keep the previous trust-the-file-size behavior (`serde` default), converti
 proven on their next natural meta write.
 Regression test: `e2e_wal_quiet_stream_torn_unacked_tail_truncated`.
 
+## Finding 5 (fixed): an acked DELETE was not durable — crash resurrected the stream
+
+Found by the second 1000-seed hunt (seed 20387, gen 2), with **no fault injection at
+all** — a clean process crash right after an acked DELETE. `handle_delete` returned 204
+while the data-file + sidecar unlinks ran on a **detached** `spawn_blocking` task (and
+with no parent-directory fsync even once they ran). A crash after the ack left both
+files on disk, and the next boot's sidecar pass resurrected the stream **with all its
+data** — after the client was told it was permanently gone (a correctness and
+data-retention/compliance issue). The soft-delete meta flag had the same fire-and-forget
+shape.
+
+**Fix:** DELETE now awaits `delete_or_soft_delete_durable` before the 204 — synchronous
+unlinks + one parent-dir fsync (both artifacts live in the same directory), or the
+durable soft-delete meta write; a failure acks 500, not 204. The expiry sweep on the hot
+read path keeps the detached non-durable variant (an expired stream that resurrects
+simply re-expires on next access — harmless, and documented on the method).
+Regression test: `e2e_acked_delete_is_durable_no_resurrection_after_crash`.
+
 ## Simulation results
 
 - Pre-fix: seed 89837 (the first default seed) hit Finding 1 in generation 1; seed 20230
-  hit Finding 4 in generation 1 of the first 1000-seed hunt.
+  hit Finding 4 in generation 1 of the first 1000-seed hunt; seed 20387 hit Finding 5 in
+  generation 2 of the second hunt (clean crash, no faults).
 - Post-fix: 4 default smoke seeds + 50-seed and 1000-seed hunts (4 generations × 150 steps
   each, 1–3 shards, 32 KiB segments to force rolls/recycles) pass with faults enabled
   (data-file truncate/scribble/zero within the un-fsynced region; WAL suffix zero/scribble

@@ -1049,6 +1049,54 @@ async fn e2e_wal_quiet_stream_torn_unacked_tail_truncated() {
 }
 
 // ===========================================================================
+// (7d) DELETE ack durability: an acked DELETE survives a crash
+// ===========================================================================
+
+/// The 204 for DELETE is a durability promise. Regression (sim seed 20387):
+/// `handle_delete` acked while the file + sidecar unlinks ran on a DETACHED
+/// blocking task — a crash right after the ack (before the task ran) left both
+/// files on disk and the stream RESURRECTED with all its data on reboot. The
+/// unlinks (+ parent-dir fsync) are now awaited before the 204.
+#[tokio::test]
+async fn e2e_acked_delete_is_durable_no_resurrection_after_crash() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("delete-durable");
+
+    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    create_stream(&h.store, "victim", OCTET).await;
+    append_acked(&h.store, "victim", OCTET, b"doomed-data|").await;
+    let file_path = h.store.get("victim").unwrap().file_path.clone();
+    let meta = crate::store::meta_path(&file_path);
+
+    let resp = handlers::handle(
+        Arc::clone(&h.store),
+        Req {
+            method: Method::Delete,
+            path: "victim".into(),
+            query: None,
+            headers: vec![],
+            body: Bytes::new(),
+        },
+    )
+    .await;
+    assert_eq!(resp.status, 204, "delete acked");
+    // The ack IS the durability point: both on-disk artifacts are already gone
+    // when the response returns (not on some detached task's schedule).
+    assert!(!file_path.exists(), "data file removed before the DELETE ack");
+    assert!(!meta.exists(), "meta sidecar removed before the DELETE ack");
+
+    // Crash + reboot: the stream must not resurrect.
+    h.crash();
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    assert!(
+        h2.store.get("victim").is_none(),
+        "acked-deleted stream must not resurrect after a crash"
+    );
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
 // (8) MEMORY-MODE sidecar recovery (no WAL)
 // ===========================================================================
 
