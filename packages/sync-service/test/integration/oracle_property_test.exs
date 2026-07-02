@@ -20,7 +20,6 @@ defmodule Electric.Integration.OraclePropertyTest do
       "graceful" (default, clean shutdown + restore from disk), "brutal"
       (kill -9 style crash + recover), or "rolling" (rolling deploy: a new
       stack takes over the replication slot before the old one is stopped).
-      See `Support.OracleHarness.RestartStrategy`.
     - RETRY_TRANSIENT_ERRORS: When "true"/"1", a transient poll error (5xx or a
       connection error) is retried within the check timeout instead of failing
       the test. These are availability blips that production hides from clients

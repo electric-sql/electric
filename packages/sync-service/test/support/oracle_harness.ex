@@ -34,7 +34,6 @@ defmodule Support.OracleHarness do
   """
 
   alias Support.OracleHarness.ShapeChecker
-  alias Support.OracleHarness.RestartStrategy
 
   @type shape :: %{
           name: String.t(),
@@ -79,7 +78,7 @@ defmodule Support.OracleHarness do
       exercise restore-from-disk (default: 0, disabled)
     - :restart_type - how the server restart is performed: "graceful" (default),
       "brutal" (crash + recover), or "rolling" (rolling deploy). See
-      `Support.OracleHarness.RestartStrategy`. Env: RESTART_TYPE.
+      `restart_stack/2`. Env: RESTART_TYPE.
     - :restart_client_every - throw away and recreate the shape clients every
       M batches to exercise fresh-poll consistency (default: 0, disabled)
   """
@@ -89,7 +88,7 @@ defmodule Support.OracleHarness do
     timeout_ms = opts[:timeout_ms] || env_int("CHECK_TIMEOUT") || @default_timeout_ms
     restart_server_every = opts[:restart_server_every] || 0
     restart_client_every = opts[:restart_client_every] || 0
-    restart_strategy = RestartStrategy.for_type(opts[:restart_type] || "graceful")
+    restart_type = opts[:restart_type] || "graceful"
 
     log_test_config(shapes, batches)
 
@@ -136,7 +135,7 @@ defmodule Support.OracleHarness do
               oracle_pool,
               timeout_ms,
               batch_idx,
-              restart_strategy
+              restart_type
             )
 
           restart_client? ->
@@ -188,17 +187,38 @@ defmodule Support.OracleHarness do
   # Restarts the Electric stack (server-side restore-from-file test) and
   # reconnects the clients. Old checkers are stopped because their polls are
   # against the server that is about to go down.
-  defp restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx, strategy) do
-    log("Restarting server (#{inspect(strategy)}) after batch_#{batch_idx}")
+  defp restart_server(ctx, pids, shapes, oracle_pool, timeout_ms, batch_idx, restart_type) do
+    log("Restarting server (#{restart_type}) after batch_#{batch_idx}")
 
     Enum.each(pids, &GenServer.stop/1)
 
-    new_ctx = Map.merge(ctx, strategy.restart(ctx))
+    new_ctx = Map.merge(ctx, restart_stack(restart_type, ctx))
 
     new_pids = recreate_checkers(new_ctx, [], shapes, oracle_pool, timeout_ms, batch_idx)
 
     {new_pids, new_ctx}
   end
+
+  # Restarts the Electric stack according to RESTART_TYPE, returning a ctx-merge
+  # map. Each variant is implemented in `Support.ComponentSetup`:
+  #   - "graceful" - clean stop + restore from disk (default)
+  #   - "brutal"   - kill -9 style crash, then recover the same stack_id
+  #   - "rolling"  - rolling deploy: a new stack takes over the replication slot
+  #                  before the old one is stopped
+  defp restart_stack("graceful", ctx), do: Support.ComponentSetup.restart_complete_stack(ctx)
+
+  defp restart_stack("brutal", ctx),
+    do: Support.ComponentSetup.brutally_restart_complete_stack(ctx)
+
+  defp restart_stack("rolling", ctx),
+    do: Support.ComponentSetup.rolling_restart_complete_stack(ctx)
+
+  defp restart_stack(other, _ctx),
+    do:
+      raise(
+        ArgumentError,
+        "unknown RESTART_TYPE=#{inspect(other)} (expected \"graceful\", \"brutal\" or \"rolling\")"
+      )
 
   # Throws away the existing checkers and creates fresh ones (client-side
   # resync test). The new checkers do an initial snapshot poll and assert
