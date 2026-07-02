@@ -36,6 +36,14 @@ defmodule Electric.Telemetry.OpenTelemetry.Config do
         Electric.Telemetry.OpenTelemetry.ResourceDetector
       ],
       resource: otel_resource,
-      processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+      processors:
+        [
+          # Runs first so its `:dropped` return short-circuits the SDK's `andalso` fold
+          # before the batch processor queues the span for export.
+          {Electric.Telemetry.OpenTelemetry.EmptyResponseDropProcessor, %{}},
+          otel_batch_processor,
+          otel_simple_processor
+        ]
+        |> Enum.reject(&is_nil/1)
   end
 end
