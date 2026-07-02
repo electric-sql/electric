@@ -69,6 +69,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :last_persisted_txn_offset,
     :snapshot_started?,
     :pg_snapshot,
+    :move_positions,
     :last_snapshot_chunk,
     :compaction_started?,
     :compaction_boundary
@@ -462,6 +463,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def fetch_pg_snapshot(%__MODULE__{} = opts) do
     {:ok, read_cached_metadata(opts, :pg_snapshot)}
+  end
+
+  # move_positions is written only when an outer subquery consumer applies a
+  # dependency move and read only at consumer startup, so it is persisted
+  # directly to disk (term-encoded) rather than through the ETS metadata cache.
+  def set_move_positions!(move_positions, %__MODULE__{} = opts) do
+    write_metadata!(opts, :move_positions, move_positions)
+    :ok
+  end
+
+  def fetch_move_positions(%__MODULE__{} = opts) do
+    {:ok, read_metadata!(opts, :move_positions) || %{}}
   end
 
   defp read_latest_offset(%__MODULE__{} = opts) do

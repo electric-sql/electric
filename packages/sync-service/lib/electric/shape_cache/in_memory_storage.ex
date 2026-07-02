@@ -15,6 +15,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @snapshot_start_index 0
   @snapshot_end_index :end
   @pg_snapshot_key :pg_snapshot
+  @move_positions_key :move_positions
   @latest_offset_key :latest_offset
 
   defstruct [
@@ -125,6 +126,20 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def set_pg_snapshot(pg_snapshot, %MS{} = opts) do
     :ets.insert(opts.snapshot_table, {@pg_snapshot_key, pg_snapshot})
     :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def set_move_positions!(move_positions, %MS{} = opts) do
+    :ets.insert(opts.snapshot_table, {@move_positions_key, move_positions})
+    :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def fetch_move_positions(%MS{} = opts) do
+    case :ets.lookup(opts.snapshot_table, @move_positions_key) do
+      [{@move_positions_key, move_positions}] -> {:ok, move_positions}
+      [] -> {:ok, %{}}
+    end
   end
 
   @impl Electric.ShapeCache.Storage

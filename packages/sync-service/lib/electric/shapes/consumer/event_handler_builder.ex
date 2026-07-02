@@ -22,7 +22,18 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
                                          {views, handle_mapping, index_mapping} ->
         materializer_opts = %{stack_id: state.stack_id, shape_handle: handle}
         :ok = Materializer.wait_until_ready(materializer_opts)
-        view = Materializer.get_link_values(materializer_opts)
+
+        # Seed the dependency view from the value captured at subscribe time
+        # (as-of this consumer's persisted moves-position), so that any moves
+        # the materializer replays are not eliminated as redundant against a
+        # view that already reflects them. Falls back to the materializer's
+        # current link values if no seed was captured (non-restart paths).
+        view =
+          case Map.fetch(state.dep_seed_views, handle) do
+            {:ok, seed_view} -> seed_view
+            :error -> Materializer.get_link_values(materializer_opts)
+          end
+
         ref = ["$sublink", Integer.to_string(index)]
 
         {Map.put(views, ref, view), Map.put(handle_mapping, handle, {index, ref}),
