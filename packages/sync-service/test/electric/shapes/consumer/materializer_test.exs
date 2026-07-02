@@ -1438,15 +1438,15 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       assert Materializer.get_link_values(mat_ctx) == MapSet.new([99])
     end
 
-    # Bug 4: when the source shape's persisted main log spans MORE than one
-    # chunk, `Storage.get_log_stream/3` returns the *entire* main-log range in
-    # a single call (chunking only applies to the snapshot). A startup-replay
-    # loop that keeps advancing through chunk boundaries past the first
-    # main-log chunk re-reads main-log entries it has already applied.
-    # Re-applying a `NewRecord` for a key that already exists raises
-    # "Key already exists" inside the materializer, crashing it (and the
-    # dependent shape's consumer). The fix stops iterating as soon as the
-    # read steps into the main log.
+    # When the source shape's persisted main log spans MORE than one chunk,
+    # `Storage.get_log_stream/3` returns the *entire* main-log range in a
+    # single call (chunking only applies to the snapshot). Startup replay must
+    # therefore stop iterating as soon as it steps into the main log:
+    # continuing to advance through chunk boundaries would re-read main-log
+    # entries it has already applied, and re-applying a `NewRecord` for a key
+    # that already exists raises "Key already exists", crashing the
+    # materializer and the dependent shape's consumer. This test guards that
+    # each persisted entry is applied exactly once.
     @tag with_pure_file_storage_opts: [chunk_bytes_threshold: 10]
     test "does not re-read main-log entries when the main log spans multiple chunks", ctx do
       shape_handle = "multichunk-test-#{System.unique_integer()}"
@@ -1464,9 +1464,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Two main-log INSERTs persisted before the materializer subscribes.
       # With a tiny `chunk_bytes_threshold` each lands in its own main-log
-      # chunk, so the main log spans more than one chunk. The buggy iteration
-      # re-reads the second chunk and re-applies the insert for key "3",
-      # raising "Key 3 already exists".
+      # chunk, so the main log spans more than one chunk — the condition under
+      # which a second read of the same range would re-apply the insert for
+      # key "3".
       offset_2 = LogOffset.new(100, 0)
       offset_3 = LogOffset.new(200, 0)
 
@@ -1492,8 +1492,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Sanity check: the main log really does span more than one chunk. The
       # first main-log chunk (the one reached from the end of the snapshot)
-      # must end strictly before the last persisted offset. Without this, the
-      # scenario wouldn't exercise the bug.
+      # must end strictly before the last persisted offset. Without this, a
+      # single read would cover the whole main log and the multi-chunk case
+      # under test wouldn't be exercised.
       first_main_chunk_end =
         Storage.get_chunk_end_log_offset(LogOffset.last_before_real_offsets(), storage)
 
@@ -1519,8 +1520,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
       assert Materializer.wait_until_ready(mat_ctx) == :ok
 
-      # All three values must be present exactly once. On the buggy iteration
-      # the materializer crashes before this point.
+      # The snapshot value and both persisted INSERTs must each be applied
+      # exactly once.
       assert Materializer.get_link_values(mat_ctx) == MapSet.new([10, 20, 30])
     end
   end
