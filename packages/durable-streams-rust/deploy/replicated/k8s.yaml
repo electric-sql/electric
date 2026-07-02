@@ -1,0 +1,95 @@
+# 3-replica durable-streams cluster (--durability replicated).
+#
+#   kubectl apply -f deploy/replicated/k8s.yaml
+#
+# Notes:
+# - Each pod derives --repl-id from its StatefulSet ordinal (+1: ids are 1-based).
+# - The headless service gives stable per-pod DNS for the peer mesh.
+# - podManagementPolicy: Parallel — consensus needs a quorum up before it can
+#   elect a leader; ordered (one-by-one, readiness-gated) startup would deadlock
+#   if readiness required a leader. Readiness below is just "process is up".
+# - The topologySpreadConstraint spreads replicas across zones: quorum-memory
+#   durability is only as good as the failure-domain independence of the
+#   replicas (REPLICATION.md "Guarantees").
+# - v1 is fail-stop: a restarted pod comes back empty and MUST NOT rejoin a
+#   running cluster past a trimmed log. Hence restartPolicy is not overridden
+#   here (k8s always restarts StatefulSet pods) — treat a pod crash as "replace
+#   the cluster during a maintenance window" until snapshot catch-up lands.
+#   For benchmarking, fresh clusters per run make this moot.
+apiVersion: v1
+kind: Service
+metadata:
+  name: durable-streams-repl
+  labels: { app: durable-streams-repl }
+spec:
+  clusterIP: None # headless: per-pod DNS for the peer mesh
+  selector: { app: durable-streams-repl }
+  ports:
+    - { name: http, port: 4437 }
+    - { name: repl, port: 5437 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: durable-streams-repl-client
+  labels: { app: durable-streams-repl }
+spec:
+  # Client-facing entry point; any node accepts writes and serves reads. For
+  # lowest write latency, point hot producers at the leader (/_repl/status).
+  selector: { app: durable-streams-repl }
+  ports:
+    - { name: http, port: 4437 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: durable-streams-repl
+spec:
+  serviceName: durable-streams-repl
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: { app: durable-streams-repl }
+  template:
+    metadata:
+      labels: { app: durable-streams-repl }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway # hard-require in production
+          labelSelector:
+            matchLabels: { app: durable-streams-repl }
+      containers:
+        - name: server
+          image: durable-streams:replicated # replace with your registry ref
+          command:
+            - /bin/sh
+            - -c
+            # Ordinal → 1-based replica id; FQDNs via the headless service.
+            - |
+              ORD="${HOSTNAME##*-}"
+              exec durable-streams-server \
+                --host 0.0.0.0 --port 4437 \
+                --data-dir /data \
+                --durability replicated \
+                --repl-id "$((ORD + 1))" \
+                --repl-listen 0.0.0.0:5437 \
+                --repl-peers "1@durable-streams-repl-0.durable-streams-repl:5437,2@durable-streams-repl-1.durable-streams-repl:5437,3@durable-streams-repl-2.durable-streams-repl:5437"
+          ports:
+            - { name: http, containerPort: 4437 }
+            - { name: repl, containerPort: 5437 }
+          readinessProbe:
+            httpGet: { path: /health, port: 4437 }
+            initialDelaySeconds: 1
+            periodSeconds: 2
+          resources:
+            requests: { cpu: '2', memory: 4Gi }
+            limits: { memory: 8Gi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        # Stream files are page-cache-backed scratch in this mode (durability is
+        # the quorum, not this disk); emptyDir keeps the deploy self-contained.
+        - name: data
+          emptyDir: {}

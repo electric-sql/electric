@@ -1,0 +1,60 @@
+# 3-node replicated durable-streams cluster.
+#   cd deploy/replicated && docker compose up --build -d
+#   curl -s localhost:4437/_repl/status   # (or :4438 / :4439)
+# Any node accepts writes; the leader (see /_repl/status) is lowest-latency.
+x-node: &node
+  build:
+    context: ../..
+    dockerfile: deploy/replicated/Dockerfile
+  image: durable-streams:replicated
+  restart: 'no' # v1 is fail-stop: a crashed replica must not auto-rejoin (REPLICATION.md)
+
+services:
+  ds1:
+    <<: *node
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '4437'
+      - --data-dir
+      - /data
+      - --durability
+      - replicated
+      - --repl-id
+      - '1'
+      - --repl-peers
+      - 1@ds1:5437,2@ds2:5437,3@ds3:5437
+    ports: ['4437:4437']
+  ds2:
+    <<: *node
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '4437'
+      - --data-dir
+      - /data
+      - --durability
+      - replicated
+      - --repl-id
+      - '2'
+      - --repl-peers
+      - 1@ds1:5437,2@ds2:5437,3@ds3:5437
+    ports: ['4438:4437']
+  ds3:
+    <<: *node
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '4437'
+      - --data-dir
+      - /data
+      - --durability
+      - replicated
+      - --repl-id
+      - '3'
+      - --repl-peers
+      - 1@ds1:5437,2@ds2:5437,3@ds3:5437
+    ports: ['4439:4437']
