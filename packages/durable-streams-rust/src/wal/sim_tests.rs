@@ -562,16 +562,11 @@ fn inject_wal_faults(sim: &mut Sim, durable: &[u64]) {
         // records with lsn > durable.
         let mut off = 0usize;
         let mut fault_from: Option<usize> = None;
-        loop {
-            match decode_at(&bytes, off) {
-                Decoded::Record { lsn, total, .. } => {
-                    if lsn > d && fault_from.is_none() {
-                        fault_from = Some(off);
-                    }
-                    off += total;
-                }
-                Decoded::Incomplete | Decoded::Torn => break,
+        while let Decoded::Record { lsn, total, .. } = decode_at(&bytes, off) {
+            if lsn > d && fault_from.is_none() {
+                fault_from = Some(off);
             }
+            off += total;
         }
         let logical_end = off;
         let Some(from) = fault_from else { continue };

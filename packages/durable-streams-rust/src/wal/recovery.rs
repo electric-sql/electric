@@ -223,7 +223,7 @@ fn recover_shard(
         #[cfg(debug_assertions)]
         debug_assert!(
             min_applied.get(stream_id).map_or(true, |&lo| {
-                pre_replay_end.get(stream_id).map_or(false, |&pre| lo <= pre)
+                pre_replay_end.get(stream_id).is_some_and(|&pre| lo <= pre)
             }),
             "WAL replay hole: stream {stream_id}: first replayed record at {:?} is past \
              the pre-replay file end {:?}",
