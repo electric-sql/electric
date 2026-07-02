@@ -4,6 +4,16 @@ defmodule ElectricTelemetry.Processes do
 
   @default_count 5
   @default_limit {:count, @default_count}
+  @initial_call_key :"$initial_call"
+  @ancestors_key :"$ancestors"
+  @proc_type_info_items [
+    :label,
+    {:dictionary, @initial_call_key},
+    {:dictionary, @ancestors_key},
+    :initial_call,
+    :registered_name
+  ]
+  @expanded_info_items @proc_type_info_items ++ [:memory, :binary]
 
   # Minimum memory threshold for a process group when using :mem_percent mode.
   @min_group_memory 1024 * 1024
@@ -23,7 +33,7 @@ defmodule ElectricTelemetry.Processes do
   Derive a stable, low-cardinality `process_type` for a pid.
   """
   @spec proc_type(pid()) :: atom() | binary()
-  def proc_type(pid), do: proc_type(pid, info(pid))
+  def proc_type(pid), do: proc_type(pid, info(pid, false))
 
   def top_memory_by_type, do: top_by(:proc_mem)
   def top_memory_by_type(proc_list_or_limit), do: top_by(:proc_mem, proc_list_or_limit)
@@ -140,9 +150,8 @@ defmodule ElectricTelemetry.Processes do
     |> Map.put(:type, type)
   end
 
-  @doc false
-  def info(pid) do
-    Process.info(pid, [:dictionary, :initial_call, :label, :memory, :binary, :registered_name])
+  defp info(pid, expanded? \\ true) do
+    Process.info(pid, if(expanded?, do: @expanded_info_items, else: @proc_type_info_items))
   end
 
   defp proc_type(pid, info) do
@@ -177,7 +186,7 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp ancestor_name(info) do
-    case get_in(info, [:dictionary, :"$ancestors"]) do
+    case dictionary_value(info, @ancestors_key) do
       [name | _] when is_atom(name) and not is_nil(name) -> name
       _ -> nil
     end
@@ -187,7 +196,7 @@ defmodule ElectricTelemetry.Processes do
     # Prefer the dictionary-stored $initial_call (set by proc_lib for OTP processes),
     # falling back to the raw initial_call reported by the VM. Returns "Module.fun/arity".
     mfa =
-      case get_in(info, [:dictionary, :"$initial_call"]) do
+      case dictionary_value(info, @initial_call_key) do
         {m, f, a} -> {m, f, a}
         _ -> info[:initial_call]
       end
@@ -213,7 +222,7 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp initial_module_from_info(info) do
-    case get_in(info, [:dictionary, :"$initial_call"]) do
+    case initial_call_from_dictionary(info) do
       {module, _function, _arg_count} ->
         module
 
@@ -222,6 +231,22 @@ defmodule ElectricTelemetry.Processes do
           {module, _function, _arg_count} -> module
           nil -> nil
         end
+    end
+  end
+
+  defp initial_call_from_dictionary(info) do
+    dictionary_value(info, @initial_call_key)
+  end
+
+  defp dictionary_value(nil, _key), do: nil
+
+  defp dictionary_value(info, key) do
+    case List.keyfind(info, {:dictionary, key}, 0) do
+      {{:dictionary, ^key}, value} ->
+        value
+
+      nil ->
+        get_in(info, [:dictionary, key])
     end
   end
 
