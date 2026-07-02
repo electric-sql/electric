@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ShapeStream } from '../src'
+import { createReactNativeRuntimeVisibilityAdapter, ShapeStream } from '../src'
 import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`Wake detection`, () => {
@@ -250,6 +250,230 @@ describe(`Wake detection`, () => {
     expect(fetchSignals[1]?.aborted).toBe(true)
     expect(fetchSignals[1]?.reason).toBe(`live-request-timeout`)
     expect(fetchCallCount).toBeGreaterThan(2)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should auto-detect React Native AppState visibility`, async () => {
+    vi.useFakeTimers()
+
+    type AppStateStatus = `active` | `background` | `inactive` | null
+    let appStateListener: ((state: AppStateStatus) => void) | undefined
+    const originalNavigator = globalThis.navigator
+    const originalRequire = (globalThis as Record<string, unknown>).require
+    Object.defineProperty(globalThis, `navigator`, {
+      configurable: true,
+      value: { product: `ReactNative` },
+    })
+    ;(globalThis as Record<string, unknown>).require = vi.fn(
+      (moduleName: string) => {
+        if (moduleName !== `react-native`) throw new Error(`unexpected module`)
+        return {
+          AppState: {
+            currentState: `active` as AppStateStatus,
+            addEventListener: vi.fn(
+              (
+                _type: `change`,
+                nextListener: (state: AppStateStatus) => void
+              ) => {
+                appStateListener = nextListener
+                return { remove: vi.fn() }
+              }
+            ),
+          },
+        }
+      }
+    )
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    try {
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+      const unsub = stream.subscribe(() => {})
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchUrls).toHaveLength(2)
+      expect(fetchUrls[1]).toContain(`live=true`)
+
+      appStateListener?.(`background`)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetchSignals[1]?.aborted).toBe(true)
+      expect(fetchUrls).toHaveLength(2)
+
+      appStateListener?.(`active`)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetchUrls).toHaveLength(4)
+      expect(fetchUrls[2]).not.toContain(`live=true`)
+      expect(fetchUrls[3]).toContain(`live=true`)
+
+      unsub()
+      aborter.abort()
+    } finally {
+      Object.defineProperty(globalThis, `navigator`, {
+        configurable: true,
+        value: originalNavigator,
+      })
+      ;(globalThis as Record<string, unknown>).require = originalRequire
+    }
+  })
+
+  it(`should adapt React Native AppState to runtime visibility`, () => {
+    type AppStateStatus = `active` | `background` | `inactive` | null
+    let listener: ((state: AppStateStatus) => void) | undefined
+    const remove = vi.fn()
+    const appState = {
+      currentState: `active` as AppStateStatus,
+      addEventListener: vi.fn(
+        (_type: `change`, nextListener: (state: AppStateStatus) => void) => {
+          listener = nextListener
+          return { remove }
+        }
+      ),
+    }
+    const adapter = createReactNativeRuntimeVisibilityAdapter(appState)
+    const visibilityHandler = vi.fn()
+
+    expect(adapter.getCurrentState?.()).toBe(`visible`)
+
+    const unsubscribe = adapter.subscribe(visibilityHandler)
+    expect(appState.addEventListener).toHaveBeenCalledWith(
+      `change`,
+      expect.any(Function)
+    )
+
+    listener?.(`inactive`)
+    listener?.(`background`)
+    listener?.(`active`)
+    listener?.(null)
+
+    expect(visibilityHandler.mock.calls).toEqual([
+      [`hidden`],
+      [`hidden`],
+      [`visible`],
+    ])
+
+    unsubscribe()
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
+  it(`should pause requests while custom runtime visibility is hidden and resume with non-live catch-up`, async () => {
+    vi.useFakeTimers()
+
+    type VisibilityState = `visible` | `hidden`
+    let visibilityState: VisibilityState = `visible`
+    let visibilityHandler: ((state: VisibilityState) => void) | undefined
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      runtimeVisibility: {
+        getCurrentState: () => visibilityState,
+        subscribe: (handler) => {
+          visibilityHandler = handler
+          return () => {
+            visibilityHandler = undefined
+          }
+        },
+      },
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    visibilityState = `hidden`
+    visibilityHandler?.(`hidden`)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchUrls).toHaveLength(2)
+
+    visibilityState = `visible`
+    visibilityHandler?.(`visible`)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchUrls).toHaveLength(4)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+    expect(fetchUrls[3]).toContain(`live=true`)
 
     unsub()
     aborter.abort()

@@ -249,6 +249,88 @@ type ShapeStreamErrorHandler = (
 /**
  * Options for constructing a ShapeStream.
  */
+export type RuntimeVisibilityState = `visible` | `hidden`
+
+export type RuntimeVisibilityAdapter = {
+  getCurrentState?: () => RuntimeVisibilityState | undefined
+  subscribe: (callback: (state: RuntimeVisibilityState) => void) => () => void
+}
+
+type ReactNativeAppStateStatus = `active` | `background` | `inactive` | null
+
+type ReactNativeAppStateLike = {
+  currentState: ReactNativeAppStateStatus
+  addEventListener: (
+    type: `change`,
+    listener: (state: ReactNativeAppStateStatus) => void
+  ) => { remove: () => void }
+}
+
+const reactNativeAppStateToVisibility = (
+  state: ReactNativeAppStateStatus
+): RuntimeVisibilityState | undefined => {
+  if (state === null) return undefined
+  return state === `active` ? `visible` : `hidden`
+}
+
+export function createReactNativeRuntimeVisibilityAdapter(
+  AppState: ReactNativeAppStateLike
+): RuntimeVisibilityAdapter {
+  return {
+    getCurrentState: () =>
+      reactNativeAppStateToVisibility(AppState.currentState),
+    subscribe: (callback) => {
+      const subscription = AppState.addEventListener(`change`, (state) => {
+        const visibilityState = reactNativeAppStateToVisibility(state)
+        if (visibilityState) callback(visibilityState)
+      })
+      return () => subscription.remove()
+    },
+  }
+}
+
+function isReactNativeEnvironment(): boolean {
+  return (
+    typeof navigator === `object` &&
+    `product` in navigator &&
+    navigator.product === `ReactNative`
+  )
+}
+
+function getRuntimeRequire(): ((moduleName: string) => unknown) | undefined {
+  const globalRequire = (
+    globalThis as typeof globalThis & { require?: unknown }
+  ).require
+  if (typeof globalRequire === `function`) {
+    return globalRequire as (moduleName: string) => unknown
+  }
+
+  try {
+    return Function(
+      `return typeof require === "function" ? require : undefined`
+    )() as ((moduleName: string) => unknown) | undefined
+  } catch {
+    return undefined
+  }
+}
+
+function detectReactNativeRuntimeVisibilityAdapter():
+  | RuntimeVisibilityAdapter
+  | undefined {
+  if (!isReactNativeEnvironment()) return undefined
+
+  try {
+    const runtimeRequire = getRuntimeRequire()
+    const reactNative = runtimeRequire?.(`react-native`) as
+      | { AppState?: ReactNativeAppStateLike }
+      | undefined
+    if (!reactNative?.AppState) return undefined
+    return createReactNativeRuntimeVisibilityAdapter(reactNative.AppState)
+  } catch {
+    return undefined
+  }
+}
+
 export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is served. This can either be the Electric server
@@ -318,6 +400,13 @@ export interface ShapeStreamOptions<T = never> {
 
   signal?: AbortSignal
   fetchClient?: typeof fetch
+
+  /**
+   * Runtime lifecycle adapter for environments without `document.visibilitychange`,
+   * such as React Native. Hidden state pauses the stream and aborts in-flight
+   * requests; visible state resumes with a non-live catch-up request.
+   */
+  runtimeVisibility?: RuntimeVisibilityAdapter
   backoffOptions?: BackoffOptions
 
   /**
@@ -1904,16 +1993,41 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
   }
 
+  #setVisibilityPaused(isHidden: boolean) {
+    if (isHidden) {
+      this.#pauseLock.acquire(`visibility`)
+    } else if (this.#pauseLock.isHeldBy(`visibility`)) {
+      this.#pauseLock.release(`visibility`)
+    }
+  }
+
   #subscribeToVisibilityChanges() {
+    const runtimeVisibility =
+      this.options.runtimeVisibility ??
+      detectReactNativeRuntimeVisibilityAdapter()
+
+    if (runtimeVisibility) {
+      this.#setVisibilityPaused(
+        runtimeVisibility.getCurrentState?.() === `hidden`
+      )
+
+      const unsubscribe = runtimeVisibility.subscribe((state) => {
+        this.#setVisibilityPaused(state === `hidden`)
+      })
+
+      this.#unsubscribeFromVisibilityChanges = () => {
+        unsubscribe()
+        this.#unsubscribeFromVisibilityChanges = undefined
+      }
+      return
+    }
+
     if (this.#hasBrowserVisibilityAPI()) {
       const visibilityHandler = () => {
-        if (document.hidden) {
-          this.#pauseLock.acquire(`visibility`)
-        } else {
-          this.#pauseLock.release(`visibility`)
-        }
+        this.#setVisibilityPaused(document.hidden)
       }
 
+      visibilityHandler()
       document.addEventListener(`visibilitychange`, visibilityHandler)
 
       // Store cleanup function to remove the event listener
