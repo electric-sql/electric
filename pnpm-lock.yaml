@@ -1019,7 +1019,7 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.5.22
+        specifier: 1.5.23
         version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
