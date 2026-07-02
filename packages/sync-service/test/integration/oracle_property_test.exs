@@ -21,6 +21,12 @@ defmodule Electric.Integration.OraclePropertyTest do
       (kill -9 style crash + recover), or "rolling" (rolling deploy: a new
       stack takes over the replication slot before the old one is stopped).
       See `Support.OracleHarness.RestartStrategy`.
+    - RETRY_TRANSIENT_ERRORS: When "true"/"1", a transient poll error (5xx or a
+      connection error) is retried within the check timeout instead of failing
+      the test. These are availability blips that production hides from clients
+      during a restart/deploy, so they are not consistency signals. Default off
+      (any poll error fails, preserving current behaviour). 409/must-refetch and
+      4xx errors and data mismatches always fail regardless of this flag.
     - RESTART_CLIENT_EVERY: Throw away clients (poll cursors, materialized
       rows) and reconnect every M batches to test that fresh polls correctly
       assemble snapshot + log (default: 0, disabled). Independent of
