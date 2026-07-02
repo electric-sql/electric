@@ -483,6 +483,11 @@ defmodule Electric.Shapes.Consumer do
     # shape but the alternative is leaking ets tables.
     state = terminate_writer(state)
 
+    # `terminate_writer/1` flushes the writer, so any staged move positions are
+    # now durable — commit them so the persisted position matches storage across
+    # a graceful restart.
+    state = commit_all_move_positions(state)
+
     ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason)
 
     State.reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
@@ -991,15 +996,16 @@ defmodule Electric.Shapes.Consumer do
             {{previous_offset, result.state.latest_offset}, result.state.latest_offset}
           end
 
-        final_state = maybe_commit_move_positions(result.state)
+        final_state = maybe_stage_move_positions(result.state)
 
         {final_state, notification, result.num_changes, result.total_size}
     end
   end
 
   # Stash the source LSN carried by a materializer move payload, keyed by
-  # dependency handle. The position is only committed (advanced + persisted)
-  # once the move pipeline is fully drained (see `maybe_commit_move_positions/1`).
+  # dependency handle. It is staged once the move pipeline is fully drained (see
+  # `maybe_stage_move_positions/1`) and only persisted once the writer confirms
+  # the flush (see `commit_flushed_move_positions/2`).
   defp record_pending_move_lsn(state, dep_handle, payload) do
     case Map.get(payload, :lsn) do
       nil ->
@@ -1010,27 +1016,104 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  # Once the subquery move pipeline is fully drained (Steady with an empty move
-  # queue), every move received so far has been applied to storage, so the
-  # per-dependency moves-positions can be safely advanced to the latest received
-  # source LSNs and persisted. This is the dedup key used to replay only the
-  # missed tail after a restart.
-  defp maybe_commit_move_positions(%State{pending_move_lsns: pending} = state)
+  # Once the move pipeline is fully drained (Steady, empty queue) every received
+  # move has been applied to the writer buffer. Stage the received source LSNs,
+  # tagged with the current outer `latest_offset` as a flush threshold: the move's
+  # splice rows are at/below `latest_offset`, so they are durable once the writer
+  # has flushed to that offset. Staged entries are only advanced into (and
+  # persisted as) `move_positions` by `commit_flushed_move_positions/2` — so the
+  # persisted position never runs ahead of durable storage across a restart.
+  defp maybe_stage_move_positions(%State{pending_move_lsns: pending} = state)
        when pending == %{},
        do: state
 
-  defp maybe_commit_move_positions(%State{} = state) do
+  defp maybe_stage_move_positions(%State{} = state) do
     if move_pipeline_fully_drained?(state.event_handler) do
-      move_positions =
-        Map.merge(state.move_positions, state.pending_move_lsns, fn _handle, old, new ->
-          LogOffset.max(old, new)
+      threshold = state.latest_offset
+
+      staged =
+        Enum.reduce(state.pending_move_lsns, state.staged_move_positions, fn {handle, lsn}, acc ->
+          Map.update(acc, handle, [{threshold, lsn}], &(&1 ++ [{threshold, lsn}]))
         end)
 
-      ShapeCache.Storage.set_move_positions!(move_positions, state.storage)
-
-      %{state | move_positions: move_positions, pending_move_lsns: %{}}
+      %{state | staged_move_positions: staged, pending_move_lsns: %{}}
     else
       state
+    end
+  end
+
+  # Commit staged move positions whose splice rows are now durable (flush
+  # threshold at/below `flushed_offset`), advancing and persisting
+  # `move_positions`.
+  defp commit_flushed_move_positions(
+         %State{staged_move_positions: staged} = state,
+         _flushed_offset
+       )
+       when staged == %{},
+       do: state
+
+  defp commit_flushed_move_positions(%State{} = state, flushed_offset) do
+    {staged, positions, changed?} =
+      Enum.reduce(state.staged_move_positions, {%{}, state.move_positions, false}, fn
+        {handle, entries}, {staged_acc, positions_acc, changed} ->
+          {committed, remaining} =
+            Enum.split_while(entries, fn {threshold, _lsn} ->
+              LogOffset.is_log_offset_lte(threshold, flushed_offset)
+            end)
+
+          positions_acc =
+            case List.last(committed) do
+              nil -> positions_acc
+              {_threshold, lsn} -> Map.update(positions_acc, handle, lsn, &LogOffset.max(&1, lsn))
+            end
+
+          staged_acc =
+            if remaining == [], do: staged_acc, else: Map.put(staged_acc, handle, remaining)
+
+          {staged_acc, positions_acc, changed or committed != []}
+      end)
+
+    if changed? do
+      ShapeCache.Storage.set_move_positions!(positions, state.storage)
+      %{state | staged_move_positions: staged, move_positions: positions}
+    else
+      state
+    end
+  end
+
+  # Commit all staged move positions unconditionally. Called from `terminate/2`
+  # after `terminate_writer/1` has flushed the writer, so every staged move's
+  # splice rows are durable by then. Note this runs after `terminate_writer/1`
+  # has popped `:writer` off the state, so we match a bare map rather than
+  # `%State{}`.
+  defp commit_all_move_positions(state) do
+    staged = Map.get(state, :staged_move_positions, %{})
+    storage = Map.get(state, :storage)
+
+    if staged == %{} or is_nil(storage) do
+      state
+    else
+      positions =
+        Enum.reduce(staged, state.move_positions, fn {handle, entries}, acc ->
+          {_threshold, lsn} = List.last(entries)
+          Map.update(acc, handle, lsn, &LogOffset.max(&1, lsn))
+        end)
+
+      # A persistence failure here must not crash `terminate/2` (that would mask
+      # the shutdown reason, and storage may already be torn down), but it should
+      # not pass silently: a dropped position just means more moves are replayed
+      # on restart. Log it so a genuine failure is observable.
+      try do
+        ShapeCache.Storage.set_move_positions!(positions, storage)
+      rescue
+        error ->
+          Logger.warning(
+            "Failed to persist move positions for shape " <>
+              "#{Map.get(state, :shape_handle)} during terminate: #{Exception.message(error)}"
+          )
+      end
+
+      %{state | move_positions: positions, staged_move_positions: %{}}
     end
   end
 
@@ -1216,7 +1299,7 @@ defmodule Electric.Shapes.Consumer do
   defp confirm_flushed_and_notify(state, flushed_offset) do
     {state, txn_offset} = State.align_offset_to_txn_boundary(state, flushed_offset)
     ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, txn_offset)
-    state
+    commit_flushed_move_positions(state, flushed_offset)
   end
 
   # After a pending transaction completes and txn_offset_mapping is populated,
