@@ -141,6 +141,18 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :error = ShapeStatus.validate_shape_handle(state, shape_handle1, shape2)
   end
 
+  test "validate_shape_handle/3 returns :error when the meta table is absent" do
+    # During a stack restart, ShapeStatusOwner frees the shape_meta_table and
+    # the new owner recreates it. An inflight request held by Bandit can wake
+    # up in that window and call validate_shape_handle while the table is gone.
+    # It must return :error (so the caller can fall back to the live SQLite
+    # store) rather than raising an ArgumentError that crashes the request.
+    absent_stack_id = "absent-stack-#{System.unique_integer([:positive])}"
+
+    assert :error =
+             ShapeStatus.validate_shape_handle(absent_stack_id, "any-handle", shape!("one"))
+  end
+
   describe "list_shapes/2" do
     test "returns shapes with dependencies in a topological order", ctx do
       {:ok, state, []} = new_state(ctx)

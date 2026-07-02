@@ -290,6 +290,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
       [] ->
         :error
     end
+  rescue
+    # The shape_meta_table is created by ShapeStatusOwner. During a stack
+    # restart there's a window when the old owner's table has been freed
+    # and the new owner hasn't recreated it yet. An inflight HTTP request
+    # held by Bandit can wake up in that window. Treat a missing table
+    # the same as a missing entry — the caller can fall back to
+    # fetch_handle_by_shape (which goes through the live SQLite store).
+    ArgumentError -> :error
   end
 
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error

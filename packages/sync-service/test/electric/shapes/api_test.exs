@@ -924,6 +924,55 @@ defmodule Electric.Shapes.ApiTest do
              }
     end
 
+    @tag long_poll_timeout: 200
+    test "disk-update check survives ETS tables vanishing during a restart", ctx do
+      # During a stack restart the per-stack ETS tables read by
+      # check_for_disk_updates can be transiently absent for a held long-poll
+      # that wakes up in the restart window. resolve_shape_handle then raises
+      # ArgumentError. The rescue must turn that into :no_change so the request
+      # completes gracefully (here: the normal out-of-bounds 400) instead of
+      # crashing the request handler with the ArgumentError.
+      expect_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        # check_for_disk_updates at the out-of-bounds timeout — the ETS table
+        # has been freed by the restarting stack, so the lookup raises.
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          raise ArgumentError, "shape_meta_table gone (restart window)"
+        end
+      )
+
+      out_of_bounds_offset = LogOffset.increment(@test_offset)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   handle: "#{@test_shape_handle}",
+                   offset: "#{out_of_bounds_offset}",
+                   live: true
+                 }
+               )
+
+      assert response = Api.serve_shape_response(request)
+
+      # With the rescue the raised ArgumentError becomes :no_change, so the
+      # out-of-bounds branch returns its normal 400 instead of crashing.
+      assert response.status == 400
+
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 offset: ["out of bounds for this shape"]
+               }
+             }
+    end
+
     for live <- [true, false] do
       @live live
       test "live=#{@live} request recovers from out of bounds offset via subscription", ctx do
