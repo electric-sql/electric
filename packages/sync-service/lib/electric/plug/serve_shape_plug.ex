@@ -36,6 +36,7 @@ defmodule Electric.Plug.ServeShapePlug do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Api
+  alias Electric.Telemetry.EmptyResponseSampler
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
   alias Plug.Conn
@@ -504,15 +505,46 @@ defmodule Electric.Plug.ServeShapePlug do
   # the parent-based sampler left no recording span, so `add_span_attributes` is a no-op
   # and nothing is stamped or exported.
   #
+  # Empty/up-to-date responses are additionally tail-dropped: when the drop is enabled
+  # they are stamped with `SampleRate = 0`, which the drop processor recognises as a
+  # sentinel to skip export (see Electric.Telemetry.EmptyResponseSampler).
+  #
   # Called both at span start (status not yet known: the rate hint is stamped as-is) and
   # at emit time, when the final attribute values overwrite the initial ones.
   defp add_span_attrs_from_conn(conn) do
     conn
     |> open_telemetry_attrs()
-    |> Map.merge(TraceContextPlug.sample_rate_attrs(conn, conn.status))
+    |> Map.merge(sample_rate_attrs(conn))
     |> OpenTelemetry.add_span_attributes()
 
     conn
+  end
+
+  # The `SampleRate` span attribute, combining the upstream rate hint with the
+  # empty-response tail-drop decision. The drop overrides the base rate with the
+  # `SampleRate = 0` sentinel for empty, non-SSE responses when enabled.
+  defp sample_rate_attrs(conn) do
+    base_attrs = TraceContextPlug.sample_rate_attrs(conn, conn.status)
+    trace_attrs = response_trace_attrs(conn)
+
+    decision =
+      EmptyResponseSampler.sample_rate(
+        conn.status,
+        trace_attrs[:ot_is_empty_response] || false,
+        trace_attrs[:ot_is_sse_response] || false,
+        Electric.Config.get_env(:drop_empty_response_spans?)
+      )
+
+    case decision do
+      :unchanged -> base_attrs
+      sample_rate -> Map.put(base_attrs, TraceContextPlug.sample_rate_attr(), sample_rate)
+    end
+  end
+
+  defp response_trace_attrs(%Conn{assigns: assigns}) do
+    request = Map.get(assigns, :request, %{}) |> bare_map()
+    response = (Map.get(assigns, :response) || Map.get(request, :response) || %{}) |> bare_map()
+    Map.get(response, :trace_attrs, %{})
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do

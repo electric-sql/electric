@@ -235,6 +235,7 @@ config :electric,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
+  drop_empty_response_spans?: env!("ELECTRIC_DROP_EMPTY_RESPONSE_SPANS", :boolean, nil),
   telemetry_top_process_limit:
     env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", &Electric.Config.parse_top_process_limit!/1, nil) ||
       env!(

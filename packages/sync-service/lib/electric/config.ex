@@ -84,6 +84,10 @@ defmodule Electric.Config do
     telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
     otel_sampling_ratio: 0.01,
     metrics_sampling_ratio: 1,
+    # When true (default), the OTel spans of empty/up-to-date shape-GET responses are
+    # tail-dropped at export time to cut trace volume. Setting it false disables the drop
+    # so empties are exported normally. See Electric.Telemetry.EmptyResponseSampler.
+    drop_empty_response_spans?: true,
     ## Memory
     # After this duration of inactivity, consumer processes will hibernate
     # to allow garbage collection
