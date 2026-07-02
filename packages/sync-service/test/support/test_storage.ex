@@ -102,6 +102,18 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def set_move_positions!(move_positions, {parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :set_move_positions!, shape_handle, move_positions})
+    Storage.set_move_positions!(move_positions, storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def fetch_move_positions({parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :fetch_move_positions, shape_handle})
+    Storage.fetch_move_positions(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def snapshot_started?({parent, shape_handle, _, storage}) do
     send(parent, {__MODULE__, :snapshot_started?, shape_handle})
     Storage.snapshot_started?(storage)

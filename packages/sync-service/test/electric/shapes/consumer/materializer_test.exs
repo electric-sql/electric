@@ -1308,6 +1308,27 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     |> Enum.map(fn {_offset, item} -> Jason.encode!(item) end)
   end
 
+  # Build a single main-log insert log item at `offset` introducing `value`,
+  # encoded the same way the source consumer would write it (headers carry the
+  # `lsn`/`op_position` used to reconstruct the offset during replay).
+  defp main_log_insert(offset, id, value) do
+    change =
+      %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        key: ~s|"public"."test_table"/"#{id}"|,
+        record: %{"id" => id, "value" => value},
+        log_offset: offset,
+        move_tags: []
+      }
+      |> Changes.fill_key(["id"])
+
+    change
+    |> then(&LogItems.from_change(&1, 1, ["id"], :default))
+    |> Enum.map(fn {item_offset, item} ->
+      {item_offset, change.key, :insert, Jason.encode!(item)}
+    end)
+  end
+
   defp prep_changes(changes, opts \\ []) do
     pk_cols = Keyword.get(opts, :pk_cols, ["id"])
     relation = Keyword.get(opts, :relation, {"public", "test_table"})
@@ -1436,6 +1457,105 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       # (the snapshot value) and the persisted UPDATE would be lost. The
       # iteration fix guarantees the UPDATE is replayed.
       assert Materializer.get_link_values(mat_ctx) == MapSet.new([99])
+    end
+  end
+
+  describe "move replay on subscribe" do
+    # A subscriber that is behind (`from_lsn` < the materializer's applied
+    # position) is caught up by replaying only the moves it missed, each tagged
+    # with its source LSN, and is handed the link values as of `from_lsn` to seed
+    # its dependency view.
+    setup ctx do
+      shape_handle = "replay-test-#{System.unique_integer([:positive])}"
+
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+      Storage.start_link(storage)
+      writer = Storage.init_writer!(storage, @shape)
+      Storage.mark_snapshot_as_started(storage)
+
+      # Snapshot establishes value 10.
+      Storage.make_new_snapshot!(
+        make_snapshot_data([%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]),
+        storage
+      )
+
+      # Two main-log inserts at distinct offsets, each introducing a new value
+      # (a move-in): value 20 at (100,0), value 30 at (200,0).
+      writer =
+        Storage.append_to_log!(
+          main_log_insert(LogOffset.new(100, 0), "2", "20"),
+          writer
+        )
+
+      writer =
+        Storage.append_to_log!(
+          main_log_insert(LogOffset.new(200, 0), "3", "30"),
+          writer
+        )
+
+      Storage.hibernate(writer)
+
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+
+      {:ok, _pid} =
+        Materializer.start_link(%{
+          stack_id: ctx.stack_id,
+          shape_handle: shape_handle,
+          storage: ctx.storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      respond_to_call(:await_snapshot_start, :started)
+      # Subscribed offset past both main-log entries so the materializer applies
+      # the full history at startup.
+      respond_to_call(:subscribe_materializer, {:ok, LogOffset.new(200, 0)})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new([10, 20, 30])
+
+      Map.put(ctx, :mat_ctx, mat_ctx)
+    end
+
+    test "replays only moves after from_lsn, tagged with per-range source LSNs",
+         %{mat_ctx: mat_ctx} do
+      # Behind at (100,0): the move-in for value 20 (at (100,0)) is already
+      # applied, only value 30 (at (200,0)) must be replayed.
+      assert {:ok, seed, applied_offset} =
+               Materializer.subscribe(mat_ctx, LogOffset.new(100, 0))
+
+      # Seed view is the link values as of (100,0): value 30 not yet included.
+      assert seed == MapSet.new([10, 20])
+      assert applied_offset == LogOffset.new(200, 0)
+
+      assert_receive {:materializer_changes, _handle,
+                      %{move_in: [{30, "30"}], lsn: %LogOffset{tx_offset: 200, op_offset: 0}}}
+
+      # The already-applied move-in for value 20 is NOT replayed.
+      refute_received {:materializer_changes, _handle, %{move_in: [{20, "20"}]}}
+    end
+
+    test "replays every move when from_lsn is before all main-log moves",
+         %{mat_ctx: mat_ctx} do
+      assert {:ok, _seed, _applied} =
+               Materializer.subscribe(mat_ctx, LogOffset.new(50, 0))
+
+      assert_receive {:materializer_changes, _handle,
+                      %{move_in: [{20, "20"}], lsn: %LogOffset{tx_offset: 100, op_offset: 0}}}
+
+      assert_receive {:materializer_changes, _handle,
+                      %{move_in: [{30, "30"}], lsn: %LogOffset{tx_offset: 200, op_offset: 0}}}
+    end
+
+    test "does not replay when from_lsn is at or past the applied position",
+         %{mat_ctx: mat_ctx} do
+      assert {:ok, seed, _applied} =
+               Materializer.subscribe(mat_ctx, LogOffset.new(200, 0))
+
+      # Caught up: seed is the current link values and nothing is replayed.
+      assert seed == MapSet.new([10, 20, 30])
+      refute_received {:materializer_changes, _handle, _payload}
     end
   end
 
