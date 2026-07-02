@@ -45,6 +45,16 @@ defmodule Electric.Shapes.Consumer do
   # fragment rate.
   @gc_min_interval_ms 1_000
 
+  # Safety net for live subscribers that stop draining their mailbox (e.g. a
+  # stalled or dead client socket). A healthy subscriber drains :new_changes
+  # promptly and sits near zero; this default only sheds pathologically
+  # backed-up subscribers well before they can OOM the node. Always a positive
+  # integer — shedding cannot be disabled. Tunable via
+  # ELECTRIC_SLOW_SUBSCRIBER_MAX_QUEUE_LEN (stack config key
+  # :slow_subscriber_max_queue_len). Used only as a fallback default when the
+  # stack config has not been seeded (e.g. in unit tests).
+  @default_slow_subscriber_max_queue_len 10_000
+
   @type initialize_shape_opts() :: %{
           :action => :create | :restore,
           optional(:otel_ctx) => OpenTelemetry.otel_ctx() | nil,
@@ -1045,6 +1055,13 @@ defmodule Electric.Shapes.Consumer do
           latest_log_offset :: LogOffset.t()
         ) :: :ok
   defp notify_clients_of_new_changes(state, latest_log_offset) do
+    max_queue_len =
+      Electric.StackConfig.lookup(
+        state.stack_id,
+        :slow_subscriber_max_queue_len,
+        @default_slow_subscriber_max_queue_len
+      )
+
     Registry.dispatch(
       Electric.StackSupervisor.registry_name(state.stack_id),
       state.shape_handle,
@@ -1053,10 +1070,39 @@ defmodule Electric.Shapes.Consumer do
           "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
         end)
 
-        for {pid, ref} <- registered,
-            do: send(pid, {ref, :new_changes, latest_log_offset})
+        for {pid, ref} <- registered do
+          if subscriber_overloaded?(pid, max_queue_len) do
+            shed_slow_subscriber(pid, state.shape_handle, max_queue_len)
+          else
+            send(pid, {ref, :new_changes, latest_log_offset})
+          end
+        end
       end
     )
+
+    :ok
+  end
+
+  # A live subscriber (e.g. a `GET /v1/shape` request) that can't drain its
+  # mailbox — a stalled or dead client socket while changes keep streaming —
+  # would otherwise accumulate one `:new_changes` message per transaction
+  # without bound, pinning reference-counted binary until the node runs out of
+  # memory. Once its mailbox crosses the watermark we stop notifying it and
+  # terminate it; the client reconnects and resumes from its last offset.
+  defp subscriber_overloaded?(pid, max_queue_len) do
+    case Process.info(pid, :message_queue_len) do
+      {:message_queue_len, len} -> len > max_queue_len
+      nil -> false
+    end
+  end
+
+  defp shed_slow_subscriber(pid, shape_handle, max_queue_len) do
+    Logger.warning(
+      "Shedding slow subscriber #{inspect(pid)} for shape #{shape_handle}: " <>
+        "mailbox exceeded #{max_queue_len} pending messages"
+    )
+
+    Process.exit(pid, :kill)
   end
 
   @spec notify_materializer_of_new_changes(
