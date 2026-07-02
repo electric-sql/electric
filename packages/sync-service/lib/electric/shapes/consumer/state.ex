@@ -35,10 +35,18 @@ defmodule Electric.Shapes.Consumer.State do
     # event handler's dependency views so replayed moves are not
     # redundancy-eliminated.
     dep_seed_views: %{},
-    # Per-dependency source LSN of the most recently received (not yet committed)
-    # materializer move (`%{dep_handle => LogOffset}`); folded into
-    # `move_positions` once the move pipeline is fully drained.
+    # Per-dependency source LSN of the most recently received (not yet applied)
+    # materializer move (`%{dep_handle => LogOffset}`); moved into
+    # `staged_move_positions` once the move pipeline is fully drained (applied to
+    # the writer buffer).
     pending_move_lsns: %{},
+    # Per-dependency source LSNs that have been applied to the writer buffer but
+    # are not yet known to be durably flushed
+    # (`%{dep_handle => [{flush_threshold_offset, source_lsn}]}`, ascending).
+    # An entry is committed to `move_positions` (advanced + persisted) only once
+    # the writer confirms a flush at/after its threshold, so the persisted
+    # position never runs ahead of durable storage.
+    staged_move_positions: %{},
     terminating?: false,
     buffering?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until

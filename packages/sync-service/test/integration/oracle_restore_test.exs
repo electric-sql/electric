@@ -35,7 +35,12 @@ defmodule Electric.Integration.OracleRestoreTest do
   setup ctx do
     ctx =
       with_electric_client(ctx,
-        router_opts: [long_poll_timeout: 100],
+        # A realistic long-poll timeout. A very short one (e.g. 100ms) trips a
+        # separate post-restart long-poll readiness race (bug 3): the poll times
+        # out before replication has caught up after the restart, yielding a
+        # spurious 409. That is independent of the subquery-restore behaviour
+        # under test here.
+        router_opts: [long_poll_timeout: 5000],
         num_clients: 1
       )
 
