@@ -272,7 +272,7 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
             Method::Post => handle_append(store, req, path).await,
             Method::Get => handle_read(store, req, path).await,
             Method::Head => handle_head(store, path),
-            Method::Delete => handle_delete(store, path),
+            Method::Delete => handle_delete(store, path).await,
             Method::Options => ResponseBuilder::new(204).body(empty()),
             Method::Other => text_response(405, "method not allowed"),
         }
@@ -886,25 +886,26 @@ impl AppendOutcome {
 
 async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
     let t0 = crate::telemetry::Timer::start();
-    // is_json is needed for the metric label even on the not-found path, where we
-    // don't have a stream; default to false there.
-    let is_json = store.get(&path).map(|s| s.is_json).unwrap_or(false);
-    let (resp, outcome) = handle_append_inner(store, req, path).await;
+    // is_json comes back from the inner handler (false on the not-found path) so
+    // the metric label doesn't cost a SECOND registry lookup per append — at high
+    // stream cardinality each lookup is a cold walk of a million-key map.
+    let (resp, outcome, is_json) = handle_append_inner(store, req, path).await;
     crate::telemetry::record_append(t0.elapsed_secs(), outcome.label(), is_json);
     resp
 }
 
-async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp, AppendOutcome) {
+async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp, AppendOutcome, bool) {
     use AppendOutcome::*;
-    macro_rules! ret {
-        ($resp:expr, $oc:expr) => {
-            return ($resp, $oc)
-        };
-    }
     let st = match store.get(&path) {
         Some(s) => s,
-        None => ret!(text_response(404, "stream not found"), Conflict),
+        None => return (text_response(404, "stream not found"), Conflict, false),
     };
+    let is_json = st.is_json;
+    macro_rules! ret {
+        ($resp:expr, $oc:expr) => {
+            return ($resp, $oc, is_json)
+        };
+    }
     if st.shared.read().unwrap().soft_deleted {
         ret!(gone(), Conflict);
     }
@@ -1156,7 +1157,18 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
         #[cfg(target_os = "linux")]
         crate::sse_reactor::wake_stream(&st);
+    } else if staged_lsn.is_some() {
+        // WAL mode: the stream is in its shard's dirty set (register_dirty ran
+        // during staging), so the ~3 s checkpoint will write the sidecar for us —
+        // just mark it. This keeps the meta `File::create`+`rename` (and its
+        // parent-directory rwsem, measured at ~40% of server CPU under write
+        // saturation) plus a timer task OFF the per-append path. Producer/access
+        // updates are already documented as a non-durable, lagging flush; the lag
+        // bound moves from the 100 ms debounce to the checkpoint cadence.
+        st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
     } else {
+        // No WAL record staged (memory durability): no checkpoint will flush the
+        // sidecar — keep the debounced flush.
         st.schedule_meta_flush();
     }
     if !wire.is_empty() {
@@ -1178,7 +1190,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     if tail.closed {
         b = b.hs(H_CLOSED, "true");
     }
-    (b.body(empty()), Accept)
+    (b.body(empty()), Accept, is_json)
 }
 
 fn closed_conflict(tail: u64) -> Resp {
@@ -2162,7 +2174,7 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
 
 // ---------- DELETE ----------
 
-fn handle_delete(store: Arc<Store>, path: String) -> Resp {
+async fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
         None => return text_response(404, "stream not found"),
@@ -2170,8 +2182,16 @@ fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
-    store.delete_or_soft_delete(&st);
-    ResponseBuilder::new(204).body(empty())
+    // The 204 is a durability promise: once acked, a crash must never
+    // resurrect the stream. Await the on-disk removal (unlinks + parent-dir
+    // fsync, or the soft-delete meta flag) before responding — a detached
+    // removal task can be lost to a crash after the ack.
+    let store2 = Arc::clone(&store);
+    let st2 = Arc::clone(&st);
+    match tokio::task::spawn_blocking(move || store2.delete_or_soft_delete_durable(&st2)).await {
+        Ok(Ok(())) => ResponseBuilder::new(204).body(empty()),
+        _ => text_response(500, "delete not durable"),
+    }
 }
 
 #[cfg(test)]

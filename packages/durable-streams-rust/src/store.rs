@@ -106,10 +106,35 @@ pub struct Appender {
 /// Returns the fsync result: a failure (e.g. EIO writeback error) MUST be
 /// surfaced to the caller so an append is never acked as durable when the data
 /// did not reach stable storage.
+/// BENCH-ONLY: whether `DS_BENCH_FAST_FSYNC` requests plain `fsync` over
+/// `F_FULLFSYNC` on macOS (see [`barrier_fsync`]). Read once and cached — the env
+/// is fixed for the process lifetime.
+#[cfg(target_os = "macos")]
+fn fast_fsync_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("DS_BENCH_FAST_FSYNC").is_some())
+}
+
 pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
     #[cfg(target_os = "macos")]
     unsafe {
+        // BENCH-ONLY escape hatch (NOT for production durability): when
+        // `DS_BENCH_FAST_FSYNC` is set, use a plain `fsync` instead of
+        // `F_FULLFSYNC`. On macOS `F_FULLFSYNC` forces a true drive-cache barrier
+        // (~tens of ms even on a RAM disk), which dominates the commit path and
+        // masks the per-shard LOCK contention this build is meant to study. Plain
+        // `fsync` on a RAM disk is ~free, reproducing the cheap-fsync (Linux +
+        // NVMe) regime where the lock is the bottleneck. Never set this where data
+        // must survive power loss.
+        if fast_fsync_enabled() {
+            return if libc::fsync(fd) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            };
+        }
         // Force a true flush to platter; fall back to a plain fsync. Only error
         // if the final fallback also fails.
         if libc::fcntl(fd, libc::F_FULLFSYNC) == 0 {
@@ -152,8 +177,22 @@ pub struct StreamState {
     pub appender: AsyncMutex<Appender>,
     pub shared: RwLock<Shared>,
     pub tail_tx: watch::Sender<Tail>,
+    /// The sidecar's persisted `durable_tail` as read at BOOT (None for sidecars
+    /// written by older servers). Consumed once by WAL recovery as this stream's
+    /// truncation-proof seed; never updated afterwards (the live value lives in
+    /// `Shared.durable_tail` and is re-captured on every meta write).
+    pub boot_meta_durable_tail: Option<u64>,
     /// True while a debounced meta flush is pending.
     pub meta_dirty: AtomicBool,
+    /// **Lock-free WAL dirty-set marker** (Tier-1a). The shard's checkpoint epoch
+    /// at which this stream was last registered into its shard's dirty set. The
+    /// hot append path compares this against the shard's current epoch: equal ⇒
+    /// already registered this interval (no lock, no push); not-equal ⇒ CAS it to
+    /// the current epoch and, on the winning transition only, push this stream's
+    /// `Arc<StreamState>` into the shard's dirty collection. Initialised to `0`
+    /// (the shard's epoch starts at `1`), so the first append after creation always
+    /// registers. See `Shard::register_dirty`.
+    pub dirty_epoch: AtomicU64,
     /// Serializes sidecar writes for this stream. Concurrent writers (append
     /// flush, close, tiering offload flip, delete) otherwise race on the shared
     /// `.meta.tmp` file and can reorder their renames, letting a stale non-durable
@@ -570,6 +609,7 @@ impl Store {
             file_path: data_path.clone(),
             base_offset: meta.base_offset,
             parent,
+            boot_meta_durable_tail: meta.durable_tail,
             appender: AsyncMutex::new(Appender { file: file.clone(), written }),
             shared: RwLock::new(Shared {
                 tail,
@@ -588,6 +628,9 @@ impl Store {
             }),
             tail_tx,
             meta_dirty: AtomicBool::new(false),
+            // Epoch 0 < the shard's initial epoch (1), so the first append
+            // registers this stream into the dirty set.
+            dirty_epoch: AtomicU64::new(0),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),
             tier: crate::tier::TierState::from_meta(
@@ -638,7 +681,27 @@ impl Store {
     }
 
     /// Hard-delete when nothing references the stream; soft-delete otherwise.
+    ///
+    /// NON-durable, detached variant for the expiry sweep on the read path: the
+    /// on-disk removals / soft-meta write run on a fire-and-forget blocking
+    /// task, so a crash can undo them (an expired stream re-expires on the next
+    /// access — harmless). The DELETE handler must NOT use this: an acked
+    /// DELETE undone by a crash resurrects the stream with all its data — use
+    /// [`Store::delete_or_soft_delete_durable`] there.
     pub fn delete_or_soft_delete(&self, st: &Arc<StreamState>) {
+        let _ = self.delete_impl(st, false);
+    }
+
+    /// [`Store::delete_or_soft_delete`] with the DELETE-ack durability contract:
+    /// the file + sidecar unlinks (and their parent-directory entry) — or the
+    /// soft-delete meta flag — are durable on disk before this returns, so a
+    /// post-ack crash can never resurrect the stream. Synchronous file I/O +
+    /// fsync: call from a blocking context.
+    pub fn delete_or_soft_delete_durable(&self, st: &Arc<StreamState>) -> std::io::Result<()> {
+        self.delete_impl(st, true)
+    }
+
+    fn delete_impl(&self, st: &Arc<StreamState>, durable: bool) -> std::io::Result<()> {
         let soft = {
             let mut s = st.shared.write().unwrap();
             if s.ref_count > 0 {
@@ -649,10 +712,14 @@ impl Store {
             }
         };
         if soft {
-            let st2 = st.clone();
-            tokio::task::spawn_blocking(move || {
-                let _ = write_meta_sync(&st2, true);
-            });
+            if durable {
+                write_meta_sync(st, true)?;
+            } else {
+                let st2 = st.clone();
+                tokio::task::spawn_blocking(move || {
+                    let _ = write_meta_sync(&st2, true);
+                });
+            }
         } else {
             self.streams
                 .remove_if(&st.path, |_, v| Arc::ptr_eq(v, st));
@@ -661,12 +728,21 @@ impl Store {
             // with no remaining fork references.
             self.gc_remote_segments(st);
             let fp = st.file_path.clone();
-            tokio::task::spawn_blocking(move || {
+            if durable {
+                // Both unlinks live in the same directory; one dir fsync makes
+                // them crash-durable together.
                 let _ = std::fs::remove_file(meta_path(&fp));
-                let _ = std::fs::remove_file(fp);
-            });
+                let _ = std::fs::remove_file(&fp);
+                fsync_parent_dir(&fp)?;
+            } else {
+                tokio::task::spawn_blocking(move || {
+                    let _ = std::fs::remove_file(meta_path(&fp));
+                    let _ = std::fs::remove_file(fp);
+                });
+            }
             self.release_parent(st);
         }
+        Ok(())
     }
 
     /// Decrement the parent's fork refcount; cascade-collect soft-deleted parents
@@ -741,6 +817,9 @@ impl Store {
             file_path,
             base_offset,
             parent: parent.clone(),
+            // Live-created stream: the durable frontier IS the initial tail (the
+            // create meta below persists it). Only consulted by boot recovery.
+            boot_meta_durable_tail: Some(base_offset),
             appender: AsyncMutex::new(Appender { file: file.clone(), written: 0 }),
             shared: RwLock::new(Shared {
                 tail: base_offset,
@@ -758,6 +837,9 @@ impl Store {
             }),
             tail_tx,
             meta_dirty: AtomicBool::new(false),
+            // Epoch 0 < the shard's initial epoch (1), so the first append
+            // registers this stream into the dirty set.
+            dirty_epoch: AtomicU64::new(0),
             meta_lock: StdMutex::new(()),
             last_chunk: RwLock::new(None),
             tier: crate::tier::TierState::default(),
@@ -951,6 +1033,16 @@ pub struct Meta {
     /// once the rewrite + swap completes durably.
     #[serde(default)]
     pub pending_compaction: Option<PendingCompaction>,
+    /// The stream's durable frontier (logical bytes) when this sidecar was
+    /// written — WAL recovery's per-stream truncation proof for streams with NO
+    /// retained WAL record and NO checkpoint `tails` entry (e.g. a stream
+    /// created after the last checkpoint whose only in-flight append was torn
+    /// by power loss). Only ever holds values that were durable at capture
+    /// time; a lagging (lazily-flushed) value is safe because recovery takes
+    /// the max of every proof. `None` in sidecars written by older servers →
+    /// recovery falls back to trusting the file size (the pre-field behavior).
+    #[serde(default)]
+    pub durable_tail: Option<u64>,
 }
 
 /// Serialized form of a sealed-segment manifest entry.
@@ -1019,6 +1111,7 @@ impl Meta {
             sealed_offset: st.tier.manifest.lock().unwrap().sealed_offset,
             file_base: Some(s.file_base),
             pending_compaction: *st.compaction.lock().unwrap(),
+            durable_tail: Some(s.durable_tail),
         }
     }
 }

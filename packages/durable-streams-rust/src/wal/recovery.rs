@@ -70,9 +70,34 @@ pub fn recover(store: &Arc<Store>, wal: &Arc<WalSet>) -> io::Result<()> {
     // Build the id → StreamState index once from the sidecar-recovered streams.
     // Streams are keyed by NAME in the store; recovery routes by `stream_id`, so
     // we re-key on the stable id. Shared across shards read-only.
+    //
+    // Alongside it, build each shard's per-stream durable-frontier SEED: the
+    // sidecar's persisted `durable_tail` proof (`None` in old sidecars → trust
+    // the file size, i.e. the boot tail — the pre-field behavior). Seeding EVERY
+    // stream (not just those the WAL touched) is what lets recovery truncate a
+    // torn, never-durable page-cache tail on a stream with NO retained WAL
+    // record and NO checkpoint `tails` entry — e.g. a stream created after the
+    // last checkpoint whose only in-flight append was torn by power loss. The
+    // reconcile loop below skips streams whose file already sits exactly at
+    // their frontier, so the seeding adds no boot I/O for untouched streams.
     let mut index: HashMap<u64, Arc<StreamState>> = HashMap::new();
+    let mut seeds: Vec<HashMap<u64, u64>> = vec![HashMap::new(); wal.shards().len()];
+    let shard_pos: HashMap<*const crate::wal::shard::Shard, usize> = wal
+        .shards()
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (Arc::as_ptr(s), i))
+        .collect();
     for entry in store.streams.iter() {
         let st = entry.value().clone();
+        let proof = {
+            let s = st.shared.read().unwrap();
+            // `s.tail` at boot is file_base + on-disk file size (the sidecar
+            // pass's trust-the-file seed).
+            st.boot_meta_durable_tail.unwrap_or(s.tail)
+        };
+        let pos = shard_pos[&Arc::as_ptr(wal.shard_for(st.id))];
+        seeds[pos].insert(st.id, proof);
         index.insert(st.id, st);
     }
     let index = Arc::new(index);
@@ -80,10 +105,10 @@ pub fn recover(store: &Arc<Store>, wal: &Arc<WalSet>) -> io::Result<()> {
     // Per-shard passes are independent (disjoint stream sets). Spawn one blocking
     // task per shard and join — the replay is synchronous file I/O.
     let mut handles = Vec::with_capacity(wal.shards().len());
-    for shard in wal.shards() {
+    for (shard, seed) in wal.shards().iter().zip(seeds) {
         let shard = Arc::clone(shard);
         let index = Arc::clone(&index);
-        handles.push(std::thread::spawn(move || recover_shard(&shard, &index)));
+        handles.push(std::thread::spawn(move || recover_shard(&shard, &index, seed)));
     }
     for h in handles {
         // A panicked recovery thread is a bug (poisoned state); surface it.
@@ -93,9 +118,13 @@ pub fn recover(store: &Arc<Store>, wal: &Arc<WalSet>) -> io::Result<()> {
 }
 
 /// Replay one shard and reconcile the tails of the streams it touched.
+/// `seed` carries every one of this shard's streams' sidecar durable-tail proof
+/// (see `recover`); the durable frontier per stream is the max of that seed,
+/// the checkpoint-persisted tails, and the replayed record ends.
 fn recover_shard(
     shard: &crate::wal::shard::Shard,
     index: &HashMap<u64, Arc<StreamState>>,
+    seed: HashMap<u64, u64>,
 ) -> io::Result<()> {
     // `checkpoint_lsn` is a WRITE-SKIP optimization ONLY — NOT the boundary for
     // which streams get reconciled. We replay from the OLDEST RETAINED record so
@@ -136,13 +165,23 @@ fn recover_shard(
     // below. Only streams with EITHER a persisted tail OR an in-range Append are
     // inserted, so we reconcile exactly the streams the WAL touched.
     let mut frontier: HashMap<u64, u64> = shard.read_durable_tails();
-    // (debug) Snapshot the persisted-tail seed and track the lowest replayed
-    // offset per stream, to assert that a stream reconstructed purely from
-    // replayed Appends covers `[file_base, frontier)` with no interior gap.
-    #[cfg(debug_assertions)]
-    let persisted_tails = frontier.clone();
+    // Fold in the per-stream sidecar proof (every stream of this shard gets an
+    // entry; max keeps the strongest proof).
+    for (id, proof) in seed {
+        let slot = frontier.entry(id).or_insert(0);
+        *slot = (*slot).max(proof);
+    }
+    // Streams whose per-stream FILE was actually written by the replay below —
+    // their reconcile must run unconditionally (fsync the repair).
+    let mut replay_wrote: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    // (debug) Track, per replayed stream, the lowest replayed offset AND the
+    // file's logical end BEFORE the first replay write touched it, to assert the
+    // replayed records tile onto the existing durable prefix with no interior
+    // hole (see the debug_assert below).
     #[cfg(debug_assertions)]
     let mut min_applied: HashMap<u64, u64> = HashMap::new();
+    #[cfg(debug_assertions)]
+    let mut pre_replay_end: HashMap<u64, u64> = HashMap::new();
     // Captured replay error from inside the closure (the closure cannot return
     // `io::Result`). The first error aborts further application for this shard.
     let mut replay_err: Option<io::Error> = None;
@@ -167,10 +206,18 @@ fn recover_shard(
             return;
         }
         let file_pos = stream_offset - file_base;
+        #[cfg(debug_assertions)]
+        pre_replay_end.entry(stream_id).or_insert_with(|| {
+            // Logical end of the per-stream file before replay writes to it —
+            // the durable prefix the replayed records must tile onto.
+            let len = std::fs::metadata(&st.file_path).map(|m| m.len()).unwrap_or(0);
+            file_base + len
+        });
         if let Err(e) = write_at(st, file_pos, payload) {
             replay_err = Some(e);
             return;
         }
+        replay_wrote.insert(stream_id);
         let end = stream_offset + payload.len() as u64;
         let slot = frontier.entry(stream_id).or_insert(0);
         *slot = (*slot).max(end);
@@ -185,9 +232,9 @@ fn recover_shard(
         return Err(e);
     }
 
-    // Reconcile each touched stream's file tail to its durable frontier (the max
-    // of the persisted durable tail and the replayed WAL frontier, already folded
-    // into `frontier`).
+    // Reconcile each stream's file tail to its durable frontier (the max of the
+    // sidecar durable-tail seed, the checkpoint-persisted tails, and the
+    // replayed WAL frontier, already folded into `frontier`).
     for (stream_id, &logical_tail) in &frontier {
         let st = match index.get(stream_id) {
             Some(st) => st,
@@ -199,19 +246,49 @@ fn recover_shard(
         // underflow `logical_tail - file_base`; skip — the live file already
         // starts at `file_base` and its tail is governed by the sealed watermark,
         // not this stale recorded tail.
-        if logical_tail < st.shared.read().unwrap().file_base {
+        let (file_base, boot_tail) = {
+            let s = st.shared.read().unwrap();
+            (s.file_base, s.tail)
+        };
+        if logical_tail < file_base {
             continue;
         }
-        // (debug) A stream rebuilt PURELY from replay (no persisted durable tail)
-        // must start at `file_base`; otherwise `[file_base, lowest_record)` is a
-        // torn interior prefix kept silently. Fail loudly in tests if a future
-        // compaction/`file_base` interaction breaks the contiguous-tiling premise.
+        // Fast path (keeps 1M-stream boots cheap): the replay never wrote this
+        // stream's file and the file already sits exactly at its frontier
+        // (`boot_tail` is file_base + on-disk size, seeded by the sidecar pass)
+        // — nothing to truncate, extend, or fsync. Persist the strengthened
+        // proof only when the sidecar's recorded one lags the frontier (e.g. a
+        // checkpoint `tails` entry outran the meta): the `tails` file is wiped
+        // by `reset_after_recovery`, so without the bump the NEXT boot's seed
+        // would regress below this durable frontier and truncate acked bytes.
+        // Old sidecars (no recorded proof) are left as-is — they keep
+        // file-size trust rather than paying a boot-time meta rewrite per
+        // stream (the proof materializes on their next natural meta write).
+        if !replay_wrote.contains(stream_id) && boot_tail == logical_tail {
+            if st.boot_meta_durable_tail.is_some_and(|d| d < logical_tail) {
+                write_meta_durable(st)?;
+            }
+            continue;
+        }
+        // (debug) No interior HOLE: a stream's first replayed record must start
+        // at or below the file's pre-replay logical end. The prefix below it is
+        // durable via one of THREE sources — a checkpoint-persisted tail, the
+        // previous boot's recovery reconcile (which fdatasync'd the repaired
+        // file before `reset_after_recovery` wiped the old WAL — so a stream
+        // recovered last boot legitimately has post-boot WAL records starting
+        // at its recovered tail with NO persisted-tail entry yet), or the
+        // records replayed earlier in this pass. A first record strictly ABOVE
+        // the pre-replay end means `[pre_end, lowest_record)` was never written
+        // by anything durable — a gap kept silently. Fail loudly in tests.
         #[cfg(debug_assertions)]
         debug_assert!(
-            persisted_tails.contains_key(stream_id)
-                || min_applied.get(stream_id).copied()
-                    == Some(st.shared.read().unwrap().file_base),
-            "WAL replay gap: stream {stream_id} rebuilt from replay does not start at file_base"
+            min_applied.get(stream_id).map_or(true, |&lo| {
+                pre_replay_end.get(stream_id).is_some_and(|&pre| lo <= pre)
+            }),
+            "WAL replay hole: stream {stream_id}: first replayed record at {:?} is past \
+             the pre-replay file end {:?}",
+            min_applied.get(stream_id),
+            pre_replay_end.get(stream_id)
         );
         reconcile_tail(st, logical_tail)?;
     }
@@ -303,7 +380,19 @@ fn reconcile_tail(st: &StreamState, logical_tail: u64) -> io::Result<()> {
         let mut ap = st.appender.blocking_lock();
         ap.written = file_len;
     }
+    // Persist the reconciled durable frontier into the sidecar BEFORE
+    // `reset_after_recovery` wipes the WAL and the checkpoint `tails` file. If
+    // the proof stayed stale (below the frontier just made durable above), the
+    // NEXT boot's seed would truncate this stream back below acked, durable
+    // bytes it can no longer re-replay.
+    write_meta_durable(st)?;
     Ok(())
+}
+
+/// Durably rewrite a stream's sidecar (recovery-time only — captures the
+/// just-reconciled `Shared.durable_tail` as the next boot's truncation proof).
+fn write_meta_durable(st: &StreamState) -> io::Result<()> {
+    crate::store::write_meta_sync(st, true)
 }
 
 /// Open a fresh read-write (non-append) handle to a stream's per-stream data file
@@ -797,9 +886,10 @@ mod tests {
 
     /// Drive a real shard so the committer makes records durable. Used by the 11b
     /// tests to checkpoint (recording per-stream durable tails) and roll/recycle.
-    fn spawn_committer(shard: &std::sync::Arc<crate::wal::shard::Shard>) -> tokio::task::JoinHandle<()> {
-        let s = std::sync::Arc::clone(shard);
-        tokio::spawn(async move { s.run_committer().await })
+    fn spawn_committer(
+        shard: &std::sync::Arc<crate::wal::shard::Shard>,
+    ) -> crate::wal::shard::CommitterHandle {
+        shard.spawn_committer()
     }
 
     /// CRITICAL (11b): a stream X whose durable WAL records are ALL recycled
@@ -886,7 +976,7 @@ mod tests {
         // segment below it (incl. X's original `1.wal`) is recycled.
         let ckpt2 = shard.checkpoint().await.unwrap();
         assert_eq!(ckpt2, last);
-        h.abort();
+        h.stop();
 
         // X must now have NO retained WAL record: replay sees nothing for X.
         let mut x_records_in_wal = 0usize;
@@ -1020,7 +1110,7 @@ mod tests {
         }
         let l3 = shard.reserve_and_stage(RecordKind::Append, x_id, after_r2, r3).unwrap();
         shard.wait_durable(l3).await;
-        h.abort();
+        h.stop();
 
         // Torn page-cache tail past r3 (un-acked).
         {
