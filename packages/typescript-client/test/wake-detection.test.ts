@@ -255,36 +255,23 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
-  it(`should auto-detect React Native AppState visibility`, async () => {
+  it(`should use the React Native export to install AppState visibility`, async () => {
     vi.useFakeTimers()
 
     type AppStateStatus = `active` | `background` | `inactive` | null
     let appStateListener: ((state: AppStateStatus) => void) | undefined
-    const originalNavigator = globalThis.navigator
-    const originalRequire = (globalThis as Record<string, unknown>).require
-    Object.defineProperty(globalThis, `navigator`, {
-      configurable: true,
-      value: { product: `ReactNative` },
-    })
-    ;(globalThis as Record<string, unknown>).require = vi.fn(
-      (moduleName: string) => {
-        if (moduleName !== `react-native`) throw new Error(`unexpected module`)
-        return {
-          AppState: {
-            currentState: `active` as AppStateStatus,
-            addEventListener: vi.fn(
-              (
-                _type: `change`,
-                nextListener: (state: AppStateStatus) => void
-              ) => {
-                appStateListener = nextListener
-                return { remove: vi.fn() }
-              }
-            ),
-          },
+    const appState = {
+      currentState: `active` as AppStateStatus,
+      addEventListener: vi.fn(
+        (_type: `change`, nextListener: (state: AppStateStatus) => void) => {
+          appStateListener = nextListener
+          return { remove: vi.fn() }
         }
-      }
-    )
+      ),
+    }
+
+    vi.resetModules()
+    vi.doMock(`react-native`, () => ({ AppState: appState }))
 
     const fetchUrls: string[] = []
     const fetchSignals: AbortSignal[] = []
@@ -322,7 +309,10 @@ describe(`Wake detection`, () => {
     }
 
     try {
-      const stream = new ShapeStream({
+      const { ShapeStream: ReactNativeShapeStream } = await import(
+        `../src/react-native`
+      )
+      const stream = new ReactNativeShapeStream({
         url: shapeUrl,
         params: { table: `foo` },
         signal: aborter.signal,
@@ -350,11 +340,8 @@ describe(`Wake detection`, () => {
       unsub()
       aborter.abort()
     } finally {
-      Object.defineProperty(globalThis, `navigator`, {
-        configurable: true,
-        value: originalNavigator,
-      })
-      ;(globalThis as Record<string, unknown>).require = originalRequire
+      vi.doUnmock(`react-native`)
+      vi.resetModules()
     }
   })
 

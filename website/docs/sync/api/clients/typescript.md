@@ -166,6 +166,34 @@ The client automatically detects when SSE is not working properly (e.g., due to 
 
 If your reverse proxy or CDN is buffering responses, you may need to configure it to support streaming. See the [HTTP API SSE documentation](/docs/sync/api/http#server-sent-events-sse) for proxy configuration examples.
 
+#### React Native and Expo lifecycle handling
+
+React Native apps should pause active long-polls while the app is backgrounded and resume with a non-live catch-up request when the app returns to the foreground. The package includes a React Native conditional export for Metro/Expo, so standard imports automatically install an `AppState`-based runtime visibility adapter in React Native builds:
+
+```ts
+import { ShapeStream } from '@electric-sql/client'
+```
+
+If your Metro configuration disables package exports or you use another non-browser runtime, pass `runtimeVisibility` explicitly:
+
+```ts
+import { AppState } from 'react-native'
+import {
+  ShapeStream,
+  createReactNativeRuntimeVisibilityAdapter,
+} from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape`,
+  params: { table: `foo` },
+  runtimeVisibility: createReactNativeRuntimeVisibilityAdapter(AppState),
+})
+```
+
+`runtimeVisibility` is also the escape hatch for custom runtimes. Return `hidden` to pause and abort in-flight requests, and `visible` to resume with a catch-up request.
+
+The client also includes a live request watchdog (`liveRequestTimeoutMs`, default `45_000`) that reconnects if a mobile fetch implementation leaves a request hanging across lifecycle or network transitions. Set it to `false` only if you want to disable that protection.
+
 #### Options
 
 The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L39):
@@ -324,6 +352,20 @@ export interface ShapeStreamOptions<T = never> {
    */
   onError?: ShapeStreamErrorHandler
 
+  /**
+   * Runtime lifecycle adapter for environments without `document.visibilitychange`.
+   * Hidden state pauses the stream and aborts in-flight requests; visible state
+   * resumes with a non-live catch-up request.
+   */
+  runtimeVisibility?: RuntimeVisibilityAdapter
+
+  /**
+   * Maximum time in milliseconds to wait for a live long-poll request or refresh
+   * catch-up request before aborting it and reconnecting. Defaults to 45s. Set
+   * to `false` to disable.
+   */
+  liveRequestTimeoutMs?: number | false
+
   backoffOptions?: BackoffOptions
 }
 
@@ -335,6 +377,13 @@ type RetryOpts = {
 type ShapeStreamErrorHandler = (
   error: Error
 ) => void | RetryOpts | Promise<void | RetryOpts>
+
+type RuntimeVisibilityState = 'visible' | 'hidden'
+
+type RuntimeVisibilityAdapter = {
+  getCurrentState?: () => RuntimeVisibilityState | undefined
+  subscribe: (callback: (state: RuntimeVisibilityState) => void) => () => void
+}
 ```
 
 Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
