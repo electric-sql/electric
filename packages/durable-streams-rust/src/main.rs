@@ -433,11 +433,22 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
         ticker.tick().await;
         loop {
             ticker.tick().await;
+            // All shards checkpoint CONCURRENTLY. Each checkpoint is one
+            // spawn_blocking task (capture + per-stream fdatasyncs + tails/ckpt
+            // persist + recycle), so a serial walk makes every per-stream fsync
+            // across the whole server queue behind a single shard's — at high
+            // stream cardinality that serialization is what stretches the
+            // checkpoint wave (and on real disks wastes the device's parallelism).
+            let mut wave = tokio::task::JoinSet::new();
             for shard in walset.shards() {
-                if let Err(e) = shard.checkpoint().await {
-                    eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
-                }
+                let shard = Arc::clone(shard);
+                wave.spawn(async move {
+                    if let Err(e) = shard.checkpoint().await {
+                        eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
+                    }
+                });
             }
+            while wave.join_next().await.is_some() {}
         }
     });
 }

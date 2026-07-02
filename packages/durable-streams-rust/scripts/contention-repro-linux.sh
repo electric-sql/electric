@@ -16,6 +16,7 @@
 #   scripts/contention-repro-linux.sh [--shards N] [--connections C]
 #       [--streams S] [--duration D] [--warmup W] [--payload P] [--batch B]
 #       [--srv-cpus 0-5] [--cli-cpus 6-9] [--label NAME] [--no-build]
+#       [--tmpfs SIZE] [--wal-stats 0|1]
 set -euo pipefail
 
 SHARDS=1
@@ -29,6 +30,8 @@ SRV_CPUS="0-5"
 CLI_CPUS="6-9"
 LABEL=""
 DO_BUILD=1
+TMPFS_SIZE=2g   # at high stream cardinality each non-empty file pins >=1 page: size ~ streams*4k + data
+WAL_STATS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRATE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -56,6 +59,8 @@ while [ $# -gt 0 ]; do
     --cli-cpus) CLI_CPUS="$2"; shift 2;;
     --label) LABEL="$2"; shift 2;;
     --no-build) DO_BUILD=0; shift;;
+    --tmpfs) TMPFS_SIZE="$2"; shift 2;;
+    --wal-stats) WAL_STATS="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -92,11 +97,11 @@ docker rm -f "$SRV" >/dev/null 2>&1 || true
 docker run -d --name "$SRV" --network "$NET" \
   --cpuset-cpus="$SRV_CPUS" \
   -v "$TARGET_VOL":/target:ro \
-  --tmpfs /data:rw,size=2g \
+  --tmpfs /data:rw,size="$TMPFS_SIZE" \
   debian:bookworm-slim \
   /target/release/durable-streams-server \
     --host 0.0.0.0 --port 4437 --data-dir /data \
-    --durability wal --wal-shards "$SHARDS" --wal-stats 1 >/dev/null
+    --durability wal --wal-shards "$SHARDS" --wal-stats "$WAL_STATS" >/dev/null
 
 for _ in $(seq 1 100); do
   docker logs "$SRV" 2>&1 | grep -q "listening on" && break
@@ -144,4 +149,11 @@ print(f"  fsync_per_s        = {avg('fsync/s'):,.0f}   batch_avg = {avg('batch_a
 print(f"  inner_wait_us      = {avg('inner_wait_us'):.2f}   inner_wait_load = {avg('inner_wait_load'):.2f} cores")
 print(f"  dirty_wait_us      = {avg('dirty_wait_us'):.2f}   dirty_wait_load = {avg('dirty_wait_load'):.2f} cores")
 print(f"  waiters_woken_avg  = {avg('waiters_woken_avg'):.1f}")
+ck=[{k:float(v) for k,v in pat.findall(l)} for l in open(srv_log,errors="ignore") if "WAL_CKPT" in l]
+if ck:
+    n=len(ck)
+    m=lambda k:max(r.get(k,0.0) for r in ck)
+    a=lambda k:sum(r.get(k,0.0) for r in ck)/n
+    print(f"  ckpt (n={n}) touched avg/max      = {a('touched'):,.0f} / {m('touched'):,.0f}   tails_entries max = {m('tails_entries'):,.0f}   meta avg = {a('meta'):,.0f}")
+    print(f"  ckpt us avg/max: capture={a('capture_us'):,.0f}/{m('capture_us'):,.0f} fsync={a('fsync_us'):,.0f}/{m('fsync_us'):,.0f} tails={a('tails_us'):,.0f}/{m('tails_us'):,.0f} rest={a('rest_us'):,.0f}/{m('rest_us'):,.0f} meta={a('meta_us'):,.0f}/{m('meta_us'):,.0f} total={a('total_us'):,.0f}/{m('total_us'):,.0f}")
 PY
