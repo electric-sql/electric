@@ -17,3 +17,6 @@ pub mod walset;
 
 #[cfg(test)]
 mod e2e_tests;
+
+#[cfg(test)]
+mod sim_tests;

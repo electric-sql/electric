@@ -424,8 +424,47 @@ impl Shard {
     /// [`WalSet::open_with_segment_size`]: super::walset::WalSet::open_with_segment_size
     pub fn open_with_segment_size(dir: PathBuf, segment_size: u64) -> io::Result<std::sync::Arc<Shard>> {
         std::fs::create_dir_all(&dir)?;
-        let seg_start_lsn = 1;
-        let active = Arc::new(FileSegment::create(seg_path(&dir, seg_start_lsn), segment_size)?);
+        // Boot must be NON-DESTRUCTIVE (spec §9: recover-before-clobber): the
+        // on-disk segments are the durable log recovery is about to replay.
+        //
+        //  - A SEALED segment was truncated to its exactly-packed length at the
+        //    roll; that exact length is how replay walks across the segment seam.
+        //    Re-`fallocate`ing it to full size grafts a zero tail onto it, which
+        //    replay reads as `Incomplete` = end of the durable log — silently
+        //    dropping every later segment's acked records (and recovery then
+        //    truncates the per-stream files back to that stale frontier).
+        //  - A RECYCLED `1.wal` no longer exists; creating a fresh zero-filled
+        //    one makes replay (which walks in start-lsn order) decode zero
+        //    records and stop before the real oldest retained segment.
+        //
+        // So: if any segment exists, open the highest-start one as a read-only
+        // placeholder handle and leave the disk untouched. The in-memory cursor
+        // (`write_pos`/`next_lsn`) is a placeholder too — `reset_after_recovery`
+        // MUST rebuild both (fresh `1.wal`, cursor to 0/1) before any append,
+        // which is the documented boot order (`open` → `recover` → `reset`).
+        // Only a genuinely fresh shard dir creates + preallocates `1.wal` here.
+        let mut existing: Vec<(u64, PathBuf)> = Vec::new();
+        for entry in std::fs::read_dir(&dir)? {
+            let path = entry?.path();
+            let Some(stem) = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .and_then(|n| n.strip_suffix(".wal"))
+            else {
+                continue;
+            };
+            if let Ok(start) = stem.parse::<u64>() {
+                existing.push((start, path));
+            }
+        }
+        existing.sort_by_key(|(s, _)| *s);
+        let (seg_start_lsn, active) = match existing.pop() {
+            Some((start, path)) => (start, Arc::new(FileSegment::open_existing(path)?)),
+            None => (
+                1,
+                Arc::new(FileSegment::create(seg_path(&dir, 1), segment_size)?),
+            ),
+        };
         Ok(std::sync::Arc::new(Shard {
             inner: Mutex::new(ShardInner {
                 active,

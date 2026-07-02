@@ -136,13 +136,14 @@ fn recover_shard(
     // below. Only streams with EITHER a persisted tail OR an in-range Append are
     // inserted, so we reconcile exactly the streams the WAL touched.
     let mut frontier: HashMap<u64, u64> = shard.read_durable_tails();
-    // (debug) Snapshot the persisted-tail seed and track the lowest replayed
-    // offset per stream, to assert that a stream reconstructed purely from
-    // replayed Appends covers `[file_base, frontier)` with no interior gap.
-    #[cfg(debug_assertions)]
-    let persisted_tails = frontier.clone();
+    // (debug) Track, per replayed stream, the lowest replayed offset AND the
+    // file's logical end BEFORE the first replay write touched it, to assert the
+    // replayed records tile onto the existing durable prefix with no interior
+    // hole (see the debug_assert below).
     #[cfg(debug_assertions)]
     let mut min_applied: HashMap<u64, u64> = HashMap::new();
+    #[cfg(debug_assertions)]
+    let mut pre_replay_end: HashMap<u64, u64> = HashMap::new();
     // Captured replay error from inside the closure (the closure cannot return
     // `io::Result`). The first error aborts further application for this shard.
     let mut replay_err: Option<io::Error> = None;
@@ -167,6 +168,13 @@ fn recover_shard(
             return;
         }
         let file_pos = stream_offset - file_base;
+        #[cfg(debug_assertions)]
+        pre_replay_end.entry(stream_id).or_insert_with(|| {
+            // Logical end of the per-stream file before replay writes to it —
+            // the durable prefix the replayed records must tile onto.
+            let len = std::fs::metadata(&st.file_path).map(|m| m.len()).unwrap_or(0);
+            file_base + len
+        });
         if let Err(e) = write_at(st, file_pos, payload) {
             replay_err = Some(e);
             return;
@@ -202,16 +210,25 @@ fn recover_shard(
         if logical_tail < st.shared.read().unwrap().file_base {
             continue;
         }
-        // (debug) A stream rebuilt PURELY from replay (no persisted durable tail)
-        // must start at `file_base`; otherwise `[file_base, lowest_record)` is a
-        // torn interior prefix kept silently. Fail loudly in tests if a future
-        // compaction/`file_base` interaction breaks the contiguous-tiling premise.
+        // (debug) No interior HOLE: a stream's first replayed record must start
+        // at or below the file's pre-replay logical end. The prefix below it is
+        // durable via one of THREE sources — a checkpoint-persisted tail, the
+        // previous boot's recovery reconcile (which fdatasync'd the repaired
+        // file before `reset_after_recovery` wiped the old WAL — so a stream
+        // recovered last boot legitimately has post-boot WAL records starting
+        // at its recovered tail with NO persisted-tail entry yet), or the
+        // records replayed earlier in this pass. A first record strictly ABOVE
+        // the pre-replay end means `[pre_end, lowest_record)` was never written
+        // by anything durable — a gap kept silently. Fail loudly in tests.
         #[cfg(debug_assertions)]
         debug_assert!(
-            persisted_tails.contains_key(stream_id)
-                || min_applied.get(stream_id).copied()
-                    == Some(st.shared.read().unwrap().file_base),
-            "WAL replay gap: stream {stream_id} rebuilt from replay does not start at file_base"
+            min_applied.get(stream_id).map_or(true, |&lo| {
+                pre_replay_end.get(stream_id).map_or(false, |&pre| lo <= pre)
+            }),
+            "WAL replay hole: stream {stream_id}: first replayed record at {:?} is past \
+             the pre-replay file end {:?}",
+            min_applied.get(stream_id),
+            pre_replay_end.get(stream_id)
         );
         reconcile_tail(st, logical_tail)?;
     }

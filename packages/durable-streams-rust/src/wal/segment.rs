@@ -84,6 +84,22 @@ impl FileSegment {
         Ok(FileSegment { file })
     }
 
+    /// Open an EXISTING segment without changing its size or contents.
+    ///
+    /// Boot-time (`Shard::open`) must be non-destructive: a sealed segment is
+    /// exactly packed (its length IS the durable-log seam recovery walks across),
+    /// so re-preallocating it to full size would graft a zero tail onto it and
+    /// recovery would mis-read that tail as the end of the durable log — dropping
+    /// every later segment's acked records. This constructor only opens the fd.
+    pub fn open_existing(path: PathBuf) -> io::Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&path)?;
+        Ok(FileSegment { file })
+    }
+
     /// **Seal** this segment at a roll: truncate it to exactly `len` bytes (drop
     /// the unused `fallocate`'d zero tail) and `fdatasync` so its new size + data
     /// are durable. After this the segment is **exactly packed** — its on-disk

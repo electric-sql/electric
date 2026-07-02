@@ -63,7 +63,18 @@ impl Harness {
     /// the durable WAL into the per-stream files + fsync) → `reset_after_recovery`
     /// (wipe the old WAL) → attach + `spawn_committers`.
     fn boot(dir: &std::path::Path, shards: Option<usize>, default_n: usize) -> io::Result<Harness> {
-        let walset = WalSet::open(dir, shards, default_n)?;
+        Harness::boot_with_segment_size(dir, shards, default_n, crate::wal::segment::SEGMENT_BYTES)
+    }
+
+    /// [`Harness::boot`] with an explicit WAL segment size, so a test can force
+    /// segment rolls/recycles cheaply (multi-segment recovery coverage).
+    fn boot_with_segment_size(
+        dir: &std::path::Path,
+        shards: Option<usize>,
+        default_n: usize,
+        segment_size: u64,
+    ) -> io::Result<Harness> {
+        let walset = WalSet::open_with_segment_size(dir, shards, default_n, segment_size)?;
         let store = Arc::new(Store::new_with_tier(dir.to_path_buf(), TierConfig::default())?);
         crate::wal::recovery::recover(&store, &walset)?;
         walset.reset_after_recovery()?;
@@ -818,6 +829,117 @@ async fn strict_created_dir_reopens_wal_only_without_data_loss() {
         "recovered tail must equal the bytes written in Phase 1"
     );
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7b) MULTI-SEGMENT recovery: boot must not clobber sealed/recycled segments
+// ===========================================================================
+
+/// Acked records that live in WAL segments AFTER the first survive a crash.
+///
+/// With a small segment size, enough acked appends roll the WAL: `1.wal` is
+/// SEALED (truncated to its exactly-packed length + fsync'd) and later records
+/// land in `<n>.wal`. A crash + reboot must replay ALL retained segments.
+///
+/// Regression (sim seed 89837): `Shard::open` re-preallocated `1.wal` to full
+/// segment size, so the sealed segment grew a zero tail; replay read that tail
+/// as `Incomplete` (= end of the durable log) and silently dropped every
+/// record in later segments — then `reconcile_tail` TRUNCATED the per-stream
+/// files back to the stale frontier. Acked-data loss on the recovery path.
+#[tokio::test]
+async fn e2e_multi_segment_acked_records_after_first_seal_survive_crash() {
+    let _guard = DurabilityGuard::wal();
+    const SEG: u64 = 4096;
+    let dir = tmp("multi-seg");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "s", OCTET).await;
+
+    // Append acked records until the shard has rolled at least once (≥2
+    // on-disk segments), then a few more so the post-roll segment holds data.
+    let mut expected = Vec::new();
+    let mut i = 0usize;
+    while h.walset.shards()[0].wal_segments() < 2 || i < 40 {
+        let rec = format!("multi-seg-record-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+        i += 1;
+        assert!(i < 10_000, "never rolled a segment; check SEG/record sizing");
+    }
+    assert!(
+        h.walset.shards()[0].wal_segments() >= 2,
+        "test needs ≥2 retained segments"
+    );
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "s");
+    assert_eq!(
+        got.len(),
+        expected.len(),
+        "every acked record recovers across ALL retained segments (lost {} bytes)",
+        expected.len().saturating_sub(got.len())
+    );
+    assert_eq!(got, expected, "recovered bytes byte-identical across segment seams");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Acked records recover when `1.wal` was RECYCLED (checkpoint deleted it and
+/// the oldest retained segment starts at lsn > 1).
+///
+/// Regression (same root cause, worse case): `Shard::open` unconditionally
+/// created a fresh, all-zero `1.wal`. Replay walked segments in start-lsn
+/// order, began with the spurious zero-filled `1.wal`, decoded `Incomplete` at
+/// offset 0, and treated that as the end of the durable log — replaying
+/// NOTHING. Every acked record after the last checkpoint was truncated away.
+#[tokio::test]
+async fn e2e_recycled_first_segment_acked_records_survive_crash() {
+    let _guard = DurabilityGuard::wal();
+    const SEG: u64 = 4096;
+    let dir = tmp("recycled-first");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "s", OCTET).await;
+
+    // Phase 1: roll past 1.wal, then checkpoint → sealed segments fully below
+    // the floor (including 1.wal) are recycled (deleted).
+    let mut expected = Vec::new();
+    let mut i = 0usize;
+    while h.walset.shards()[0].wal_segments() < 3 {
+        let rec = format!("pre-ckpt-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+        i += 1;
+        assert!(i < 10_000, "never rolled; check SEG/record sizing");
+    }
+    h.walset.shards()[0].checkpoint().await.unwrap();
+    assert!(
+        !dir.join("wal").join("0").join("1.wal").exists(),
+        "checkpoint recycled 1.wal (else this test is vacuous)"
+    );
+
+    // Phase 2: more ACKED records after the checkpoint (they live only in the
+    // WAL + page cache; the checkpoint that would fsync them never runs).
+    for j in 0..25usize {
+        let rec = format!("post-ckpt-{j:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "s");
+    assert_eq!(
+        got.len(),
+        expected.len(),
+        "post-checkpoint acked records recover from the retained (recycle-survivor) segments"
+    );
+    assert_eq!(got, expected, "recovered bytes byte-identical");
+    h2.crash();
     let _ = std::fs::remove_dir_all(&dir);
 }
 
