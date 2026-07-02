@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.7.6
+
+### Patch Changes
+
+- c2ae8bd: Fix shapes processing duplicate operations after a server restart.
+- b8be884: Reduce memory retained by live shape requests while they wait for changes.
+
+  Remove a dead SystemMonitor timer branch that fails warnings-as-errors on Elixir 1.20.
+
+- 841b51a: Upgrade Erlang to 29.0.2, Elixir to 1.20.2 and fix new compilation warnings (unused requires, bitstring pin operators, built-in type conflict, dead code).
+
 ## 1.7.5
 
 ### Patch Changes

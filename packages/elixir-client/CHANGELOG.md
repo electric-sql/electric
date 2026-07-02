@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.10.3
+
+### Patch Changes
+
+- 841b51a: Upgrade Erlang to 29.0.2, Elixir to 1.20.2 and fix new compilation warnings (unused requires, bitstring pin operators, built-in type conflict, dead code).
+
 ## 0.10.2
 
 ### Patch Changes
