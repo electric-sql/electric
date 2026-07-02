@@ -463,7 +463,8 @@ defmodule Support.ComponentSetup do
   (stack_id, persistent_kv, storage, registry, etc.) are unchanged.
   """
   def restart_complete_stack(ctx) do
-    :ok = stop_supervised(Electric.StackSupervisor)
+    sup_id = Map.get(ctx, :stack_supervisor_id, Electric.StackSupervisor)
+    :ok = stop_supervised(sup_id)
 
     stack_supervisor =
       start_stack_supervisor!(
@@ -472,7 +473,8 @@ defmodule Support.ComponentSetup do
         ctx.persistent_kv,
         ctx.storage,
         ctx.stack_events_registry,
-        ctx.publication_name
+        ctx.publication_name,
+        id: sup_id
       )
 
     # The :stack_status :ready event fires before the connection pools and
@@ -481,7 +483,7 @@ defmodule Support.ComponentSetup do
     # :active level which requires all readiness conditions to be met.
     :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 5000)
 
-    %{stack_supervisor: stack_supervisor}
+    %{stack_supervisor: stack_supervisor, stack_supervisor_id: sup_id}
   end
 
   @doc """
@@ -495,6 +497,7 @@ defmodule Support.ComponentSetup do
   Returns a map with the updated `:stack_supervisor` pid.
   """
   def brutally_restart_complete_stack(ctx) do
+    sup_id = Map.get(ctx, :stack_supervisor_id, Electric.StackSupervisor)
     pid = ctx.stack_supervisor
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
@@ -507,7 +510,7 @@ defmodule Support.ComponentSetup do
 
     # The child was `restart: :temporary`, so ExUnit does not restart it; its
     # spec lingers with an :undefined pid. Remove it so the id is free to reuse.
-    case stop_supervised(Electric.StackSupervisor) do
+    case stop_supervised(sup_id) do
       :ok -> :ok
       {:error, :not_found} -> :ok
     end
@@ -525,14 +528,15 @@ defmodule Support.ComponentSetup do
         ctx.persistent_kv,
         ctx.storage,
         ctx.stack_events_registry,
-        ctx.publication_name
+        ctx.publication_name,
+        id: sup_id
       )
 
     # Generous timeout: worst case the stale advisory lock is only cleared on
     # the periodic lock-breaker cycle (~10s), not immediately on kill.
     :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 15_000)
 
-    %{stack_supervisor: stack_supervisor}
+    %{stack_supervisor: stack_supervisor, stack_supervisor_id: sup_id}
   end
 
   @doc """
