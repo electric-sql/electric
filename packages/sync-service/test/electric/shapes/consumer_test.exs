@@ -223,29 +223,68 @@ defmodule Electric.Shapes.ConsumerTest do
       [consumers: consumers]
     end
 
-    test "sheds a live subscriber whose mailbox grows without bound", ctx do
-      # Regression: a live `GET /v1/shape` subscriber that can't drain its
-      # mailbox (stalled/dead socket) while changes keep streaming accumulates
-      # one `{:new_changes, _}` message per transaction with no upper bound.
-      # Each message pins reference-counted binary, so memory grows unbounded
+    test "sheds a live subscriber blocked writing to a stalled socket", ctx do
+      # Regression: a live `GET /v1/shape` handler blocked in `Plug.Conn.chunk`
+      # writing to a stalled/dead client socket stops draining its mailbox while
+      # changes keep streaming. It accumulates one `{:new_changes, _}` message
+      # per transaction with no upper bound, pinning reference-counted binary
       # until the node OOMs. The consumer must shed such a subscriber once its
-      # mailbox crosses a watermark instead of notifying it forever.
+      # mailbox crosses a watermark.
+      #
+      # The stuck subscriber is blocked in a real `:gen_tcp.send` to a peer that
+      # never reads — the actual production scheduler state, `:waiting` in the
+      # `inet_reply` receive — so this also exercises that the consumer's
+      # `Process.info(_, :message_queue_len)` check does not itself stall on the
+      # blocked subscriber (which would freeze the per-shape consumer).
       Electric.StackConfig.put(ctx.stack_id, :slow_subscriber_max_queue_len, 5)
 
       xmin = snapshot_xmin(@shape_handle1, ctx)
       base_lsn = lsn(@shape_handle1, ctx)
       test_pid = self()
 
-      # A subscriber that registers for changes but never drains its mailbox.
+      # A stalled "client": accepts the connection but never reads, so the
+      # subscriber's writes fill the buffers and block.
+      {:ok, listen} =
+        :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true, recbuf: 1024])
+
+      {:ok, lport} = :inet.port(listen)
+      on_exit(fn -> :gen_tcp.close(listen) end)
+
+      acceptor =
+        spawn(fn ->
+          {:ok, _accepted} = :gen_tcp.accept(listen)
+          Process.sleep(:infinity)
+        end)
+
+      on_exit(fn -> Process.exit(acceptor, :kill) end)
+
       subscriber =
         spawn(fn ->
+          {:ok, sock} =
+            :gen_tcp.connect({127, 0, 0, 1}, lport, [
+              :binary,
+              active: false,
+              sndbuf: 1024,
+              buffer: 1024,
+              high_watermark: 2048,
+              low_watermark: 1024,
+              send_timeout: :infinity
+            ])
+
           {:ok, _} = Registry.register(ctx.registry, @shape_handle1, make_ref())
           send(test_pid, :subscribed)
-          Process.sleep(:infinity)
+
+          # Block forever writing to the stalled socket, exactly like a live
+          # handler stuck in Plug.Conn.chunk. The process never drains its
+          # :new_changes mailbox while parked here.
+          chunk = :binary.copy(<<0>>, 1_000_000)
+          Enum.each(Stream.cycle([chunk]), &:gen_tcp.send(sock, &1))
         end)
 
       monitor = Process.monitor(subscriber)
       assert_receive :subscribed, @receive_timeout
+      # Let it get stuck in the blocking send before changes start streaming.
+      Process.sleep(50)
 
       # Stream a steady series of transactions that all match the shape.
       for i <- 1..50 do
@@ -263,9 +302,39 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       end
 
-      # The non-draining subscriber must be shed once its mailbox crosses the
-      # watermark, rather than being allowed to grow without bound.
+      # The stuck subscriber must be shed once its mailbox crosses the watermark.
+      # This arriving also proves the consumer's mailbox check did not block on
+      # the socket-stuck subscriber — otherwise the shed would never run.
       assert_receive {:DOWN, ^monitor, :process, ^subscriber, _reason}, @receive_timeout
+
+      # And the consumer must still be alive and notifying afterwards: register a
+      # healthy subscriber and confirm it receives the next change.
+      healthy =
+        spawn(fn ->
+          {:ok, _} = Registry.register(ctx.registry, @shape_handle1, ref = make_ref())
+          send(test_pid, :healthy_subscribed)
+
+          receive do
+            {^ref, :new_changes, offset} -> send(test_pid, {:healthy_notified, offset})
+          end
+        end)
+
+      on_exit(fn -> Process.exit(healthy, :kill) end)
+      assert_receive :healthy_subscribed, @receive_timeout
+
+      healthy_lsn = Lsn.increment(base_lsn, 100)
+
+      healthy_txn =
+        complete_txn_fragment(xmin + 100, healthy_lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(healthy_lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(healthy_txn, ctx.stack_id)
+      assert_receive {:healthy_notified, _offset}, @receive_timeout
     end
 
     test "does not shed a healthy subscriber whose backlog stays under the watermark", ctx do
