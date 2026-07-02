@@ -35,7 +35,12 @@ defmodule Electric.Integration.OracleRestoreTest do
   setup ctx do
     ctx =
       with_electric_client(ctx,
-        router_opts: [long_poll_timeout: 100],
+        # A realistic long-poll timeout. A very short one (e.g. 100ms) trips a
+        # separate post-restart long-poll readiness race (bug 3): the poll times
+        # out before replication has caught up after the restart, yielding a
+        # spurious 409. That is independent of the subquery-restore behaviour
+        # under test here.
+        router_opts: [long_poll_timeout: 5000],
         num_clients: 1
       )
 
@@ -126,6 +131,72 @@ defmodule Electric.Integration.OracleRestoreTest do
         [%{name: "reactivate_p1", sql: "UPDATE projects SET active = true WHERE id = 'p1'"}]
       ]
     ]
+
+    OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
+  end
+
+  @tag :oracle_restore_optimized_refetch
+  # Build a large persisted backlog on the `projects` source shape: 200 toggles
+  # under a small `chunk_bytes_threshold` so its log spans many chunks. After the
+  # restart the persistent replication slot has to replay that backlog.
+  @tag chunk_bytes_threshold: 200
+  test "optimized subquery shape must-refetches after restart during slot catch-up replay",
+       ctx do
+    # Two `optimized: true` subquery shapes over the same `projects` source.
+    #
+    # Regression test. Before the fix: after the restart, the `projects` source
+    # consumer replays batch_1 from the persistent slot and re-delivers those
+    # already-applied changes to the subquery materializer via `new_changes`. The
+    # materializer re-applied them and crashed ("Key ... already exists"), which
+    # cascaded — handle_materializer_down -> stop_and_clean ->
+    # handle_writer_termination({:shutdown, :cleanup}) -> remove_shape_async ->
+    # notify_shape_rotation — removing the (healthy) shapes and sending the
+    # polling client a 409 must-refetch.
+    #
+    # The fix makes the materializer ignore `new_changes` ranges it already
+    # applied during its startup history replay, so the crash (and the whole
+    # removal cascade) no longer happens. NB the underlying cascade — a
+    # materializer crash tearing down and *removing* healthy dependent shapes —
+    # is a separate hardening concern (the "bug 6" cascade) this fix leaves open.
+    shapes = [
+      %{
+        name: "issues_of_active_projects",
+        table: "issues",
+        where: "project_id IN (SELECT id FROM projects WHERE active = true)",
+        columns: ["id", "project_id", "title"],
+        pk: ["id"],
+        optimized: true
+      },
+      %{
+        name: "issues_of_inactive_projects",
+        table: "issues",
+        where: "project_id IN (SELECT id FROM projects WHERE active = false)",
+        columns: ["id", "project_id", "title"],
+        pk: ["id"],
+        optimized: true
+      }
+    ]
+
+    # batch_1: 200 toggles of p5's `active` flag — the backlog. Under the small
+    # `chunk_bytes_threshold` above this makes the `projects` source log span many
+    # chunks. p5 ends active, so pre-restart both shapes match the oracle; the
+    # restart then replays this backlog from the slot.
+    toggles =
+      Enum.flat_map(1..100, fn _ ->
+        [
+          [%{name: "deactivate_p5", sql: "UPDATE projects SET active = false WHERE id = 'p5'"}],
+          [%{name: "reactivate_p5", sql: "UPDATE projects SET active = true WHERE id = 'p5'"}]
+        ]
+      end)
+
+    # batch_2: a single dependency move applied after the restart. In practice the
+    # test fails during the batch_1 replay before this is reached; it's kept so the
+    # harness runs a post-restart batch/check.
+    batch_2 = [
+      [%{name: "deactivate_p3", sql: "UPDATE projects SET active = false WHERE id = 'p3'"}]
+    ]
+
+    batches = [toggles, batch_2]
 
     OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
   end
