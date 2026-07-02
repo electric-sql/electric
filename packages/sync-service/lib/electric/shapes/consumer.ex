@@ -1088,28 +1088,31 @@ defmodule Electric.Shapes.Consumer do
 
   # Commit all staged move positions unconditionally. Called from `terminate/2`
   # after `terminate_writer/1` has flushed the writer, so every staged move's
-  # splice rows are durable by then.
-  defp commit_all_move_positions(%State{staged_move_positions: staged} = state)
-       when staged == %{},
-       do: state
+  # splice rows are durable by then. Note this runs after `terminate_writer/1`
+  # has popped `:writer` off the state, so we match a bare map rather than
+  # `%State{}`.
+  defp commit_all_move_positions(state) do
+    staged = Map.get(state, :staged_move_positions, %{})
+    storage = Map.get(state, :storage)
 
-  defp commit_all_move_positions(%State{storage: storage} = state) when not is_nil(storage) do
-    positions =
-      Enum.reduce(state.staged_move_positions, state.move_positions, fn {handle, entries}, acc ->
-        {_threshold, lsn} = List.last(entries)
-        Map.update(acc, handle, lsn, &LogOffset.max(&1, lsn))
-      end)
+    if staged == %{} or is_nil(storage) do
+      state
+    else
+      positions =
+        Enum.reduce(staged, state.move_positions, fn {handle, entries}, acc ->
+          {_threshold, lsn} = List.last(entries)
+          Map.update(acc, handle, lsn, &LogOffset.max(&1, lsn))
+        end)
 
-    try do
-      ShapeCache.Storage.set_move_positions!(positions, storage)
-    rescue
-      _ -> :ok
+      try do
+        ShapeCache.Storage.set_move_positions!(positions, storage)
+      rescue
+        _ -> :ok
+      end
+
+      %{state | move_positions: positions, staged_move_positions: %{}}
     end
-
-    %{state | move_positions: positions, staged_move_positions: %{}}
   end
-
-  defp commit_all_move_positions(state), do: state
 
   defp move_pipeline_fully_drained?(%EventHandler.Subqueries.Steady{queue: queue}),
     do: MoveQueue.length(queue) == 0
