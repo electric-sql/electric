@@ -24,8 +24,10 @@ defmodule Electric.Integration.OraclePropertyTest do
       connection error) is retried within the check timeout instead of failing
       the test. These are availability blips that production hides from clients
       during a restart/deploy, so they are not consistency signals. Default off
-      (any poll error fails, preserving current behaviour). 409/must-refetch and
-      4xx errors and data mismatches always fail regardless of this flag.
+      (any poll error fails, preserving current behaviour). A server that never
+      recovers within the timeout still fails (a window with no successful poll
+      is treated as an error, not a pass). 409/must-refetch, 4xx errors and data
+      mismatches always fail regardless of this flag.
     - RESTART_CLIENT_EVERY: Throw away clients (poll cursors, materialized
       rows) and reconnect every M batches to test that fresh polls correctly
       assemble snapshot + log (default: 0, disabled). Independent of
