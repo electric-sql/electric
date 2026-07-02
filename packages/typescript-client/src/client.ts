@@ -417,6 +417,10 @@ export interface ShapeStreamOptions<T = never> {
    * in-flight fetch can hang indefinitely across app lifecycle or network
    * transitions.
    *
+   * The default (45s) is intentionally longer than Electric's server-side
+   * long-poll timeout (20s), so firing the watchdog indicates a request that
+   * failed to settle rather than a normal long-poll waiting for data.
+   *
    * Must be a positive finite number. Set to `false` to disable the watchdog.
    */
   liveRequestTimeoutMs?: number | false
@@ -813,6 +817,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
+    // Default exceeds Electric's 20s server long-poll timeout, so this only
+    // fires when the runtime request appears wedged rather than normally held.
     this.#liveRequestTimeoutMs = this.options.liveRequestTimeoutMs ?? 45_000
 
     const baseFetchClient =
