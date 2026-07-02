@@ -859,45 +859,97 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      api: %{long_poll_timeout: long_poll_timeout} = api
+      api: %{long_poll_timeout: long_poll_timeout}
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
 
-    # Bandit reuses handler processes across requests. This process may have accumulated
-    # garbage from previous requests or from building the response for this request.
-    # Before blocking in receive (potentially for up to long_poll_timeout seconds),
-    # run garbage collection so we don't hold onto memory while idle.
-    # Combined with handler_fullsweep_after config, this helps keep handler memory usage low.
+    ref
+    |> wait_for_live_change(long_poll_timeout)
+    |> handle_live_change_result(request)
+  end
+
+  defp wait_for_live_change(ref, long_poll_timeout) do
+    # Bandit reuses handler processes across requests. Entering this narrow helper before
+    # collecting keeps the parked receive from retaining the larger request-handling frame.
     :erlang.garbage_collect()
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->
-        # Stream new log since currently "held" offset
-        %{request | last_offset: latest_log_offset}
+        {:new_changes, latest_log_offset}
+
+      {^ref, :shape_rotation, new_handle} ->
+        {:shape_rotation, new_handle}
+
+      {^ref, :shape_rotation} ->
+        :shape_rotation
+
+      {^ref, :out_of_bounds_timeout} ->
+        :out_of_bounds_timeout
+    after
+      long_poll_timeout ->
+        :long_poll_timeout
+    end
+  end
+
+  defp handle_live_change_result({:new_changes, latest_log_offset}, request) do
+    # Stream new log since currently "held" offset
+    %{request | last_offset: latest_log_offset}
+    |> determine_global_last_seen_lsn()
+    |> determine_log_chunk_offset()
+    |> determine_up_to_date()
+    |> do_serve_shape_log()
+  end
+
+  defp handle_live_change_result({:shape_rotation, new_handle}, request) do
+    error = Api.Error.must_refetch()
+
+    Response.error(request, error.message,
+      handle: new_handle,
+      status: error.status
+    )
+  end
+
+  defp handle_live_change_result(:shape_rotation, request) do
+    error = Api.Error.must_refetch()
+    Response.error(request, error.message, status: error.status)
+  end
+
+  defp handle_live_change_result(:out_of_bounds_timeout, request) do
+    %{api: api, handle: shape_handle} = request
+
+    Logger.debug(fn ->
+      "Client #{inspect(self())} timed out waiting for " <>
+        "changes to #{shape_handle} (out-of-bounds check)"
+    end)
+
+    case check_for_disk_updates(request) do
+      {:updated, new_offset} ->
+        %{request | last_offset: new_offset}
         |> determine_global_last_seen_lsn()
         |> determine_log_chunk_offset()
         |> determine_up_to_date()
         |> do_serve_shape_log()
 
-      {^ref, :shape_rotation, new_handle} ->
-        error = Api.Error.must_refetch()
+      _ ->
+        Response.invalid_request(api, errors: @offset_out_of_bounds)
+    end
+  end
 
-        Response.error(request, error.message,
-          handle: new_handle,
-          status: error.status
-        )
+  defp handle_live_change_result(:long_poll_timeout, request) do
+    %{api: api} = request
+    request = update_attrs(request, %{ot_is_long_poll_timeout: true})
+    status = Electric.StatusMonitor.status(api.stack_id)
 
-      {^ref, :shape_rotation} ->
-        error = Api.Error.must_refetch()
-        Response.error(request, error.message, status: error.status)
+    cond do
+      request.read_only? or status.shape == :read_only ->
+        # Align the request flag with the current runtime status so that
+        # downstream functions (determine_log_chunk_offset, get_merged_log_stream,
+        # etc.) use the correct read-only strategy.
+        request = %{request | read_only?: true}
 
-      {^ref, :out_of_bounds_timeout} ->
-        Logger.debug(fn ->
-          "Client #{inspect(self())} timed out waiting for " <>
-            "changes to #{shape_handle} (out-of-bounds check)"
-        end)
-
+        # No consumer is running (or it stopped), so check if the
+        # active instance has flushed new data to disk.
         case check_for_disk_updates(request) do
           {:updated, new_offset} ->
             %{request | last_offset: new_offset}
@@ -907,45 +959,19 @@ defmodule Electric.Shapes.Api do
             |> do_serve_shape_log()
 
           _ ->
-            Response.invalid_request(api, errors: @offset_out_of_bounds)
-        end
-    after
-      long_poll_timeout ->
-        request = update_attrs(request, %{ot_is_long_poll_timeout: true})
-        status = Electric.StatusMonitor.status(api.stack_id)
-
-        cond do
-          request.read_only? or status.shape == :read_only ->
-            # Align the request flag with the current runtime status so that
-            # downstream functions (determine_log_chunk_offset, get_merged_log_stream,
-            # etc.) use the correct read-only strategy.
-            request = %{request | read_only?: true}
-
-            # No consumer is running (or it stopped), so check if the
-            # active instance has flushed new data to disk.
-            case check_for_disk_updates(request) do
-              {:updated, new_offset} ->
-                %{request | last_offset: new_offset}
-                |> determine_global_last_seen_lsn()
-                |> determine_log_chunk_offset()
-                |> determine_up_to_date()
-                |> do_serve_shape_log()
-
-              _ ->
-                request
-                |> determine_global_last_seen_lsn()
-                |> no_change_response()
-            end
-
-          status.shape == :up ->
             request
             |> determine_global_last_seen_lsn()
             |> no_change_response()
-
-          true ->
-            message = Electric.StatusMonitor.timeout_message(api.stack_id)
-            Response.error(request, message, status: 503, retry_after: 10)
         end
+
+      status.shape == :up ->
+        request
+        |> determine_global_last_seen_lsn()
+        |> no_change_response()
+
+      true ->
+        message = Electric.StatusMonitor.timeout_message(api.stack_id)
+        Response.error(request, message, status: 503, retry_after: 10)
     end
   end
 

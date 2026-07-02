@@ -170,6 +170,4 @@ defmodule ElectricTelemetry.SystemMonitor do
           Process.send_after(self(), @garbage_collect_message, @garbage_collect_interval)
     }
   end
-
-  defp schedule_garbage_collect(state), do: state
 end
