@@ -32,7 +32,9 @@ pub struct ProducerState {
     pub last_seq: u64,
 }
 
-#[derive(Clone, Debug)]
+// Serialize/Deserialize: the config travels inside replicated `LogOp::Create`
+// entries (src/replication/entry.rs).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct StreamConfig {
     pub content_type: String,
     pub ttl_seconds: Option<u64>,

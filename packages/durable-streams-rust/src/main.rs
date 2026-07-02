@@ -3,6 +3,7 @@ mod blobstore;
 mod engine_raw;
 mod handlers;
 mod http1;
+mod replication;
 #[cfg(target_os = "linux")]
 mod sse_reactor;
 mod store;
@@ -137,6 +138,12 @@ fn main() {
     // append path). Dependency-free — the measurement vehicle for the contention
     // investigation, independent of the heavy `telemetry` OTLP feature.
     let mut wal_stats_secs: Option<u64> = None;
+    // `--durability replicated` settings (REPLICATION.md "Configuration").
+    let mut repl_id: Option<u64> = None;
+    let mut repl_peers: Option<String> = None;
+    let mut repl_listen: Option<String> = None;
+    let mut repl_ack_timeout_ms: u64 = 10_000;
+    let mut repl_trim_secs: u64 = 5;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -228,12 +235,19 @@ fn main() {
                 }
                 wal_stats_secs = Some(n);
             }
+            "--repl-id" => repl_id = Some(parse_val(args.next(), "--repl-id")),
+            "--repl-peers" => repl_peers = Some(val(args.next(), "--repl-peers")),
+            "--repl-listen" => repl_listen = Some(val(args.next(), "--repl-listen")),
+            "--repl-ack-timeout-ms" => {
+                repl_ack_timeout_ms = parse_val(args.next(), "--repl-ack-timeout-ms")
+            }
+            "--repl-trim-secs" => repl_trim_secs = parse_val(args.next(), "--repl-trim-secs"),
             "--durability" => {
                 let v = val(args.next(), "--durability");
                 match handlers::parse_durability(&v) {
                     Some(m) => handlers::set_durability(m),
                     None => {
-                        eprintln!("--durability must be wal|memory");
+                        eprintln!("--durability must be wal|memory|replicated");
                         std::process::exit(2);
                     }
                 }
@@ -245,28 +259,68 @@ fn main() {
         }
     }
 
-    // Apply --durability memory AFTER the arg loop. Memory mode is the buffered
-    // append path with the WAL stage/wait skipped (no splice intercept, no forced
-    // tail-cache-off — those belonged to the removed zero-copy path); the only
-    // gate is refusing to silently ignore a WAL left by a previous wal run.
-    if handlers::durability() == handlers::DurabilityMode::Memory {
-        // Fail fast on a WAL left by a previous `--durability wal` run: memory mode
-        // never opens/replays it, so starting here would silently ignore those
+    // Apply --durability memory/replicated AFTER the arg loop. Both are the
+    // buffered append path with the WAL stage/wait skipped (no splice intercept,
+    // no forced tail-cache-off — those belonged to the removed zero-copy path);
+    // the only gate is refusing to silently ignore a WAL left by a previous wal run.
+    if handlers::durability() != handlers::DurabilityMode::Wal {
+        // Fail fast on a WAL left by a previous `--durability wal` run: these modes
+        // never open/replay it, so starting here would silently ignore those
         // records (and drop any not yet folded into the per-stream files). Refuse
         // rather than diverge quietly; the operator can replay with `--durability
         // wal` first, or remove the `wal/` directory to discard it deliberately.
         let wal_dir = data_dir.join("wal");
         if wal_dir_has_segments(&wal_dir) {
             eprintln!(
-                "error: --durability memory refuses to start: {} holds a WAL from a previous \
-                 --durability wal run. Memory mode would ignore it and could drop un-checkpointed \
+                "error: --durability {} refuses to start: {} holds a WAL from a previous \
+                 --durability wal run. This mode would ignore it and could drop un-checkpointed \
                  records. Replay it first with --durability wal, or remove {} to discard it.",
+                if handlers::durability() == handlers::DurabilityMode::Memory {
+                    "memory"
+                } else {
+                    "replicated"
+                },
                 wal_dir.display(),
                 wal_dir.display()
             );
             std::process::exit(2);
         }
     }
+
+    // Validate the replication flags before the runtime starts, so a bad config
+    // is a clean exit 2 (usage error), not a panic mid-boot.
+    let repl_config: Option<replication::ReplConfig> =
+        if handlers::durability() == handlers::DurabilityMode::Replicated {
+            let (Some(id), Some(peers_raw)) = (repl_id, &repl_peers) else {
+                eprintln!("error: --durability replicated requires --repl-id and --repl-peers");
+                std::process::exit(2);
+            };
+            let peers = replication::ReplConfig::parse_peers(peers_raw).unwrap_or_else(|e| {
+                eprintln!("error: --repl-peers: {e}");
+                std::process::exit(2);
+            });
+            let mut cfg = replication::ReplConfig {
+                id,
+                peers,
+                listen: String::new(),
+                ack_timeout: std::time::Duration::from_millis(repl_ack_timeout_ms),
+                trim_secs: repl_trim_secs,
+            };
+            cfg.listen = match repl_listen {
+                Some(l) => l,
+                None => cfg.default_listen().unwrap_or_else(|e| {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }),
+            };
+            Some(cfg)
+        } else {
+            if repl_id.is_some() || repl_peers.is_some() {
+                eprintln!("error: --repl-* flags require --durability replicated");
+                std::process::exit(2);
+            }
+            None
+        };
 
     // S3 credentials come from env (never CLI flags), matching the OTEL_*/AWS
     // convention. Honour both the DS_* names and the standard AWS_* fallbacks.
@@ -370,6 +424,27 @@ fn main() {
             // `--features telemetry`; off the hot commit/append path.
             wal::telemetry::spawn_emitter(Arc::clone(&walset));
             wal_for_shutdown = Some(walset);
+        }
+
+        // ---- replication wiring (Replicated mode only) ----
+        // Start the peer mesh + consensus core BEFORE serving so no append can
+        // race the OnceLock install. Serving does not wait for an elected
+        // leader: proposals buffer inside OmniPaxos until the election
+        // (~500 ms) resolves; readiness is `/_repl/status` reporting a leader.
+        if let Some(cfg) = &repl_config {
+            let h = replication::start(Arc::clone(&store), cfg)
+                .await
+                .unwrap_or_else(|e| {
+                    eprintln!("error: replication listener bind {} failed: {e}", cfg.listen);
+                    std::process::exit(2);
+                });
+            replication::install(h);
+            println!(
+                "replication: node {} of {:?}, peer listener on {}",
+                cfg.id,
+                cfg.peers.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+                cfg.listen
+            );
         }
 
         let addr: SocketAddr = (host, port).into();

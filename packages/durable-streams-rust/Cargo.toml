@@ -24,6 +24,14 @@ dashmap = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 httparse = "1"
+
+# Consensus for `--durability replicated` (REPLICATION.md): OmniPaxos (Sequence
+# Paxos) with serde-serializable messages for our TCP mesh; batch_accept
+# coalesces outstanding proposals into single Accept rounds (group commit).
+# Default features are OFF to skip the derive-macros dep (we impl Entry by hand).
+omnipaxos = { version = "0.2.2", default-features = false, features = ["batch_accept", "serde"] }
+# Peer-message framing for the replication mesh.
+bincode = "1"
 libc = "0.2"
 percent-encoding = "2"
 

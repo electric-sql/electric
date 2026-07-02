@@ -46,15 +46,19 @@ pub enum DurabilityMode {
     /// No WAL, no fsync: ack on the page-cache write. Durability comes from replication
     /// (future). Linux-only (binary appends use zero-copy socket→file).
     Memory,
+    /// No WAL, no fsync: ack once the op is decided by a quorum of replicas
+    /// (OmniPaxos) and applied locally. See REPLICATION.md.
+    Replicated,
 }
 
 static DURABILITY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-/// Parse the `--durability` value. `wal` | `memory`; `None` → usage error.
+/// Parse the `--durability` value. `wal` | `memory` | `replicated`; `None` → usage error.
 pub fn parse_durability(s: &str) -> Option<DurabilityMode> {
     match s {
         "wal" => Some(DurabilityMode::Wal),
         "memory" => Some(DurabilityMode::Memory),
+        "replicated" => Some(DurabilityMode::Replicated),
         _ => None,
     }
 }
@@ -66,6 +70,7 @@ pub fn set_durability(mode: DurabilityMode) {
 pub fn durability() -> DurabilityMode {
     match DURABILITY_MODE.load(std::sync::atomic::Ordering::Relaxed) {
         1 => DurabilityMode::Memory,
+        2 => DurabilityMode::Replicated,
         _ => DurabilityMode::Wal,
     }
 }
@@ -266,6 +271,15 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
     let path = req.path.clone();
     if path == "/health" {
         text_response(200, "ok")
+    } else if path == "/_repl/status" {
+        if durability() == DurabilityMode::Replicated {
+            let mut r = Resp::new(200);
+            r.headers.push(("content-type", "application/json".to_string()));
+            r.body = full(crate::replication::handle().status_json());
+            r
+        } else {
+            text_response(404, "not in replicated mode")
+        }
     } else {
         match req.method {
             Method::Put => handle_create(store, req, path).await,
@@ -550,6 +564,55 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
             Err(msg) => return text_response(400, msg),
         }
     };
+
+    // Replicated mode: the create (fork point pre-resolved above) goes through
+    // the consensus log; every node — this one included — applies it from the
+    // decided entry (log-first apply, REPLICATION.md). The response is built
+    // from the apply outcome so it matches the single-node path.
+    if durability() == DurabilityMode::Replicated {
+        use crate::replication::entry::{CreateApplyOutcome as C, LogOp, OpOutcome};
+        let op = LogOp::Create {
+            path: path.clone(),
+            config,
+            base_offset,
+            wire: wire.as_ref().map(|w| w.to_vec()).unwrap_or_default(),
+        };
+        return match crate::replication::handle().propose_and_wait(op).await {
+            Err(_) => text_response(503, "replication timeout — retry"),
+            Ok(OpOutcome::Create(c)) => match c {
+                C::Created { tail, closed } => {
+                    let mut b = ResponseBuilder::new(201)
+                        .h(
+                            "location",
+                            format!("http://{}{}", host.as_deref().unwrap_or("localhost"), path),
+                        )
+                        .h("content-type", content_type)
+                        .h(H_NEXT_OFFSET, format_offset(tail));
+                    if closed {
+                        b = b.hs(H_CLOSED, "true");
+                    }
+                    b.body(empty())
+                }
+                C::Exists {
+                    tail,
+                    closed,
+                    content_type,
+                } => {
+                    let mut b = ResponseBuilder::new(200)
+                        .h("content-type", content_type)
+                        .h(H_NEXT_OFFSET, format_offset(tail));
+                    if closed {
+                        b = b.hs(H_CLOSED, "true");
+                    }
+                    b.body(empty())
+                }
+                C::Conflict => text_response(409, "stream exists with different configuration"),
+                C::ForkSourceMissing => text_response(409, "fork source is deleted"),
+                C::WriteFailed => text_response(500, "write failed"),
+            },
+            Ok(_) => text_response(500, "unexpected apply outcome"),
+        };
+    }
 
     // Run create on the blocking pool: it opens the data file and does a durable
     // (fsync) `.meta` write, which would otherwise block an async worker for the
@@ -864,6 +927,249 @@ fn gone() -> Resp {
     text_response(410, "stream is deleted")
 }
 
+// ---------- replicated apply (log-first) ----------
+//
+// The semantic twins of the single-node PUT/POST/DELETE paths, invoked by the
+// replication core for every DECIDED log entry, in log order, on every node
+// (leader included). They mirror the checks above exactly — closed → producer
+// dedup/fencing → Stream-Seq — so replicas stay a deterministic function of
+// the decided log. "Decided by a quorum" is this mode's durability, so bytes
+// and closures are exposed to readers immediately after apply; the meta
+// sidecar flush stays async (REPLICATION.md).
+
+/// Apply a decided `LogOp::Create`. The fork point (`base_offset`) was
+/// resolved by the proposing node; only the parent lookup happens here.
+pub(crate) async fn apply_replicated_create(
+    store: &Arc<Store>,
+    path: &str,
+    config: StreamConfig,
+    base_offset: u64,
+    wire: Vec<u8>,
+) -> crate::replication::entry::CreateApplyOutcome {
+    use crate::replication::entry::CreateApplyOutcome as C;
+    let parent = match &config.forked_from {
+        Some(src) => match store.get(src) {
+            Some(s) if !s.shared.read().unwrap().soft_deleted => Some(s),
+            _ => return C::ForkSourceMissing,
+        },
+        None => None,
+    };
+    let result = {
+        let store2 = Arc::clone(store);
+        let path2 = path.to_string();
+        match tokio::task::spawn_blocking(move || store2.create(&path2, config, parent, base_offset))
+            .await
+        {
+            Ok(Ok(r)) => r,
+            _ => return C::WriteFailed,
+        }
+    };
+    match result {
+        CreateResult::Conflict => C::Conflict,
+        CreateResult::Exists(st) => {
+            st.touch();
+            let t = st.tail();
+            C::Exists {
+                tail: t.bytes,
+                closed: t.closed,
+                content_type: st.config.content_type.clone(),
+            }
+        }
+        CreateResult::Created(st) => {
+            if !wire.is_empty() {
+                let wire = Bytes::from(wire);
+                let mut ap = st.appender.lock().await;
+                let new_tail = match write_wire(&st, &mut ap, &wire) {
+                    Ok(t) => t,
+                    Err(_) => return C::WriteFailed,
+                };
+                drop(ap);
+                publish_durable_tail(&st, new_tail, &wire);
+            }
+            let t = st.tail();
+            C::Created {
+                tail: t.bytes,
+                closed: t.closed,
+            }
+        }
+    }
+}
+
+/// Apply a decided `LogOp::Append` — the authoritative twin of
+/// `handle_append_inner`'s checked-write section.
+pub(crate) async fn apply_replicated_append(
+    store: &Arc<Store>,
+    path: &str,
+    wire: Vec<u8>,
+    producer: Option<crate::replication::entry::ReplProducer>,
+    seq_header: Option<String>,
+    close_req: bool,
+) -> crate::replication::entry::AppendApplyOutcome {
+    use crate::replication::entry::AppendApplyOutcome as A;
+    let wire = Bytes::from(wire);
+    let st = match store.get(path) {
+        Some(s) => s,
+        None => return A::NotFound,
+    };
+    if st.shared.read().unwrap().soft_deleted {
+        return A::Gone;
+    }
+    let lock_t0 = crate::telemetry::Timer::start();
+    let mut ap = st.appender.lock().await;
+    crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
+
+    // Closed checks (precedence: closed → producer → seq), as in the single-node path.
+    {
+        let s = st.shared.read().unwrap();
+        if s.closed {
+            let tail = s.durable_tail;
+            if close_req {
+                if let Some(p) = &producer {
+                    if let Some((cid, cep, cseq)) = &s.closed_by {
+                        if *cid == p.id && *cep == p.epoch && *cseq == p.seq {
+                            return A::ClosedDupClose {
+                                tail,
+                                epoch: p.epoch,
+                                seq: p.seq,
+                            };
+                        }
+                    }
+                    return A::Closed { tail };
+                }
+                if wire.is_empty() {
+                    return A::ClosedIdempotent { tail };
+                }
+            }
+            return A::Closed { tail };
+        }
+    }
+    if let Some(p) = &producer {
+        let ph = ProducerHeaders {
+            id: p.id.clone(),
+            epoch: p.epoch,
+            seq: p.seq,
+        };
+        let outcome = {
+            let s = st.shared.read().unwrap();
+            validate_producer(&s, &ph)
+        };
+        match outcome {
+            ProducerOutcome::Accept => {}
+            ProducerOutcome::Duplicate { last_seq } => {
+                let (tail, closed) = {
+                    let s = st.shared.read().unwrap();
+                    (s.durable_tail, s.closed_durable)
+                };
+                return A::ProducerDuplicate {
+                    tail,
+                    closed,
+                    epoch: p.epoch,
+                    last_seq,
+                };
+            }
+            ProducerOutcome::StaleEpoch { current } => {
+                let tail = st.shared.read().unwrap().durable_tail;
+                return A::ProducerStaleEpoch { tail, current };
+            }
+            ProducerOutcome::Gap { expected } => {
+                return A::ProducerGap {
+                    expected,
+                    received: p.seq,
+                }
+            }
+            ProducerOutcome::BadEpochStart => return A::ProducerBadEpochStart,
+        }
+    }
+    if let Some(seq) = &seq_header {
+        let s = st.shared.read().unwrap();
+        if let Some(last) = &s.last_seq_header {
+            if seq.as_str() <= last.as_str() {
+                return A::SeqConflict {
+                    tail: s.durable_tail,
+                };
+            }
+        }
+    }
+
+    // NOTE: a local write failure here (disk error) after the entry decided
+    // means this replica diverges from the log — same failure class as a WAL
+    // fsync error in `wal` mode. The 500 surfaces it; the node should be
+    // replaced (v1 fail-stop assumption, REPLICATION.md).
+    let mut new_tail = None;
+    if !wire.is_empty() {
+        match write_wire(&st, &mut ap, &wire) {
+            Ok(t) => new_tail = Some(t),
+            Err(_) => return A::WriteFailed,
+        }
+    }
+    {
+        let mut s = st.shared.write().unwrap();
+        if let Some(p) = &producer {
+            s.producers.insert(
+                p.id.clone(),
+                ProducerState {
+                    epoch: p.epoch,
+                    last_seq: p.seq,
+                },
+            );
+        }
+        if let Some(seq) = seq_header {
+            s.last_seq_header = Some(seq);
+        }
+        if close_req {
+            s.closed = true;
+            if let Some(p) = &producer {
+                s.closed_by = Some((p.id.clone(), p.epoch, p.seq));
+            }
+        }
+    }
+    drop(ap);
+
+    // Decided ⇒ durable in this mode: expose bytes (and the closure) now.
+    if let Some(t) = new_tail {
+        publish_durable_tail(&st, t, &wire);
+    }
+    let (tail, closed) = if close_req {
+        let tail = {
+            let mut s = st.shared.write().unwrap();
+            s.closed_durable = true;
+            s.durable_tail
+        };
+        st.tail_tx.send_replace(Tail {
+            bytes: tail,
+            closed: true,
+        });
+        #[cfg(target_os = "linux")]
+        crate::sse_reactor::wake_stream(&st);
+        (tail, true)
+    } else {
+        let s = st.shared.read().unwrap();
+        (s.durable_tail, s.closed_durable)
+    };
+    st.schedule_meta_flush();
+    A::Applied { tail, closed }
+}
+
+/// Apply a decided `LogOp::Delete`. The decided log entry is the durability of
+/// the delete, so the local removal uses the non-durable variant.
+pub(crate) async fn apply_replicated_delete(
+    store: &Arc<Store>,
+    path: &str,
+) -> crate::replication::entry::DeleteApplyOutcome {
+    use crate::replication::entry::DeleteApplyOutcome as D;
+    let st = match store.get(path) {
+        Some(s) => s,
+        None => return D::NotFound,
+    };
+    if st.shared.read().unwrap().soft_deleted {
+        return D::Gone;
+    }
+    let store2 = Arc::clone(store);
+    let st2 = Arc::clone(&st);
+    let _ = tokio::task::spawn_blocking(move || store2.delete_or_soft_delete(&st2)).await;
+    D::Deleted
+}
+
 /// Append outcome, recorded as a bounded metric label on `ds.append.duration`.
 #[derive(Clone, Copy)]
 enum AppendOutcome {
@@ -946,6 +1252,110 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             Err(m) => ret!(text_response(400, m), Conflict),
         }
     };
+
+    // Replicated mode: propose the append into the consensus log and wait for
+    // the local apply of the decided entry (log-first apply — REPLICATION.md).
+    // The authoritative closed/producer/seq checks run in the applier
+    // (`apply_replicated_append`), in log order, deterministically on every
+    // node; the response is rebuilt here from the apply outcome, mirroring the
+    // single-node formats below.
+    if durability() == DurabilityMode::Replicated {
+        use crate::replication::entry::{AppendApplyOutcome as A, LogOp, OpOutcome, ReplProducer};
+        let op = LogOp::Append {
+            path: path.clone(),
+            wire: wire.to_vec(),
+            producer: producer.as_ref().map(|p| ReplProducer {
+                id: p.id.clone(),
+                epoch: p.epoch,
+                seq: p.seq,
+            }),
+            seq: seq_header.clone(),
+            close: close_req,
+        };
+        let outcome = match crate::replication::handle().propose_and_wait(op).await {
+            Ok(OpOutcome::Append(a)) => a,
+            Ok(_) => ret!(text_response(500, "unexpected apply outcome"), Conflict),
+            Err(_) => ret!(text_response(503, "replication timeout — retry"), Conflict),
+        };
+        match outcome {
+            A::Applied { tail, closed } => {
+                let status = if producer.is_some() && !body.is_empty() {
+                    200
+                } else {
+                    204
+                };
+                let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(tail));
+                if let Some(p) = &producer {
+                    b = b
+                        .h(H_PRODUCER_EPOCH, p.epoch.to_string())
+                        .h(H_PRODUCER_SEQ, p.seq.to_string());
+                }
+                if closed {
+                    b = b.hs(H_CLOSED, "true");
+                }
+                ret!(b.body(empty()), Accept);
+            }
+            A::NotFound => ret!(text_response(404, "stream not found"), Conflict),
+            A::Gone => ret!(gone(), Conflict),
+            A::ClosedDupClose { tail, epoch, seq } => ret!(
+                ResponseBuilder::new(204)
+                    .hs(H_CLOSED, "true")
+                    .h(H_NEXT_OFFSET, format_offset(tail))
+                    .h(H_PRODUCER_EPOCH, epoch.to_string())
+                    .h(H_PRODUCER_SEQ, seq.to_string())
+                    .body(empty()),
+                Dup
+            ),
+            A::ClosedIdempotent { tail } => ret!(
+                ResponseBuilder::new(204)
+                    .hs(H_CLOSED, "true")
+                    .h(H_NEXT_OFFSET, format_offset(tail))
+                    .body(empty()),
+                Dup
+            ),
+            A::Closed { tail } => ret!(closed_conflict(tail), Closed),
+            A::ProducerDuplicate {
+                tail,
+                closed,
+                epoch,
+                last_seq,
+            } => {
+                let mut b = ResponseBuilder::new(204)
+                    .h(H_NEXT_OFFSET, format_offset(tail))
+                    .h(H_PRODUCER_EPOCH, epoch.to_string())
+                    .h(H_PRODUCER_SEQ, last_seq.to_string());
+                if closed {
+                    b = b.hs(H_CLOSED, "true");
+                }
+                ret!(b.body(empty()), Dup);
+            }
+            A::ProducerStaleEpoch { tail, current } => ret!(
+                ResponseBuilder::new(403)
+                    .h(H_PRODUCER_EPOCH, current.to_string())
+                    .h(H_NEXT_OFFSET, format_offset(tail))
+                    .body(full("stale producer epoch")),
+                Conflict
+            ),
+            A::ProducerGap { expected, received } => ret!(
+                ResponseBuilder::new(409)
+                    .h(H_PRODUCER_EXPECTED, expected.to_string())
+                    .h(H_PRODUCER_RECEIVED, received.to_string())
+                    .body(full("producer sequence gap")),
+                Conflict
+            ),
+            A::ProducerBadEpochStart => ret!(
+                text_response(400, "new producer epoch must start at seq 0"),
+                Conflict
+            ),
+            A::SeqConflict { tail } => ret!(
+                ResponseBuilder::new(409)
+                    .h(H_NEXT_OFFSET, format_offset(tail))
+                    .body(full("Sequence conflict")),
+                Conflict
+            ),
+            A::WriteFailed => ret!(text_response(500, "write failed"), Conflict),
+        }
+    }
 
     // Serialize per stream: producer validation + write + state update under one
     // lock. Time the wait separately — lock contention is a key bottleneck.
@@ -1911,7 +2321,8 @@ fn handle_sse(st: Arc<StreamState>, offset: ParsedOffset, client_cursor: Option<
 /// Read a logical byte range fully into memory (SSE batches are small).
 /// Returns `Err` if the range could not be fully materialized (a short local
 /// read or a cold-storage error/truncation) so callers never advance past a gap.
-async fn read_range_bytes(
+/// pub(crate): the replication tests use it to verify replica convergence.
+pub(crate) async fn read_range_bytes(
     st: &Arc<StreamState>,
     start: u64,
     end: u64,
@@ -1973,6 +2384,19 @@ async fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     };
     if st.shared.read().unwrap().soft_deleted {
         return gone();
+    }
+    // Replicated mode: the delete goes through the consensus log; durability of
+    // the 204 comes from the decided entry, not local fsync (REPLICATION.md).
+    if durability() == DurabilityMode::Replicated {
+        use crate::replication::entry::{DeleteApplyOutcome as D, LogOp, OpOutcome};
+        let op = LogOp::Delete { path };
+        return match crate::replication::handle().propose_and_wait(op).await {
+            Err(_) => text_response(503, "replication timeout — retry"),
+            Ok(OpOutcome::Delete(D::Deleted)) => ResponseBuilder::new(204).body(empty()),
+            Ok(OpOutcome::Delete(D::NotFound)) => text_response(404, "stream not found"),
+            Ok(OpOutcome::Delete(D::Gone)) => gone(),
+            Ok(_) => text_response(500, "unexpected apply outcome"),
+        };
     }
     // The 204 is a durability promise: once acked, a crash must never
     // resurrect the stream. Await the on-disk removal (unlinks + parent-dir
