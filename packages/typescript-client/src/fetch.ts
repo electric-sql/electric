@@ -192,36 +192,48 @@ export function createFetchWithBackoff(
 
 const NO_BODY_STATUS_CODES = [201, 204, 205]
 
+export async function consumeResponseBody(
+  res: Response,
+  url: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  try {
+    if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
+      return res
+    }
+
+    const text = await res.text()
+    return new Response(text, res)
+  } catch (err) {
+    if (signal?.aborted) {
+      throw new FetchBackoffAbortError()
+    }
+
+    throw new FetchError(
+      res.status,
+      undefined,
+      undefined,
+      Object.fromEntries([...res.headers.entries()]),
+      url,
+      err instanceof Error
+        ? err.message
+        : typeof err === `string`
+          ? err
+          : `failed to read body`
+    )
+  }
+}
+
 // Ensure body can actually be read in its entirety
 export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const res = await fetchClient(...args)
-    try {
-      if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
-        return res
-      }
-
-      const text = await res.text()
-      return new Response(text, res)
-    } catch (err) {
-      if (args[1]?.signal?.aborted) {
-        throw new FetchBackoffAbortError()
-      }
-
-      throw new FetchError(
-        res.status,
-        undefined,
-        undefined,
-        Object.fromEntries([...res.headers.entries()]),
-        url.toString(),
-        err instanceof Error
-          ? err.message
-          : typeof err === `string`
-            ? err
-            : `failed to read body`
-      )
-    }
+    return consumeResponseBody(
+      res,
+      url.toString(),
+      args[1]?.signal ?? undefined
+    )
   }
 }
 

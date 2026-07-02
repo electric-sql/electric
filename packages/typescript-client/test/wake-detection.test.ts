@@ -479,6 +479,227 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  it(`should not timeout a slow but successful wake catch-up body`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const upToDateResponse = () =>
+      new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+        status: 200,
+        headers: new Headers({
+          'electric-handle': `h1`,
+          'electric-offset': `0_0`,
+          'electric-schema': `{}`,
+          'electric-up-to-date': ``,
+        }),
+      })
+
+    const slowUpToDateResponse = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            setTimeout(() => {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify([{ headers: { control: `up-to-date` } }])
+                )
+              )
+              controller.close()
+            }, 10_000)
+          },
+        }),
+        {
+          status: 200,
+          headers: new Headers({
+            'electric-handle': `h1`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-up-to-date': ``,
+          }),
+        }
+      )
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) return Promise.resolve(upToDateResponse())
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      return Promise.resolve(slowUpToDateResponse())
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls).toHaveLength(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[2]?.aborted).toBe(false)
+    expect(fetchUrls).toHaveLength(3)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchUrls.length).toBeGreaterThan(3)
+    expect(fetchUrls[3]).toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should watchdog the request after a wake catch-up chunk`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      if (fetchUrls.length === 3) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                offset: `1_0`,
+                key: `item-1`,
+                value: { id: 1 },
+                headers: {
+                  operation: `insert`,
+                  lsn: `1`,
+                  op_position: 0,
+                  txids: [`1`],
+                },
+              },
+            ]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `1_0`,
+                'electric-schema': `{"id":"int4"}`,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls.length).toBeGreaterThanOrEqual(4)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+    expect(fetchUrls[3]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(
+      fetchSignals.some((signal) => signal.reason === `live-request-timeout`)
+    ).toBe(true)
+    expect(fetchUrls.length).toBeGreaterThan(4)
+    expect(fetchUrls[4]).toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
   it(`should restart a hung wake catch-up request`, async () => {
     vi.useFakeTimers()
 

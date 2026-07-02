@@ -35,6 +35,7 @@ import {
 import {
   BackoffDefaults,
   BackoffOptions,
+  consumeResponseBody,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
@@ -707,6 +708,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #requestAbortController?: AbortController
   #restartAbortControllers = new WeakSet<AbortController>()
   #refreshCount = 0
+  #refreshCatchUpWatchdogActive = false
   #snapshotCounter = 0
 
   get #isRefreshing(): boolean {
@@ -1580,6 +1582,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = transition.state
 
     if (hasUpToDateMessage) {
+      this.#refreshCatchUpWatchdogActive = false
       if (transition.suppressBatch) {
         return
       }
@@ -1658,7 +1661,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   ): Promise<T> {
     const timeoutMs = this.#liveRequestTimeoutMs
     const isLiveRequest = fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`
-    const isRefreshCatchUpRequest = this.#isRefreshing
+    const isRefreshCatchUpRequest =
+      this.#isRefreshing || this.#refreshCatchUpWatchdogActive
 
     if (timeoutMs === false || (!isLiveRequest && !isRefreshCatchUpRequest)) {
       return promise
@@ -1688,13 +1692,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    const response = await this.#withRequestTimeout(
-      this.#fetchClient(fetchUrl.toString(), {
+    const fetchUrlString = fetchUrl.toString()
+    const rawResponse = await this.#withRequestTimeout(
+      this.#sseFetchClient(fetchUrlString, {
         signal: requestAbortController.signal,
         headers,
       }),
       requestAbortController,
       fetchUrl
+    )
+    const response = await consumeResponseBody(
+      rawResponse,
+      fetchUrlString,
+      requestAbortController.signal
     )
 
     this.#connected = true
@@ -1921,6 +1931,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   async forceDisconnectAndRefresh(): Promise<void> {
     this.#refreshCount++
+    this.#refreshCatchUpWatchdogActive = true
     try {
       const requestAbortController = this.#requestAbortController
       if (
@@ -2062,6 +2073,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     this.#refreshCount++
+    this.#refreshCatchUpWatchdogActive = true
     // Track restart intent ourselves instead of relying only on
     // AbortSignal.reason, which is missing in some React Native runtimes.
     this.#restartAbortControllers.add(requestAbortController)
