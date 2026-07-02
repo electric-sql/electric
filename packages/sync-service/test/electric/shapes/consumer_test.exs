@@ -2619,6 +2619,78 @@ defmodule Electric.Shapes.ConsumerTest do
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
 
+    test "consumer advances and persists the per-dependency moves-position on move application",
+         ctx do
+      parent = self()
+
+      Repatch.patch(
+        Electric.Shapes.Consumer.Effects,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [dep_handle] = shape.shape_dependencies_handles
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      move_lsn = LogOffset.new(777, 0)
+
+      assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 100)
+
+      send(
+        consumer_pid,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: [], lsn: move_lsn}}
+      )
+
+      assert_receive {:query_requested, ^consumer_pid}
+
+      # While the move-in is still buffering the position has NOT advanced to the
+      # move's LSN — it must only advance once the move is applied.
+      {:ok, buffering_positions} = Storage.fetch_move_positions(shape_storage)
+      refute Map.get(buffering_positions, dep_handle) == move_lsn
+
+      send(consumer_pid, {:pg_snapshot_known, {100, 300, []}})
+
+      send_stored_move_in_complete(
+        consumer_pid,
+        shape_storage,
+        [
+          [
+            ~s'"public"."test_table"/"1"',
+            [],
+            Jason.encode!(%{
+              "key" => ~s'"public"."test_table"/"1"',
+              "value" => %{"id" => "1", "value" => "val"},
+              "headers" => %{"operation" => "insert", "relation" => ["public", "test_table"]}
+            })
+          ]
+        ],
+        Lsn.from_integer(100)
+      )
+
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # Once the move-in splice completes and the pipeline is fully drained, the
+      # per-dependency moves-position is advanced to the move's source LSN and
+      # persisted to storage.
+      {:ok, applied_positions} = Storage.fetch_move_positions(shape_storage)
+      assert Map.get(applied_positions, dep_handle) == move_lsn
+    end
+
     test "consumer startup seeds the stack-scoped subquery index", ctx do
       alias Electric.Shapes.Filter.Indexes.SubqueryIndex
 

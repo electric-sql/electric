@@ -124,6 +124,33 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
+    describe "#{module_name}.fetch_move_positions/1" do
+      setup :start_storage
+
+      test "returns an empty map on startup", %{storage: opts} do
+        assert Storage.fetch_move_positions(opts) == {:ok, %{}}
+      end
+
+      test "round-trips a per-dependency positions map", %{storage: opts} do
+        positions = %{
+          "dep-a" => LogOffset.new(10, 2),
+          "dep-b" => LogOffset.new(42, 0)
+        }
+
+        assert :ok = Storage.set_move_positions!(positions, opts)
+        assert Storage.fetch_move_positions(opts) == {:ok, positions}
+      end
+
+      test "overwrites previously persisted positions", %{storage: opts} do
+        assert :ok = Storage.set_move_positions!(%{"dep-a" => LogOffset.new(1, 0)}, opts)
+
+        updated = %{"dep-a" => LogOffset.new(5, 0), "dep-b" => LogOffset.new(7, 1)}
+        assert :ok = Storage.set_move_positions!(updated, opts)
+
+        assert Storage.fetch_move_positions(opts) == {:ok, updated}
+      end
+    end
+
     describe "#{module_name}.append_to_log!/3" do
       setup do
         {:ok, %{module: unquote(module)}}

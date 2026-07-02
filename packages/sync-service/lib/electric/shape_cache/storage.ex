@@ -18,6 +18,11 @@ defmodule Electric.ShapeCache.Storage do
           filter_txns?: boolean()
         }
   @type offset :: LogOffset.t()
+  @typedoc """
+  Per-dependency "moves-applied-up-to" source LSN positions for an outer
+  subquery consumer, keyed by the dependency's shape handle.
+  """
+  @type move_positions :: %{shape_handle() => LogOffset.t()}
 
   @type compiled_opts :: term()
   @type shape_opts :: term()
@@ -76,6 +81,18 @@ defmodule Electric.ShapeCache.Storage do
   @callback fetch_pg_snapshot(shape_opts()) :: {:ok, pg_snapshot() | nil} | {:error, term()}
 
   @callback set_pg_snapshot(pg_snapshot(), shape_opts()) :: :ok
+
+  @doc """
+  Persist the per-dependency moves-applied-up-to positions for an outer
+  subquery consumer.
+  """
+  @callback set_move_positions!(move_positions(), shape_opts()) :: :ok
+
+  @doc """
+  Fetch the per-dependency moves-applied-up-to positions for an outer subquery
+  consumer. Returns `{:ok, %{}}` when none have been persisted yet.
+  """
+  @callback fetch_move_positions(shape_opts()) :: {:ok, move_positions()} | {:error, term()}
 
   @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
@@ -318,6 +335,16 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def set_pg_snapshot(pg_snapshot, {mod, shape_opts}) do
     mod.set_pg_snapshot(pg_snapshot, shape_opts)
+  end
+
+  @impl __MODULE__
+  def set_move_positions!(move_positions, {mod, shape_opts}) do
+    mod.set_move_positions!(move_positions, shape_opts)
+  end
+
+  @impl __MODULE__
+  def fetch_move_positions({mod, shape_opts}) do
+    mod.fetch_move_positions(shape_opts)
   end
 
   @impl __MODULE__

@@ -8,6 +8,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.SetupEffects
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
@@ -351,6 +352,10 @@ defmodule Electric.Shapes.Consumer do
     Logger.debug(fn ->
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
+
+    # Remember the source LSN of this move so that the per-dependency
+    # moves-position can be advanced once the move pipeline is fully drained.
+    state = record_pending_move_lsn(state, dep_handle, payload)
 
     handle_apply_event_result(
       state,
@@ -986,9 +991,54 @@ defmodule Electric.Shapes.Consumer do
             {{previous_offset, result.state.latest_offset}, result.state.latest_offset}
           end
 
-        {result.state, notification, result.num_changes, result.total_size}
+        final_state = maybe_commit_move_positions(result.state)
+
+        {final_state, notification, result.num_changes, result.total_size}
     end
   end
+
+  # Stash the source LSN carried by a materializer move payload, keyed by
+  # dependency handle. The position is only committed (advanced + persisted)
+  # once the move pipeline is fully drained (see `maybe_commit_move_positions/1`).
+  defp record_pending_move_lsn(state, dep_handle, payload) do
+    case Map.get(payload, :lsn) do
+      nil ->
+        state
+
+      lsn ->
+        %{state | pending_move_lsns: Map.put(state.pending_move_lsns, dep_handle, lsn)}
+    end
+  end
+
+  # Once the subquery move pipeline is fully drained (Steady with an empty move
+  # queue), every move received so far has been applied to storage, so the
+  # per-dependency moves-positions can be safely advanced to the latest received
+  # source LSNs and persisted. This is the dedup key used to replay only the
+  # missed tail after a restart.
+  defp maybe_commit_move_positions(%State{pending_move_lsns: pending} = state)
+       when pending == %{},
+       do: state
+
+  defp maybe_commit_move_positions(%State{} = state) do
+    if move_pipeline_fully_drained?(state.event_handler) do
+      move_positions =
+        Map.merge(state.move_positions, state.pending_move_lsns, fn _handle, old, new ->
+          LogOffset.max(old, new)
+        end)
+
+      ShapeCache.Storage.set_move_positions!(move_positions, state.storage)
+
+      %{state | move_positions: move_positions, pending_move_lsns: %{}}
+    else
+      state
+    end
+  end
+
+  defp move_pipeline_fully_drained?(%EventHandler.Subqueries.Steady{queue: queue}),
+    do: MoveQueue.length(queue) == 0
+
+  defp move_pipeline_fully_drained?(%EventHandler.Subqueries.Buffering{}), do: false
+  defp move_pipeline_fully_drained?(_handler), do: true
 
   defp handle_event_error(state, {:truncate, xid}) do
     handle_txn_with_truncate(xid, state)
@@ -1199,41 +1249,68 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp finish_initialization(%State{} = state, action, otel_ctx) do
-    if all_materializers_alive?(state) do
-      case initialize_event_handler(state, action) do
-        {:ok, state} ->
-          Logger.debug("Writer for #{state.shape_handle} initialized")
+    case subscribe_to_materializers(state) do
+      {:ok, state} ->
+        case initialize_event_handler(state, action) do
+          {:ok, state} ->
+            Logger.debug("Writer for #{state.shape_handle} initialized")
 
-          # We start the snapshotter even if there's a snapshot because it also performs the call
-          # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
-          # process if the shape already has a snapshot but the current semantics rely on being able
-          # to wait for the snapshot asynchronously and if we called publication manager here it would
-          # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+            # We start the snapshotter even if there's a snapshot because it also performs the call
+            # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+            # process if the shape already has a snapshot but the current semantics rely on being able
+            # to wait for the snapshot asynchronously and if we called publication manager here it would
+            # block and prevent await_snapshot_start calls from adding snapshot subscribers.
 
-          {:ok, _pid} =
-            Shapes.DynamicConsumerSupervisor.start_snapshotter(
-              state.stack_id,
-              %{
-                stack_id: state.stack_id,
-                shape: state.shape,
-                shape_handle: state.shape_handle,
-                storage: state.storage,
-                otel_ctx: otel_ctx
-              }
-            )
+            {:ok, _pid} =
+              Shapes.DynamicConsumerSupervisor.start_snapshotter(
+                state.stack_id,
+                %{
+                  stack_id: state.stack_id,
+                  shape: state.shape,
+                  shape_handle: state.shape_handle,
+                  storage: state.storage,
+                  otel_ctx: otel_ctx
+                }
+              )
 
-          {:noreply, state}
+            {:noreply, state}
 
-        {:error, state} ->
-          stop_and_clean(state)
-      end
-    else
-      stop_and_clean(state)
+          {:error, state} ->
+            stop_and_clean(state)
+        end
+
+      :error ->
+        stop_and_clean(state)
     end
   end
 
-  defp all_materializers_alive?(state) do
-    Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
+  # Subscribe to each dependency materializer, passing the persisted per-dep
+  # moves-position so the materializer replays any moves this consumer missed
+  # across a restart. Captures the returned seed views (as-of the position) for
+  # seeding the event handler's dependency views, and baselines a position for
+  # dependencies that don't have one yet so a first missed move can be replayed.
+  #
+  # Returns `{:ok, state}` with `dep_seed_views`/`move_positions` populated, or
+  # `:error` if any dependency materializer is not alive.
+  defp subscribe_to_materializers(state) do
+    case do_subscribe_to_materializers(state) do
+      {:ok, %State{move_positions: move_positions} = state} ->
+        # Persist baselined positions so a restart before the first move can
+        # still replay it (no-op writes if nothing changed are cheap at startup).
+        if state.shape.shape_dependencies_handles != [] do
+          ShapeCache.Storage.set_move_positions!(move_positions, state.storage)
+        end
+
+        {:ok, state}
+
+      :error ->
+        :error
+    end
+  end
+
+  defp do_subscribe_to_materializers(state) do
+    Enum.reduce_while(state.shape.shape_dependencies_handles, {:ok, state}, fn shape_handle,
+                                                                               {:ok, state} ->
       name = Materializer.name(state.stack_id, shape_handle)
 
       with pid when is_pid(pid) <- GenServer.whereis(name),
@@ -1242,9 +1319,19 @@ defmodule Electric.Shapes.Consumer do
           tag: {:dependency_materializer_down, shape_handle}
         )
 
-        Materializer.subscribe(pid)
+        from_lsn = Map.get(state.move_positions, shape_handle)
+        {:ok, seed_view, applied_offset} = Materializer.subscribe(pid, from_lsn)
 
-        true
+        move_positions =
+          Map.put_new(state.move_positions, shape_handle, applied_offset)
+
+        state = %{
+          state
+          | dep_seed_views: Map.put(state.dep_seed_views, shape_handle, seed_view),
+            move_positions: move_positions
+        }
+
+        {:cont, {:ok, state}}
       else
         _ ->
           Logger.warning(
@@ -1253,7 +1340,7 @@ defmodule Electric.Shapes.Consumer do
             state_shape_handle: state.shape_handle
           )
 
-          false
+          {:halt, :error}
       end
     end)
   end
