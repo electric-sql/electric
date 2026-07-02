@@ -86,23 +86,36 @@ publishes a higher frontier (monotonic heal) or a crash-recovery exposes the fro
 Contract-consistent (the append never acked), but operators reading `Stream-Next-Offset`
 may see it hold still despite durable bytes existing past it on a quiet stream.
 
-## Residual gap (unfixed, edge): WAL-quiet streams have no torn-tail proof after power loss
+## Finding 4 (fixed): WAL-quiet streams had no torn-tail proof after power loss
 
-For a stream with **zero surviving WAL records and no persisted-tails entry** (nothing
-acked since the current WAL era began), recovery never reconciles it — the sidecar pass
-trusts `tail = file_base + file size`. Under real power loss an _unacked_ in-flight
-append's data-file bytes can persist torn/zeroed (size metadata committed, data pages not,
-WAL record torn), and boot then exposes that torn fragment to readers — the C1 shape, for
-streams whose durable-boundary proof was recycled or never recorded. Requires power loss
-(not just process crash) plus a specific flush interleaving; no acked data is at risk.
-Possible fixes: record a durable tail for a stream at first-append-of-era (hot-path cost),
-or an fsync'd tail marker in the sidecar on close/idle. Not addressed in this pass; the
-simulator's fault injector deliberately stays within the provable model, so this gap is
-documented rather than asserted.
+Initially documented as a theoretical residual gap, then **confirmed by the 1000-seed
+hunt** (seed 20230, gen 1): a stream created after the last checkpoint whose only append
+was in-flight at the crash. Power loss tore the append's WAL record (never fdatasync'd —
+nothing acked) while the data file kept a torn prefix of its bytes. Recovery had **no
+truncation proof** — zero surviving WAL records, no checkpoint `tails` entry — so the
+sidecar pass trusted `tail = file_base + file size` and exposed the torn fragment (615
+bytes of a partial record) to readers: exactly the C1 torn-tail shape the WAL exists to
+prevent, on the one class of stream the existing proof chain missed. No acked data was at
+risk, but torn/garbage bytes (including torn JSON) became reader-visible.
+
+**Fix:** the `.meta` sidecar now persists a `durable_tail` proof, captured from
+`Shared.durable_tail` (which only ever advances post-fsync, so any captured value is
+honest). It rides along on writes that already happen — fsynced at create/close,
+refreshed by the checkpoint's meta flush and by recovery's reconcile — **zero new
+hot-path fsyncs**. Recovery seeds every sidecar-recovered stream's frontier with
+`max(meta proof, checkpoint tails, replayed ends)` and truncates anything past it; a
+fast path skips streams whose file already sits exactly at their frontier, so 1M-stream
+boots stay free of extra I/O. Recovery durably re-persists the proof before
+`reset_after_recovery` wipes the WAL + tails file (else the next boot's seed would
+regress below a durable frontier it can no longer re-replay). Old sidecars without the
+field keep the previous trust-the-file-size behavior (`serde` default), converting to
+proven on their next natural meta write.
+Regression test: `e2e_wal_quiet_stream_torn_unacked_tail_truncated`.
 
 ## Simulation results
 
-- Pre-fix: seed 89837 (the first default seed) hit Finding 1 in generation 1.
+- Pre-fix: seed 89837 (the first default seed) hit Finding 1 in generation 1; seed 20230
+  hit Finding 4 in generation 1 of the first 1000-seed hunt.
 - Post-fix: 4 default smoke seeds + 50-seed and 1000-seed hunts (4 generations × 150 steps
   each, 1–3 shards, 32 KiB segments to force rolls/recycles) pass with faults enabled
   (data-file truncate/scribble/zero within the un-fsynced region; WAL suffix zero/scribble

@@ -799,6 +799,15 @@ async fn strict_created_dir_reopens_wal_only_without_data_loss() {
             .await
             .unwrap()
             .unwrap();
+        // A strict-era server predates the `durable_tail` sidecar proof — strip
+        // the field the CURRENT writer emitted so the sidecar is byte-faithful
+        // to what an old deployment left behind (recovery must fall back to
+        // trusting the file size for such sidecars).
+        let meta_path = crate::store::meta_path(&st.file_path);
+        let mut v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&meta_path).unwrap()).unwrap();
+        v.as_object_mut().unwrap().remove("durable_tail");
+        std::fs::write(&meta_path, serde_json::to_vec(&v).unwrap()).unwrap();
     }
     // Remove any wal/ subtree — a strict-era dir has none.
     std::fs::remove_dir_all(dir.join("wal")).ok();
@@ -939,6 +948,102 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
         "post-checkpoint acked records recover from the retained (recycle-survivor) segments"
     );
     assert_eq!(got, expected, "recovered bytes byte-identical");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7c) WAL-QUIET stream: torn unacked tail truncated via the sidecar proof
+// ===========================================================================
+
+/// A stream with NO durable WAL record and NO checkpoint `tails` entry (created
+/// after the last checkpoint; its only append was in-flight at the crash) must
+/// still have its torn, never-acked page-cache tail truncated on recovery.
+///
+/// Regression (sim seed 20230): with the WAL bytes for the in-flight append
+/// torn by power loss and its data-file bytes partially persisted, recovery had
+/// NO truncation proof for the stream — the sidecar pass trusted
+/// `tail = file size` and exposed the torn fragment to readers (the exact C1
+/// shape the WAL exists to prevent). The sidecar now persists a `durable_tail`
+/// proof (fsynced at create/close, refreshed at checkpoint + recovery), and
+/// recovery seeds every stream's frontier from it.
+#[tokio::test]
+async fn e2e_wal_quiet_stream_torn_unacked_tail_truncated() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("quiet-torn");
+
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
+
+    // An earlier checkpointed stream so the shard's tails file is non-empty
+    // (proves the fix is not just "empty tails == reconcile everything").
+    create_stream(&h.store, "older", OCTET).await;
+    append_acked(&h.store, "older", OCTET, b"older-rec|").await;
+    h.walset.shards()[0].checkpoint().await.unwrap();
+
+    // The WAL-quiet stream: created AFTER the checkpoint, never acked an append.
+    create_stream(&h.store, "fresh", OCTET).await;
+
+    // Its only append is in-flight at the crash: bytes reached the data file's
+    // page cache and the WAL staging buffer, but the committer never fsync'd
+    // (stop it first), so no ack was ever released.
+    h.stop_committers();
+    let st = h.store.get("fresh").unwrap();
+    let torn: &[u8] = b"TORN-IN-FLIGHT-NEVER-ACKED";
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new().append(true).open(&st.file_path).unwrap();
+        f.write_all(torn).unwrap();
+        f.sync_all().unwrap(); // even fully-persisted: still un-acked, must go
+    }
+    let shard = h.walset.shard_for(st.id).clone();
+    shard
+        .reserve_and_stage(crate::wal::codec::RecordKind::Append, st.id, 0, torn)
+        .unwrap();
+    // Power loss tears the staged (never-fdatasync'd) WAL record: zero it out.
+    // Everything at/above this record was never covered by an ack.
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let seg = crate::wal::segment::seg_path(&dir.join("wal").join("0"), 1);
+        let len = std::fs::metadata(&seg).unwrap().len();
+        let mut f = std::fs::OpenOptions::new().write(true).open(&seg).unwrap();
+        // The quiet stream's record is the LAST staged record; zeroing the whole
+        // segment suffix past the durable prefix models its loss. Find the
+        // offset by decoding up to the first record for `st.id`.
+        let bytes = std::fs::read(&seg).unwrap();
+        let mut off = 0usize;
+        while let crate::wal::codec::Decoded::Record { stream_id, total, .. } =
+            crate::wal::codec::decode_at(&bytes, off)
+        {
+            if stream_id == st.id {
+                break;
+            }
+            off += total;
+        }
+        f.seek(SeekFrom::Start(off as u64)).unwrap();
+        f.write_all(&vec![0u8; (len as usize) - off]).unwrap();
+        f.sync_all().unwrap();
+    }
+
+    drop(st);
+    let store = h.store;
+    let walset = h.walset;
+    drop(store);
+    drop(walset);
+
+    // Reopen: recovery must truncate the torn tail even though the stream has
+    // zero surviving WAL records and no tails entry — the sidecar's durable_tail
+    // proof (0, persisted at create) is the seed.
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    let got = stream_file_bytes(&h2.store, "fresh");
+    assert_eq!(
+        got,
+        b"",
+        "torn un-acked tail truncated on a WAL-quiet stream (sidecar durable_tail proof)"
+    );
+    let st2 = h2.store.get("fresh").unwrap();
+    assert_eq!(st2.tail().bytes, 0, "tail reconciled to the durable frontier (0)");
+    // The checkpointed stream is untouched.
+    assert_eq!(stream_file_bytes(&h2.store, "older"), b"older-rec|");
     h2.crash();
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -177,6 +177,11 @@ pub struct StreamState {
     pub appender: AsyncMutex<Appender>,
     pub shared: RwLock<Shared>,
     pub tail_tx: watch::Sender<Tail>,
+    /// The sidecar's persisted `durable_tail` as read at BOOT (None for sidecars
+    /// written by older servers). Consumed once by WAL recovery as this stream's
+    /// truncation-proof seed; never updated afterwards (the live value lives in
+    /// `Shared.durable_tail` and is re-captured on every meta write).
+    pub boot_meta_durable_tail: Option<u64>,
     /// True while a debounced meta flush is pending.
     pub meta_dirty: AtomicBool,
     /// **Lock-free WAL dirty-set marker** (Tier-1a). The shard's checkpoint epoch
@@ -604,6 +609,7 @@ impl Store {
             file_path: data_path.clone(),
             base_offset: meta.base_offset,
             parent,
+            boot_meta_durable_tail: meta.durable_tail,
             appender: AsyncMutex::new(Appender { file: file.clone(), written }),
             shared: RwLock::new(Shared {
                 tail,
@@ -778,6 +784,9 @@ impl Store {
             file_path,
             base_offset,
             parent: parent.clone(),
+            // Live-created stream: the durable frontier IS the initial tail (the
+            // create meta below persists it). Only consulted by boot recovery.
+            boot_meta_durable_tail: Some(base_offset),
             appender: AsyncMutex::new(Appender { file: file.clone(), written: 0 }),
             shared: RwLock::new(Shared {
                 tail: base_offset,
@@ -991,6 +1000,16 @@ pub struct Meta {
     /// once the rewrite + swap completes durably.
     #[serde(default)]
     pub pending_compaction: Option<PendingCompaction>,
+    /// The stream's durable frontier (logical bytes) when this sidecar was
+    /// written — WAL recovery's per-stream truncation proof for streams with NO
+    /// retained WAL record and NO checkpoint `tails` entry (e.g. a stream
+    /// created after the last checkpoint whose only in-flight append was torn
+    /// by power loss). Only ever holds values that were durable at capture
+    /// time; a lagging (lazily-flushed) value is safe because recovery takes
+    /// the max of every proof. `None` in sidecars written by older servers →
+    /// recovery falls back to trusting the file size (the pre-field behavior).
+    #[serde(default)]
+    pub durable_tail: Option<u64>,
 }
 
 /// Serialized form of a sealed-segment manifest entry.
@@ -1059,6 +1078,7 @@ impl Meta {
             sealed_offset: st.tier.manifest.lock().unwrap().sealed_offset,
             file_base: Some(s.file_base),
             pending_compaction: *st.compaction.lock().unwrap(),
+            durable_tail: Some(s.durable_tail),
         }
     }
 }
