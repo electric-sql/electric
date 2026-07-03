@@ -8,3 +8,5 @@
 # the cross-server suite may still drop these here when run against this checkout:
 /bench/
 benchmark-results.json
+# deploy/replicated/local-cluster.sh state (data dirs, logs, pids)
+/.local-cluster/

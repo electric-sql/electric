@@ -24,6 +24,15 @@ dashmap = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 httparse = "1"
+
+# Consensus for `--durability replicated` (REPLICATION.md): openraft (Raft),
+# actively maintained and production-proven (Databend, CnosDB). Replaced
+# OmniPaxos after our deterministic simulation caught an unpublished-fix
+# consensus safety bug in the last released version and the project proved
+# unmaintained (see REPLICATION.md "History: why openraft").
+openraft = { version = "0.9.21", features = ["serde", "storage-v2"] }
+# Peer-message framing for the replication mesh.
+bincode = "1"
 libc = "0.2"
 percent-encoding = "2"
 

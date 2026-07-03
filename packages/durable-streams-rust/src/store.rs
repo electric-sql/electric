@@ -32,7 +32,9 @@ pub struct ProducerState {
     pub last_seq: u64,
 }
 
-#[derive(Clone, Debug)]
+// Serialize/Deserialize: the config travels inside replicated `LogOp::Create`
+// entries (src/replication/entry.rs).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct StreamConfig {
     pub content_type: String,
     pub ttl_seconds: Option<u64>,
@@ -691,6 +693,22 @@ impl Store {
         self.delete_impl(st, true)
     }
 
+    /// Drop EVERY stream — in-memory state and on-disk files — regardless of
+    /// fork refcounts. Used by replicated-mode snapshot install (the incoming
+    /// manifest replaces the whole store) and by replicated-mode boot (the
+    /// consensus log/snapshot is the source of truth; stale local files must
+    /// not double-apply). Readers racing a wipe see 404s, matching a follower
+    /// that is legitimately behind.
+    pub fn wipe_all(&self) -> std::io::Result<()> {
+        self.streams.clear();
+        let dir = self.data_dir.join("streams");
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let _ = std::fs::remove_file(entry.path());
+        }
+        Ok(())
+    }
+
     fn delete_impl(&self, st: &Arc<StreamState>, durable: bool) -> std::io::Result<()> {
         let soft = {
             let mut s = st.shared.write().unwrap();
@@ -771,6 +789,22 @@ impl Store {
         config: StreamConfig,
         parent: Option<Arc<StreamState>>,
         base_offset: u64,
+    ) -> std::io::Result<CreateResult> {
+        self.create_with_meta_durability(path, config, parent, base_offset, true)
+    }
+
+    /// `create` with the meta-sidecar fsync optional. The replicated applier
+    /// passes `durable_meta: false`: the decided log entry is the create's
+    /// durability there, and the fsync would serialize every stream creation
+    /// through the single applier task (REPLICATION.md). The sidecar is still
+    /// written (non-durably) so local tooling sees it.
+    pub fn create_with_meta_durability(
+        &self,
+        path: &str,
+        config: StreamConfig,
+        parent: Option<Arc<StreamState>>,
+        base_offset: u64,
+        durable_meta: bool,
     ) -> std::io::Result<CreateResult> {
         use dashmap::mapref::entry::Entry;
         // Fast path: existing stream → config comparison.
@@ -860,9 +894,9 @@ impl Store {
                 // rejected/raced creates never leak a refcount on the source.
                 if let Some(p) = &parent {
                     p.shared.write().unwrap().ref_count += 1;
-                    write_meta_sync(p, true)?;
+                    write_meta_sync(p, durable_meta)?;
                 }
-                write_meta_sync(&state, true)?;
+                write_meta_sync(&state, durable_meta)?;
                 Ok(CreateResult::Created(state))
             }
         }
