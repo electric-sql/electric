@@ -853,8 +853,7 @@ dependencies = [
 [[package]]
 name = "omnipaxos"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8b6871f667e9a1045996d5a42d8fec5c8b9aaac66ba22ccb9664707a86524bf"
+source = "git+https://github.com/haraldng/omnipaxos.git?rev=bd234be231626ebb552a8e2f1825901aa0d19ba7#bd234be231626ebb552a8e2f1825901aa0d19ba7"
 dependencies = [
  "serde",
 ]

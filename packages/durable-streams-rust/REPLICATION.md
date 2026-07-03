@@ -94,6 +94,16 @@ Consequences:
   resolves the client's response with the outcome the applier computed
   (offset, duplicate, conflict, …), so responses are identical to the
   single-node modes.
+- **Applies are sharded.** Decided entries dispatch to a small pool of
+  applier tasks (stream path → shard; per-stream log order preserved,
+  fork-creates barrier and apply inline). Benchmarks showed a single inline
+  applier lets one slow store write (an fs-journal stall) block consensus and
+  every other stream's ack — 100–450 ms tails. Two corollaries: dirty meta
+  sidecars are swept per shard every ~3 s instead of rewritten per append,
+  and trim is only safe because entries are cloned out of the consensus log
+  at dispatch. A Compaction message is never handled before the dispatch
+  cursor catches up (trim-vs-apply race guard — found by the DST-style
+  reasoning below, visible in production as leaked acks).
 
 ### The consensus core
 
@@ -233,6 +243,59 @@ again (fail-over) → verify byte-identical streams on the survivors.
 - **What to monitor**: `decided_idx` advancing on all nodes; a node whose
   `decided_idx` stalls while others advance has lost its mesh links.
 
+## Why the omnipaxos dependency is a pinned git rev
+
+crates.io `omnipaxos 0.2.2` (Nov 2023, the latest published release) has a
+consensus **safety bug** that our deterministic simulation reproduces in
+seconds: a follower's cached Promise message is not cleared when the new
+leader syncs it (AcceptSync), so a Promise resend after a partition + leader
+change feeds the new leader stale log state — the decided logs diverge and an
+**acked entry disappears on the new leader**. Fixed upstream post-release
+(`e6ddc52 "Clear cached_promise_message when handling AcceptSync"`, Jan 2024)
+but never published to crates.io. We pin upstream `main`
+(`bd234be2…`), which also carries two leader-election fixes (#154, #156).
+`replication/sim_tests.rs` fails within ~10 seeds on 0.2.2 and passes 200+
+seeds on the pinned rev.
+
+## Validation
+
+- `replication/tests.rs` — 3-node in-process clusters over real loopback TCP:
+  convergence, follower proposals, replicated producer dedup, close/delete,
+  forks.
+- `replication/sim_tests.rs` — **deterministic simulation with fault
+  injection**: seeded message drops, partition (delay) windows, crash-stop of
+  any one node (leader included), elections, resends, and active trimming,
+  against real stores through the real apply functions. Invariants: acked
+  appends survive on every live node, exactly once, in producer-seq order;
+  replicas byte-identical; bounded-time quiescence; compaction actually ran.
+  `DS_REPL_SIM_SEEDS=200 cargo test replication_dst` runs 200 seeds in ~4 s;
+  reproduce a failure with `DS_REPL_SIM_SEED0=<seed>`.
+  The fault model is deliberately exactly the production mesh's contract:
+  per-link FIFO with loss — no reordering/duplication, which TCP excludes and
+  OmniPaxos's session-numbered protocol does not tolerate.
+- `deploy/replicated/smoke.sh` — end-to-end HTTP incl. leader kill-over.
+
+## Benchmarks (local 3-node cluster, 10-core M-series, 2026-07-03)
+
+All three replicas + the ds-bench client share one machine, so absolute
+numbers are conservative; the memory-mode column is the same box's ceiling.
+ds-bench `multi-stream`, 200 streams, `--repl-trim-secs 5`.
+
+| payload | conns | replicated                        | single-node `memory` | notes                              |
+| ------- | ----- | --------------------------------- | -------------------- | ---------------------------------- |
+| 256 B   | 32    | 40k ops/s, p50 0.7 ms, p99 2.1 ms | 96k ops/s, p50 0.28  |                                    |
+| 256 B   | 128   | 52k ops/s, p50 1.9 ms, p99 9 ms   | 100k ops/s           | replicated saturates ≈ 55k/s       |
+| 16 KB   | 32    | 10.7k ops/s (175 MB/s), p99 18 ms | 35k ops/s (580 MB/s) | byte copies dominate — see roadmap |
+
+Sustained (5 min, open loop): 256 B × 22.6k/s — RSS flat at 77 MB, log window
+sawtooths ≤ 115k entries (= rate × trim cadence), zero ack timeouts. 16 KB at
+saturation — RSS sawtooths 0.2–0.6 GB (= window × payload), still bounded,
+zero timeouts, all replicas byte-identical. **Sizing rule: consensus-log RSS ≈
+append bytes/s × (`--repl-trim-secs` + decide lag); at large payloads set
+`--repl-trim-secs 1`.** Watch `REPL_STATS` (`--repl-stats N`): `window` flat ⇒
+trim keeping up; `apply_max_us` large with idle CPU ⇒ store stalls;
+`timeouts` climbing ⇒ dropped forwards or a dead quorum.
+
 ## Roadmap
 
 - **Snapshot / state transfer** — stream-file shipping so a fresh or restarted
@@ -244,4 +307,9 @@ again (fail-over) → verify byte-identical streams on the survivors.
 - **Reconfiguration** — OmniPaxos supports membership change (StopSign); wire
   it to an admin endpoint to replace nodes without full restart.
 - **Bench integration** — a `replicated` deploy mode in ds-bench
-  (`scripts/bench`) to put numbers on the wal / memory / replicated triangle.
+  (`scripts/bench`) to put numbers on the wal / memory / replicated triangle
+  on real (separate-machine) hardware.
+- **Large-payload copy reduction** — a 16 KB append is copied ~4× per node
+  (propose → log → decided-read → apply, plus per-peer serialization); at 256 B
+  this is noise, at 16 KB it is the throughput gap vs memory mode. `Arc<[u8]>`
+  payloads + `serde_bytes` would remove most of it.

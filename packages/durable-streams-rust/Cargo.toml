@@ -29,7 +29,16 @@ httparse = "1"
 # Paxos) with serde-serializable messages for our TCP mesh; batch_accept
 # coalesces outstanding proposals into single Accept rounds (group commit).
 # Default features are OFF to skip the derive-macros dep (we impl Entry by hand).
-omnipaxos = { version = "0.2.2", default-features = false, features = ["batch_accept", "serde"] }
+#
+# PINNED TO A GIT REV, deliberately: crates.io 0.2.2 (Nov 2023) has a consensus
+# SAFETY bug our deterministic simulation (replication/sim_tests.rs) reproduces
+# — a follower's cached Promise message is not cleared on AcceptSync, so a
+# resend after a partition + leader change feeds the new leader stale log
+# state and the decided logs diverge (an acked entry vanishes on the new
+# leader). Fixed upstream post-release in e6ddc52 ("Clear
+# cached_promise_message when handling AcceptSync"), never published. The rev
+# is upstream main incl. that fix + two leader-election fixes (#154, #156).
+omnipaxos = { git = "https://github.com/haraldng/omnipaxos.git", rev = "bd234be231626ebb552a8e2f1825901aa0d19ba7", default-features = false, features = ["serde"] }
 # Peer-message framing for the replication mesh.
 bincode = "1"
 libc = "0.2"

@@ -15,6 +15,8 @@ pub mod entry;
 mod mem_storage;
 mod net;
 #[cfg(test)]
+mod sim_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::{Arc, OnceLock};

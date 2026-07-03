@@ -243,7 +243,9 @@ async fn run(
     trim.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let trim_enabled = trim_secs > 0;
     // The applied cursor: everything below is already folded into the store.
-    let mut applied: u64 = 0;
+    let mut applied: usize = 0;
+    // Reused outgoing-message buffer (upstream API takes a buffer to fill).
+    let mut out_buf: Vec<omnipaxos::messages::Message<ReplEntry>> = Vec::new();
 
     loop {
         tokio::select! {
@@ -293,20 +295,22 @@ async fn run(
         dispatch_new_decided(&mut op, &store, &handle, &appliers, &mut applied).await;
         handle
             .compacted
-            .store(op.get_compacted_idx(), Ordering::Relaxed);
-        handle
-            .leader
-            .store(op.get_current_leader().unwrap_or(0), Ordering::Relaxed);
+            .store(op.get_compacted_idx() as u64, Ordering::Relaxed);
+        handle.leader.store(
+            op.get_current_leader().map(|(pid, _)| pid).unwrap_or(0),
+            Ordering::Relaxed,
+        );
 
-        for msg in op.outgoing_messages() {
+        op.take_outgoing_messages(&mut out_buf);
+        for msg in out_buf.drain(..) {
             mesh.send(msg);
         }
     }
 }
 
 /// True for messages that can compact (trim) the log — see the race guard in
-/// `run()`.
-fn is_compaction(msg: &omnipaxos::messages::Message<ReplEntry>) -> bool {
+/// `run()`. pub(super): the DST harness replicates the same guard.
+pub(super) fn is_compaction(msg: &omnipaxos::messages::Message<ReplEntry>) -> bool {
     use omnipaxos::messages::sequence_paxos::PaxosMsg;
     use omnipaxos::messages::Message;
     matches!(
@@ -429,7 +433,7 @@ async fn dispatch_new_decided(
     store: &Arc<Store>,
     handle: &Arc<ReplHandle>,
     appliers: &[mpsc::Sender<ShardMsg>],
-    applied: &mut u64,
+    applied: &mut usize,
 ) {
     let decided_idx = op.get_decided_idx();
     if decided_idx > *applied {
@@ -458,7 +462,7 @@ async fn dispatch_new_decided(
             }
         }
         *applied = decided_idx;
-        handle.decided.store(decided_idx, Ordering::Relaxed);
+        handle.decided.store(decided_idx as u64, Ordering::Relaxed);
     }
 }
 
