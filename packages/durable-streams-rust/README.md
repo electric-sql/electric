@@ -74,7 +74,7 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 
 | Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                                            |
 | --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--durability`        | `wal`     | `wal` (default) — durable group-commit `fdatasync`; an append acks only after its record is in the sharded WAL. `memory` (Linux-only) — no WAL; binary appends use zero-copy `socket→file` splice, ack on the page-cache write; **NOT locally crash-durable** — durability is delegated to (future) replication. Exits 2 on non-Linux. |
+| `--durability`        | `wal`     | `wal` (default) — durable group-commit `fdatasync`; an append acks only after its record is in the sharded WAL. `memory` — no WAL, no fsync; the same buffered append path with the WAL stage/wait skipped, ack on the page-cache write; **NOT locally crash-durable** — durability is delegated to (future) replication.             |
 | `--wal-shards`        | CPU cores | (`wal` mode) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                                   |
 | `--wal-segment-bytes` | `128 MiB` | (`wal` mode) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                                         |
 
@@ -124,7 +124,7 @@ configurations CI guards.
 | `wal-default`             | _(none)_                   | WAL durability, buffered append, resident cache off (Linux) | all      |
 | `wal-resident-cache`      | `--tail-cache-bytes 65536` | WAL + resident tail cache on                                | all      |
 | `wal-read-offload-always` | `--read-offload always`    | reads served on the blocking pool                           | Linux    |
-| `memory`                  | `--durability memory`      | no WAL; zero-copy socket→file append; page-cache ack        | Linux    |
+| `memory`                  | `--durability memory`      | no WAL; buffered append; page-cache ack                     | all      |
 
 Run one configuration's conformance suite locally:
 
@@ -132,8 +132,7 @@ Run one configuration's conformance suite locally:
 RUST_SERVER_ARGS="--durability memory" pnpm vitest run --project server-rust
 ```
 
-(The Linux-only configs need a Linux host — e.g. Docker — because `memory`
-exits 2 elsewhere.)
+(The Linux-only config needs a Linux host — e.g. Docker.)
 
 ## What it implements
 
@@ -149,7 +148,7 @@ In `memory` mode there is no WAL and no WAL replay. Recovery is a sidecar pass: 
 - **Sharded WAL durability** — in `wal` mode (the default), appends are acked only after their record is durable in the sharded write-ahead log. One group-commit committer per shard batches many streams' appends into a single `fdatasync` (`F_FULLFSYNC` on macOS), minimizing fsync operations regardless of stream cardinality. Per-stream files are the read view; checkpoint periodically fsyncs them and recycles WAL segments. See [Durability](ARCHITECTURE.md#durability).
 - **Per-stream serialization, lock-free reads** — one async mutex per stream orders appends; reads take a brief snapshot and do positioned `pread`s, never blocking the writer.
 - **watch-channel wakeups** drive long-poll and SSE subscribers, so there's no polling loop.
-- **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte) and binary appends with `splice(2)`; elsewhere it falls back to positioned reads.
+- **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte); elsewhere it falls back to positioned reads.
 
 ## Tiered storage (cold offload)
 
