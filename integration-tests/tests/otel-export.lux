@@ -10,7 +10,7 @@
 
 [invoke setup_pg]
 
-[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s ELECTRIC_OTEL_SAMPLING_RATIO=1.0 ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
+[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s ELECTRIC_OTEL_SAMPLING_RATIO=1.0 ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true ELECTRIC_LONG_POLL_TIMEOUT=1000 DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
 
 # Spawn a process containing off-heap binary references and ensure it's in the top 5 by memory footprint.
 [shell electric]
@@ -62,20 +62,11 @@
   [global latest_offset=$1]
   ??"value":{"val":"3"}
 
-  # A live request at the current offset receives no new data, so it long-polls
-  # until it times out and returns an empty (no-change) up-to-date 200 response
-  # (this is the only path that sets ot_is_empty_response). Its Plug_shape_get root
-  # span carries shape_req.is_empty_response=true and must be tail-dropped
-  # (ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true is set above), so it must never reach
-  # the collector. Verified below. The long-poll timeout is 20s by default, so allow
-  # ample time for the response.
-  [timeout 60]
+  # A live request with no new data long-polls until it times out and returns an
+  # empty up-to-date response — the only path that sets is_empty_response.
   [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=$latest_offset&live"]
   ??HTTP/1.1 200 OK
-  # Body is the up-to-date control only (no data element) — confirms the empty
-  # no-change path was taken, so the drop assertion below is not vacuous.
   ??[{"headers":{"control":"up-to-date"
-  [timeout]
 
 [sleep 10]
 
@@ -141,12 +132,10 @@
   # (ELECTRIC_OTEL_SAMPLING_RATIO=1.0); it is sampled at 1% by default.
   [invoke grep_otel_collector_output "Span pg_txn\.replication_client\.transaction_received .*total_processing_time=[0-9]+"]
 
-  # A data (non-empty) shape-GET response is exported as a Plug_shape_get root span
-  # flagged shape_req.is_empty_response=false.
+  # Verify that a span is exported for a non-empty shape response.
   [invoke grep_otel_collector_output "Span Plug_shape_get .*shape_req\.is_empty_response=false"]
 
-  # The empty/up-to-date long-poll response above was tail-dropped: no Plug_shape_get
-  # span carrying shape_req.is_empty_response=true is ever exported to the collector.
+  # Verify that no span is exported for an empty shape response.
   !test $(docker logs $otel_collector_container_name 2>&1 | python3 $(realpath ../support_files/normalize-otel-output.py) | grep -c "Span Plug_shape_get .*shape_req\.is_empty_response=true") -eq 0 && echo EMPTY_RESPONSE_SPAN_DROPPED
   ??EMPTY_RESPONSE_SPAN_DROPPED
 

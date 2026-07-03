@@ -3,14 +3,11 @@ defmodule Electric.Telemetry.EmptyResponseSampler do
   Decides the `SampleRate` weight for a shape-GET root span, tail-dropping the spans of
   empty/up-to-date responses to cut trace volume.
 
-  The vast majority of shape-GET responses are empty (up-to-date, incl. long-poll
-  timeouts) and carry no useful trace detail, yet they dominate exported span volume.
   When the drop is enabled, such spans are stamped with `SampleRate = 0`, which
   `Electric.Telemetry.OpenTelemetry.EmptyResponseDropProcessor` recognises as a sentinel
   to drop the span before it is queued for export.
 
-  The decision is a pure function so it can be unit-tested in isolation. Ordering mirrors
-  the worker's `traceSampleRate` (see stratovolt#1611):
+  The decision, in order:
 
     1. Error responses (`status >= 500`) are kept and stamped with `SampleRate = 1` —
        keep-on-error wins and is checked first.
@@ -18,10 +15,6 @@ defmodule Electric.Telemetry.EmptyResponseSampler do
        enabled.
     3. Everything else is left unchanged (`:unchanged`), preserving whatever base
        `SampleRate` the upstream rate hint produced.
-
-  Ratio-based sampling of empties is expected to live on the cloud worker side and reach
-  the origin via the tracestate rate hint, so the origin only needs an all-or-nothing
-  toggle rather than its own ratio knob.
   """
 
   @drop_sample_rate 0

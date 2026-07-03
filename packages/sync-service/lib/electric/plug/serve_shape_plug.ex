@@ -520,9 +520,6 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
   end
 
-  # The `SampleRate` span attribute, combining the upstream rate hint with the
-  # empty-response tail-drop decision. The drop overrides the base rate with the
-  # `SampleRate = 0` sentinel for empty, non-SSE responses when enabled.
   defp sample_rate_attrs(conn) do
     base_attrs = TraceContextPlug.sample_rate_attrs(conn, conn.status)
     trace_attrs = response_trace_attrs(conn)

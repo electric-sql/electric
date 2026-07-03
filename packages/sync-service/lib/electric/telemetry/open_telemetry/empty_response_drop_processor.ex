@@ -7,11 +7,10 @@ if Electric.telemetry_enabled?() do
     An OTel span processor that tail-drops spans stamped with the `SampleRate = 0`
     sentinel by `Electric.Telemetry.EmptyResponseSampler`.
 
-    The SDK folds `on_end/2` over the processor list with a short-circuiting `andalso`
-    (`Bool andalso P:on_end(Span, Config) =:= true`), so a processor returning anything
-    other than `true` before `otel_batch_processor` prevents the batch processor from ever
-    seeing the span, and it is never queued for export. This processor is therefore
-    registered first (see `Electric.Telemetry.OpenTelemetry.Config`).
+    `on_end/2` returns `:dropped` for such spans. The SDK stops running the remaining
+    processors for a span as soon as one declines it, so registering this processor
+    ahead of the exporting processors (see `Electric.Telemetry.OpenTelemetry.Config`)
+    keeps a dropped span from ever being queued for export.
 
     Only empty/up-to-date shape-GET response spans carry `SampleRate = 0`; every other span
     passes through unchanged.

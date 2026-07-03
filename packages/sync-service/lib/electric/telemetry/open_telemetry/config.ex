@@ -38,8 +38,8 @@ defmodule Electric.Telemetry.OpenTelemetry.Config do
       resource: otel_resource,
       processors:
         [
-          # Runs first so its `:dropped` return short-circuits the SDK's `andalso` fold
-          # before the batch processor queues the span for export.
+          # Must run before the exporting processors so that a span it drops is never
+          # queued for export.
           {Electric.Telemetry.OpenTelemetry.EmptyResponseDropProcessor, %{}},
           otel_batch_processor,
           otel_simple_processor

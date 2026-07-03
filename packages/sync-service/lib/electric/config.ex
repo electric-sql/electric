@@ -85,8 +85,7 @@ defmodule Electric.Config do
     otel_sampling_ratio: 0.01,
     metrics_sampling_ratio: 1,
     # When true, the OTel spans of empty/up-to-date shape-GET responses are tail-dropped
-    # at export time to cut trace volume. Defaults to false (empties exported normally);
-    # set it true to enable the drop. See Electric.Telemetry.EmptyResponseSampler.
+    # at export time to cut trace volume. See Electric.Telemetry.EmptyResponseSampler.
     drop_empty_response_spans?: false,
     ## Memory
     # After this duration of inactivity, consumer processes will hibernate
