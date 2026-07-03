@@ -293,23 +293,36 @@ deterministic simulation that caught the bug above, lives in git history
 ## Benchmarks (local 3-node cluster, 10-core M-series, 2026-07-03)
 
 All three replicas + the ds-bench client share one machine, so absolute
-numbers are conservative; the memory-mode column is the same box's ceiling.
-ds-bench `multi-stream`, 200 streams, `--repl-trim-secs 5`.
+numbers are conservative; the memory-mode column is the same box's
+single-node ceiling. ds-bench `multi-stream` (closed loop, 200 streams) and
+`sustained` (open loop, 5 min). The omnipaxos column is the previous
+incarnation of this mode, same box, same workloads — kept for the record of
+the consensus-layer swap.
 
-| payload | conns | replicated                        | single-node `memory` | notes                              |
-| ------- | ----- | --------------------------------- | -------------------- | ---------------------------------- |
-| 256 B   | 32    | 40k ops/s, p50 0.7 ms, p99 2.1 ms | 96k ops/s, p50 0.28  |                                    |
-| 256 B   | 128   | 52k ops/s, p50 1.9 ms, p99 9 ms   | 100k ops/s           | replicated saturates ≈ 55k/s       |
-| 16 KB   | 32    | 10.7k ops/s (175 MB/s), p99 18 ms | 35k ops/s (580 MB/s) | byte copies dominate — see roadmap |
+Peak throughput (closed loop):
 
-Sustained (5 min, open loop): 256 B × 22.6k/s — RSS flat at 77 MB, log window
-sawtooths ≤ 115k entries (= rate × trim cadence), zero ack timeouts. 16 KB at
-saturation — RSS sawtooths 0.2–0.6 GB (= window × payload), still bounded,
-zero timeouts, all replicas byte-identical. **Sizing rule: consensus-log RSS ≈
-append bytes/s × (`--repl-trim-secs` + decide lag); at large payloads set
-`--repl-trim-secs 1`.** Watch `REPL_STATS` (`--repl-stats N`): `window` flat ⇒
-trim keeping up; `apply_max_us` large with idle CPU ⇒ store stalls;
-`timeouts` climbing ⇒ dropped forwards or a dead quorum.
+| workload         | openraft                               | omnipaxos (prev)        | single-node `memory` |
+| ---------------- | -------------------------------------- | ----------------------- | -------------------- |
+| 256 B, 32 conns  | 36.3k ops/s, p99 2.1 ms                | 40.3k ops/s, p99 2.1 ms | 96k ops/s            |
+| 256 B, 128 conns | 51.5k ops/s, p99 6.7 ms                | 52.5k ops/s, p99 9.2 ms | 100k ops/s           |
+| 16 KB, 32 conns  | **14.9k ops/s (244 MB/s), p99 5.7 ms** | 10.7k ops/s, p99 18 ms  | 35k ops/s            |
+
+Sustained (open loop, 5 min, zero ack timeouts, all replicas byte-identical):
+
+| workload           | openraft                               | omnipaxos (prev)                   |
+| ------------------ | -------------------------------------- | ---------------------------------- |
+| 256 B × 22k/s      | p99 13 ms, **RSS flat 20 MB**          | p99 19 ms, RSS flat 77 MB          |
+| 16 KB × saturation | 5.2k/s, p99 314 ms, **RSS 116–143 MB** | 4.4k/s, p99 502 ms, RSS 0.2–0.6 GB |
+
+Reading: peak small-payload throughput is within a few percent (−10% at low
+concurrency, −2% near saturation) with equal-or-better tails; large payloads
+are **+18–39% faster with 3–4× lower memory** — openraft's entry-count purge
+bounds the log at `--repl-snapshot-logs` entries regardless of rate, where
+the previous time-based trim held rate × seconds of payloads. **Sizing rule:
+log RSS ≈ `--repl-snapshot-logs` × payload size per node; lower the flag for
+large payloads.** Watch `REPL_STATS` (`--repl-stats N`): `window` bounded ⇒
+purge keeping up; `apply_max_us` large with idle CPU ⇒ store stalls;
+`timeouts` climbing ⇒ elections or a dead quorum.
 
 ## Roadmap
 
