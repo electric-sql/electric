@@ -2,17 +2,18 @@
 
 Tracking doc for the investigation into the write-throughput ceiling reported in
 `ds-bench/results/run-durable-pool2/FINDINGS.md` (server plateaus at ~80% CPU and
-then *declines* under more load — a ceiling set by the commit path, not compute).
+then _declines_ under more load — a ceiling set by the commit path, not compute).
 
 ## Hypothesis
 
 Sharding, group-commit, and the network reactor are **not isolated**: they are
 multiplexed over one shared work-stealing Tokio runtime, and each WAL shard is
-guarded by cross-thread blocking `std::sync::Mutex`es. So a "shard" is a *lock*,
-not a *core*. At saturation the cost is lock contention + committer scheduling +
+guarded by cross-thread blocking `std::sync::Mutex`es. So a "shard" is a _lock_,
+not a _core_. At saturation the cost is lock contention + committer scheduling +
 a durability-wakeup thundering herd, not CPU.
 
 Per-append contended state (all on the shard a stream hashes to):
+
 - `shard.dirty` Mutex + HashMap insert — **every append** (`register_dirty`).
 - `shard.inner` Mutex — **twice** per append (reserve + mark_written).
 - `durable_tx` watch — `publish_durable` wakes **every** parked waiter on the shard.
@@ -36,7 +37,7 @@ Added always-on, dependency-free contention telemetry (independent of the heavy
            dirty_wait_us=… dirty_wait_load=… waiters_woken_avg=…
   ```
 
-  `*_wait_load` = fraction of a core-second spent purely *waiting* on that lock
+  `*_wait_load` = fraction of a core-second spent purely _waiting_ on that lock
   (>1.0 ⇒ more than a whole core lost to parking on it).
 
 ## Phase 0 — local reproduction (DONE / caveated)
@@ -45,18 +46,20 @@ Added always-on, dependency-free contention telemetry (independent of the heavy
 pool client and prints throughput + CPU + steady-state `WAL_CONT`.
 
 **macOS caveats (why a Linux harness is also needed):**
+
 - `F_FULLFSYNC` is a true drive barrier (~tens of ms) and dominates the commit
   path, masking the lock. Added a **bench-only** `DS_BENCH_FAST_FSYNC` env
   (`src/store.rs`, `src/wal/segment.rs`) that uses plain `fsync` on macOS so a
   RAM-disk data dir gives cheap fsync (the Linux+NVMe regime). NOT durable; never
   set in production.
-- The 10-core dev box co-locates client + server, so the *absolute* throughput
+- The 10-core dev box co-locates client + server, so the _absolute_ throughput
   ceiling is confounded (a flat ~1600 ops/s independent of shards/connections).
   The **contention telemetry signals are valid** on macOS (use them for relative
   before/after of a change); the **throughput-ceiling** comparison must run on
   Linux with a tmpfs data dir and CPU isolation (`contention-repro-linux.sh`).
 
 Use a RAM disk for cheap fsync on macOS:
+
 ```
 DEV=$(hdiutil attach -nomount ram://6291456 | awk '{print $1}')
 diskutil erasevolume HFS+ dsram "$DEV"          # → /Volumes/dsram
@@ -68,11 +71,11 @@ TMPDIR=/Volumes/dsram scripts/contention-repro.sh --shards 1 --connections 256
 Reproduces the findings' signature — a hard throughput ceiling at **~80% CPU**
 (480–500 of 600), barely helped by more shards, with CPU left on the table:
 
-| shards | ops/s  | cpu%  | fsync/s | batch | inner_wait_load | waiters_woken |
-|--------|--------|-------|---------|-------|-----------------|---------------|
-| 1      | 45,543 | 482   | 6,113   | 7.5   | 0.02            | 25.8          |
-| 2      | 46,905 | 504   | 12,384  | 3.8   | 0.01            | 12.4          |
-| 6      | 48,825 | 495   | 24,177  | 2.0   | 0.01            | 5.2           |
+| shards | ops/s  | cpu% | fsync/s | batch | inner_wait_load | waiters_woken |
+| ------ | ------ | ---- | ------- | ----- | --------------- | ------------- |
+| 1      | 45,543 | 482  | 6,113   | 7.5   | 0.02            | 25.8          |
+| 2      | 46,905 | 504  | 12,384  | 3.8   | 0.01            | 12.4          |
+| 6      | 48,825 | 495  | 24,177  | 2.0   | 0.01            | 5.2           |
 
 Read: fsync is cheap (tmpfs), the inner lock is not yet the gate at 6 cores
 (`inner_wait_load`≈0.02), so the ceiling here is the **commit + durability-wakeup
@@ -84,6 +87,7 @@ are targeted below. (Numbers are this dev box; use deltas, not absolutes.)
 
 A change is good if it **lifts the Linux throughput ceiling** AND drives the
 contention metric it targets toward zero:
+
 - lock-free `register_dirty` → `dirty_wait_load` → ~0
 - atomic reserve → `inner_wait_load` drops
 - coalesced wakeups → `waiters_woken_avg` → ~1
@@ -97,6 +101,6 @@ contention metric it targets toward zero:
 - **T2a** dedicated committer thread(s) off the shared runtime / drop per-commit
   `spawn_blocking`.
 - **T2b** io_uring WAL writes + fsync (Linux).
-- **T3**  shared-nothing thread-per-core spike (shard→core, per-core epoll via
+- **T3** shared-nothing thread-per-core spike (shard→core, per-core epoll via
   `SO_REUSEPORT`, no cross-core lock; SPSC handoff for the pool client's
   all-shards-per-connection access pattern).
