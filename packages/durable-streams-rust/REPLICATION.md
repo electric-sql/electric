@@ -7,7 +7,8 @@ fsync leaves the hot path entirely — durability comes from independent failure
 domains, exactly like a Kafka produce with `acks=all` against an in-memory
 (page-cache) log.
 
-The consensus layer is **[OmniPaxos]** (`omnipaxos` 0.2.2, Apache-2.0) — a
+The consensus layer is **[OmniPaxos]** (Apache-2.0, pinned to an upstream git
+rev — [see why](#why-the-omnipaxos-dependency-is-a-pinned-git-rev)) — a
 Sequence Paxos implementation from KTH purpose-built for replicated logs, with
 leader election (Ballot Leader Election), reconfiguration support, and a
 bring-your-own-network design that lets us keep our own TCP mesh.
@@ -122,19 +123,20 @@ running in a dedicated tokio task:
   automatic reconnect, length-prefixed bincode frames. Lost messages are
   reissued by OmniPaxos's resend timer, so links can drop without correctness
   impact.
-- **Batching**: OmniPaxos's `batch_accept` (on by default) coalesces all
-  outstanding entries into single Accept messages, so the effective batch size
-  scales with load — one consensus RTT amortizes across every append in
-  flight, the same shape as the WAL's group commit.
+- **Batching**: OmniPaxos coalesces all outstanding entries into single
+  Accept messages, so the effective batch size scales with load — one
+  consensus RTT amortizes across every append in flight, the same shape as
+  the WAL's group commit.
 - **Trim**: every `--repl-trim-secs` (default 5 s) the core trims the log
   prefix that _all_ replicas have decided, bounding memory. The stream files
   remain the real storage; the consensus log is only the replication conduit.
 
 ### Storage
 
-The OmniPaxos log lives in memory (`omnipaxos_storage::MemoryStorage`). That
-is deliberate: the whole point of the mode is that durability comes from
-replication, not disk. See the trade-offs below for what that assumes.
+The OmniPaxos log lives in memory (`replication::mem_storage`, vendored from
+`omnipaxos_storage::MemoryStorage`). That is deliberate: the whole point of
+the mode is that durability comes from replication, not disk. See the
+trade-offs below for what that assumes.
 
 ## What is replicated
 
