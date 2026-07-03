@@ -245,8 +245,10 @@ fn main() {
         }
     }
 
-    // Apply --durability memory AFTER the arg loop. On non-Linux, reject immediately.
-    // On Linux, force the tail cache off (binary appends use the zero-copy socket→file splice).
+    // Apply --durability memory AFTER the arg loop. Memory mode is the buffered
+    // append path with the WAL stage/wait skipped (no splice intercept, no forced
+    // tail-cache-off — those belonged to the removed zero-copy path); the only
+    // gate is refusing to silently ignore a WAL left by a previous wal run.
     if handlers::durability() == handlers::DurabilityMode::Memory {
         // Fail fast on a WAL left by a previous `--durability wal` run: memory mode
         // never opens/replays it, so starting here would silently ignore those
@@ -263,19 +265,6 @@ fn main() {
                 wal_dir.display()
             );
             std::process::exit(2);
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            eprintln!("--durability memory is Linux-only (zero-copy socket→file)");
-            std::process::exit(2);
-        }
-        #[cfg(target_os = "linux")]
-        {
-            if store::tail_cache_bytes() != 0 {
-                eprintln!("--durability memory disables the resident tail cache");
-            }
-            store::set_tail_cache_bytes(0);
-            engine_raw::set_zero_copy(true); // binary appends take the splice intercept
         }
     }
 

@@ -231,6 +231,15 @@ pub struct StreamState {
 #[cfg(target_os = "linux")]
 pub struct StreamSubs {
     pub subs: Vec<SubHandle>,
+    /// Wake-coalescing latch: set by `wake_stream` when it queues this stream's
+    /// subscribers, cleared by the reactor BEFORE it reads the tail to flush
+    /// (clear-then-read: a publish racing the flush either lands before the
+    /// clear — its bytes are covered by the post-clear tail read — or after,
+    /// and re-queues). Converts per-append wakes into one wake per stream per
+    /// reactor cycle under load — the fan-out batching that wal mode gets for
+    /// free from group commit, without which memory mode drowns the reactor in
+    /// per-append eventfd signals (measured: delivery collapse past ~16k w/s).
+    pub wake_pending: std::sync::atomic::AtomicBool,
 }
 
 /// Locates one reactor subscriber: which shard owns it, its slab key, and the
@@ -282,25 +291,6 @@ pub fn tail_cache_bytes() -> usize {
 }
 
 impl StreamState {
-    /// Open a fresh `O_WRONLY` fd on the data file for positioned splice writes.
-    ///
-    /// The shared `Appender.file` is opened `O_APPEND`, which `splice(2)` rejects
-    /// as a target (it ignores the supplied offset). The zero-copy append path
-    /// therefore opens its own non-`O_APPEND` write fd and positions every write
-    /// explicitly (`pwrite` for the buffered prefix, `splice` with an offset for
-    /// the socket relay). Called under the appender lock, so no other writer can
-    /// move the logical tail underneath it.
-    #[cfg(target_os = "linux")]
-    pub fn open_splice_fd(&self) -> std::io::Result<std::fs::File> {
-        // O_RDWR (not O_WRONLY): this same fd is the positioned-WRITE target for the
-        // socket→file splice AND the READ source for the file→WAL relay splice, so it
-        // must be readable. (Not O_APPEND — splice rejects O_APPEND targets.)
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.file_path)
-    }
-
     /// Record the just-appended wire chunk as the resident tail. `start` is the
     /// logical offset where `bytes` begins. Chunks larger than the tail-cache cap
     /// (or any append when the cache is disabled) are not cached (the entry is
