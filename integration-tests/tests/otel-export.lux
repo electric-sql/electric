@@ -139,6 +139,10 @@
   !test $(docker logs $otel_collector_container_name 2>&1 | python3 $(realpath ../support_files/normalize-otel-output.py) | grep -c "Span Plug_shape_get .*shape_req\.is_empty_response=true") -eq 0 && echo EMPTY_RESPONSE_SPAN_DROPPED
   ??EMPTY_RESPONSE_SPAN_DROPPED
 
+  # Even though its span was dropped, the empty response is still counted by the
+  # serve_shape request metric, tagged empty=true.
+  [invoke grep_otel_collector_output "Metric electric\.plug\.serve_shape\.requests\.count .*empty=true"]
+
 ###
 
 [cleanup]

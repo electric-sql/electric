@@ -444,6 +444,7 @@ defmodule Electric.Plug.ServeShapePlug do
     bytes_sent = assigns[:streaming_bytes_sent] || 0
     is_live = get_live_mode(assigns)
     stack_id = get_in(conn.assigns, [:config, :stack_id])
+    is_empty = response_trace_attrs(conn)[:ot_is_empty_response] || false
 
     OpenTelemetry.execute(
       [:electric, :plug, :serve_shape],
@@ -459,7 +460,8 @@ defmodule Electric.Plug.ServeShapePlug do
         client_ip: conn.remote_ip,
         status: conn.status,
         stack_id: stack_id,
-        known_error: Api.Response.conn_has_known_error?(conn)
+        known_error: Api.Response.conn_has_known_error?(conn),
+        empty: is_empty
       }
     )
 
