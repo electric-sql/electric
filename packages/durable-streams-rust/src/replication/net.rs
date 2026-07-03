@@ -63,7 +63,7 @@ struct Conn {
 }
 
 /// A lazily-connected, auto-reconnecting RPC client for one peer.
-pub(super) struct RpcClient {
+pub struct RpcClient {
     pub addr: String,
     conn: Mutex<Option<Conn>>,
     next_id: AtomicU64,

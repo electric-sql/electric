@@ -14,8 +14,6 @@
 // zero-copy page-cache → socket transfer, but a fault parks a pool thread
 // instead. ReadOffload picks where each read runs; see set_read_offload.
 
-#[cfg(target_os = "linux")]
-use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 

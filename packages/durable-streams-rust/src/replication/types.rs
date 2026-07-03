@@ -26,11 +26,9 @@ pub mod typ {
     use openraft::BasicNode;
 
     use super::NodeId;
-    use super::TypeConfig;
 
     pub type RaftError<E = openraft::error::Infallible> = openraft::error::RaftError<NodeId, E>;
     pub type RPCError<E = openraft::error::Infallible> =
         openraft::error::RPCError<NodeId, BasicNode, RaftError<E>>;
     pub type ClientWriteError = openraft::error::ClientWriteError<NodeId, BasicNode>;
-    pub type ClientWriteResponse = openraft::raft::ClientWriteResponse<TypeConfig>;
 }

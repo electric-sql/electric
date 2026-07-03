@@ -403,10 +403,9 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachine> {
         // barrier (it reads its parent stream, possibly on another shard).
         let mut responses: Vec<(usize, OpOutcome)> = Vec::new();
         let mut group: Vec<(usize, LogOp)> = Vec::new();
-        let mut pos = 0usize;
         let mut last_applied = None;
         let mut last_membership = None;
-        for entry in entries {
+        for (pos, entry) in entries.into_iter().enumerate() {
             last_applied = Some(entry.log_id);
             match entry.payload {
                 EntryPayload::Blank => responses.push((pos, OpOutcome::Noop)),
@@ -428,7 +427,6 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachine> {
                     }
                 }
             }
-            pos += 1;
         }
         self.apply_group(group, &mut responses).await;
 
