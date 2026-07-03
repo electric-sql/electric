@@ -26,9 +26,42 @@ use openraft::{
 };
 use tokio::sync::{Mutex, RwLock};
 
+use serde::{Deserialize, Serialize};
+
 use super::entry::{AppendApplyOutcome, CreateApplyOutcome, LogOp, OpOutcome};
 use super::types::{Entry, NodeId, TypeConfig};
-use crate::store::{Store, StreamState};
+use crate::store::{Store, StreamConfig, StreamState};
+
+/// One stream in a snapshot MANIFEST. Snapshots carry metadata only — the
+/// byte content is pulled over the mesh at install time (`FetchStream` RPC),
+/// which the append-only model makes safe: a stream's `[0, tail)` prefix is
+/// immutable, so fetching it later from a peer that has advanced still yields
+/// exactly the bytes at snapshot time. `id` guards against the path being
+/// deleted+recreated in between (the serving peer verifies it).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamSnap {
+    pub path: String,
+    pub id: u64,
+    pub config: StreamConfig,
+    pub tail: u64,
+    pub closed: bool,
+    pub closed_by: Option<(String, u64, u64)>,
+    pub producers: Vec<(String, u64, u64)>,
+    pub last_seq_header: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Manifest {
+    pub streams: Vec<StreamSnap>,
+}
+
+/// Wiring the state machine needs for snapshot INSTALL (fetching bytes from
+/// the current leader) — populated after `Raft::new` by `mod.rs`.
+pub struct InstallCtx {
+    pub self_id: NodeId,
+    pub clients: Arc<super::net::Clients>,
+    pub metrics: tokio::sync::watch::Receiver<openraft::RaftMetrics<NodeId, BasicNode>>,
+}
 
 const APPLY_SHARDS: usize = 4;
 /// Dirty meta sidecars are swept on this cadence (vs per-append rewrites,
@@ -50,6 +83,10 @@ pub struct StateMachine {
     pub apply_max_us: std::sync::atomic::AtomicU64,
     /// Ops applied (cumulative).
     pub applied_ops: std::sync::atomic::AtomicU64,
+    /// The last built manifest snapshot (offered to lagging followers).
+    pub current_snapshot: RwLock<Option<(SnapshotMeta<NodeId, BasicNode>, Manifest)>>,
+    /// Fetch wiring for snapshot install — set once by `mod.rs` after boot.
+    pub install_ctx: std::sync::OnceLock<InstallCtx>,
 }
 
 impl StateMachine {
@@ -60,6 +97,8 @@ impl StateMachine {
             dirty: Mutex::new(HashMap::new()),
             apply_max_us: std::sync::atomic::AtomicU64::new(0),
             applied_ops: std::sync::atomic::AtomicU64::new(0),
+            current_snapshot: RwLock::new(None),
+            install_ctx: std::sync::OnceLock::new(),
         })
     }
 
@@ -183,20 +222,165 @@ impl StateMachine {
 
 impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachine> {
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, StorageError<NodeId>> {
-        // Metadata-only marker (see module docs): exists so the log purges.
+        // MANIFEST snapshot: O(streams) metadata, no byte content (module
+        // docs). Built under the meta read lock so `last_applied` and the
+        // captured stream tails are mutually consistent (applies advance
+        // last_applied only after mutating the store, and tails captured here
+        // are ≥ the snapshot index's — over-capture is safe: prefixes are
+        // immutable and log replay past the snapshot re-applies
+        // deterministically via producer dedup / publish monotonicity).
         let meta = self.meta.read().await;
+        let mut streams = Vec::new();
+        for entry in self.store.streams.iter() {
+            let st = entry.value();
+            let s = st.shared.read().unwrap();
+            if s.soft_deleted {
+                continue;
+            }
+            streams.push(StreamSnap {
+                path: st.path.clone(),
+                id: st.id,
+                config: st.config.clone(),
+                tail: s.durable_tail,
+                closed: s.closed_durable,
+                closed_by: s.closed_by.clone(),
+                producers: s
+                    .producers
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.epoch, v.last_seq))
+                    .collect(),
+                last_seq_header: s.last_seq_header.clone(),
+            });
+        }
+        let manifest = Manifest { streams };
         let snapshot_id = meta
             .last_applied
-            .map(|l| format!("marker-{}-{}", l.leader_id, l.index))
-            .unwrap_or_else(|| "marker-empty".to_string());
+            .map(|l| format!("manifest-{}-{}", l.leader_id, l.index))
+            .unwrap_or_else(|| "manifest-empty".to_string());
+        let snap_meta = SnapshotMeta {
+            last_log_id: meta.last_applied,
+            last_membership: meta.last_membership.clone(),
+            snapshot_id,
+        };
+        let data = bincode::serialize(&manifest)
+            .map_err(|e| StorageIOError::write_snapshot(Some(snap_meta.signature()), &e))?;
+        drop(meta);
+        *self.current_snapshot.write().await = Some((snap_meta.clone(), manifest));
         Ok(Snapshot {
-            meta: SnapshotMeta {
-                last_log_id: meta.last_applied,
-                last_membership: meta.last_membership.clone(),
-                snapshot_id,
-            },
-            snapshot: Box::new(Cursor::new(Vec::new())),
+            meta: snap_meta,
+            snapshot: Box::new(Cursor::new(data)),
         })
+    }
+}
+
+impl StateMachine {
+    /// Rebuild the whole store from a manifest: wipe, recreate every stream,
+    /// pull its immutable byte prefix from the current leader over the mesh,
+    /// and restore producer/closed state. Fork children are materialized flat
+    /// (their logical content, standalone) — reads are byte-identical.
+    async fn install_manifest(
+        &self,
+        meta: &SnapshotMeta<NodeId, BasicNode>,
+        manifest: Manifest,
+    ) -> Result<(), StorageError<NodeId>> {
+        fn io_err_from(
+            sig: openraft::storage::SnapshotSignature<NodeId>,
+            e: impl std::error::Error + 'static,
+        ) -> StorageError<NodeId> {
+            StorageError::from(StorageIOError::read_snapshot(Some(sig), &e))
+        }
+        let io_err = |e: std::io::Error| io_err_from(meta.signature(), e);
+        let ctx = self.install_ctx.get().ok_or_else(|| {
+            io_err(std::io::Error::other("snapshot install ctx not wired"))
+        })?;
+        // Pull from the current leader (who else could have sent a snapshot);
+        // any peer at/above the snapshot index would do. The leader's mesh
+        // address comes from the snapshot's membership.
+        let m = ctx.metrics.borrow().clone();
+        let leader = m
+            .current_leader
+            .filter(|l| *l != ctx.self_id)
+            .ok_or_else(|| io_err(std::io::Error::other("no leader to fetch from")))?;
+        let leader_addr = meta
+            .last_membership
+            .membership()
+            .nodes()
+            .find(|(id, _)| **id == leader)
+            .map(|(_, n)| n.addr.clone())
+            .or_else(|| {
+                m.membership_config
+                    .membership()
+                    .nodes()
+                    .find(|(id, _)| **id == leader)
+                    .map(|(_, n)| n.addr.clone())
+            })
+            .ok_or_else(|| io_err(std::io::Error::other("leader not in membership")))?;
+        let client = ctx.clients.get_or_create(leader, &leader_addr);
+
+        self.store.wipe_all().map_err(|e| io_err(std::io::Error::other(e.to_string())))?;
+        for snap in manifest.streams {
+            let store = Arc::clone(&self.store);
+            let path = snap.path.clone();
+            let config = snap.config.clone();
+            let created = tokio::task::spawn_blocking(move || {
+                store.create_with_meta_durability(&path, config, None, 0, false)
+            })
+            .await
+            .map_err(|e| io_err(std::io::Error::other(e.to_string())))?
+            .map_err(|e| io_err(std::io::Error::other(e.to_string())))?;
+            let crate::store::CreateResult::Created(st) = created else {
+                return Err(io_err(std::io::Error::other(format!(
+                    "stream {} already exists during install",
+                    snap.path
+                ))));
+            };
+            // Fetch [0, tail) in chunks from the leader and append.
+            const CHUNK: u64 = 4 * 1024 * 1024;
+            let mut off = 0u64;
+            while off < snap.tail {
+                let to = (off + CHUNK).min(snap.tail);
+                let bytes = client
+                    .fetch_stream(&snap.path, snap.id, off, to)
+                    .await
+                    .map_err(|e| io_err(std::io::Error::other(e)))?;
+                if bytes.len() as u64 != to - off {
+                    return Err(io_err(std::io::Error::other(format!(
+                        "short fetch for {} [{off},{to})",
+                        snap.path
+                    ))));
+                }
+                let wire = bytes::Bytes::from(bytes);
+                let mut ap = st.appender.lock().await;
+                let new_tail =
+                    crate::handlers::write_wire(&st, &mut ap, &wire).map_err(|e| io_err(std::io::Error::other(e.to_string())))?;
+                drop(ap);
+                crate::handlers::publish_durable_tail(&st, new_tail, &wire);
+                off = to;
+            }
+            // Restore replicated per-stream state.
+            {
+                let mut sh = st.shared.write().unwrap();
+                for (id, epoch, last_seq) in snap.producers {
+                    sh.producers
+                        .insert(id, crate::store::ProducerState { epoch, last_seq });
+                }
+                sh.last_seq_header = snap.last_seq_header;
+                if snap.closed {
+                    sh.closed = true;
+                    sh.closed_durable = true;
+                    sh.closed_by = snap.closed_by;
+                }
+            }
+            if snap.closed {
+                let t = st.tail().bytes;
+                st.tail_tx.send_replace(crate::store::Tail {
+                    bytes: t,
+                    closed: true,
+                });
+            }
+            self.dirty.lock().await.insert(st.id, Arc::clone(&st));
+        }
+        Ok(())
     }
 }
 
@@ -262,40 +446,41 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachine> {
     async fn begin_receiving_snapshot(
         &mut self,
     ) -> Result<Box<Cursor<Vec<u8>>>, StorageError<NodeId>> {
-        // v1: no state transfer — a follower behind the purge horizon cannot
-        // be rebuilt from a marker snapshot. Refuse loudly (fail-stop).
-        Err(StorageIOError::read_snapshot(
-            None,
-            &std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "snapshot install unsupported in v1 (marker snapshots only) — \
-                 replace the node / restart the cluster (REPLICATION.md)",
-            ),
-        )
-        .into())
+        Ok(Box::new(Cursor::new(Vec::new())))
     }
 
     async fn install_snapshot(
         &mut self,
         meta: &SnapshotMeta<NodeId, BasicNode>,
-        _snapshot: Box<Cursor<Vec<u8>>>,
+        snapshot: Box<Cursor<Vec<u8>>>,
     ) -> Result<(), StorageError<NodeId>> {
-        Err(StorageIOError::read_snapshot(
-            Some(meta.signature()),
-            &std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "snapshot install unsupported in v1 (marker snapshots only)",
-            ),
-        )
-        .into())
+        let manifest: Manifest = bincode::deserialize(snapshot.get_ref())
+            .map_err(|e| StorageIOError::read_snapshot(Some(meta.signature()), &e))?;
+        self.install_manifest(meta, manifest.clone()).await?;
+        {
+            let mut m = self.meta.write().await;
+            m.last_applied = meta.last_log_id;
+            m.last_membership = meta.last_membership.clone();
+        }
+        *self.current_snapshot.write().await = Some((meta.clone(), manifest));
+        Ok(())
     }
 
     async fn get_current_snapshot(
         &mut self,
     ) -> Result<Option<Snapshot<TypeConfig>>, StorageError<NodeId>> {
-        // Never offer a snapshot for replication — marker snapshots carry no
-        // state. Lagging followers must be caught up from the log or not at all.
-        Ok(None)
+        let cur = self.current_snapshot.read().await;
+        match &*cur {
+            None => Ok(None),
+            Some((meta, manifest)) => {
+                let data = bincode::serialize(manifest)
+                    .map_err(|e| StorageIOError::read_snapshot(Some(meta.signature()), &e))?;
+                Ok(Some(Snapshot {
+                    meta: meta.clone(),
+                    snapshot: Box::new(Cursor::new(data)),
+                }))
+            }
+        }
     }
 
     async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {

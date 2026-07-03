@@ -23,11 +23,11 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-pub use core::{AckTimeout, ReplHandle};
+pub use core::ReplHandle;
 use openraft::BasicNode;
 
 use crate::store::Store;
@@ -45,12 +45,19 @@ pub struct ReplConfig {
     pub listen: String,
     /// How long `propose_and_wait` waits for the acked outcome before 503.
     pub ack_timeout: Duration,
-    /// Snapshot (log-purge) cadence in log entries: a marker snapshot is
+    /// Snapshot (log-purge) cadence in log entries: a manifest snapshot is
     /// taken every N entries and the log behind it is purged, bounding the
     /// in-memory log to roughly N + keep-margin entries per node.
     pub snapshot_logs: u64,
     /// `REPL_STATS` stderr emit cadence in seconds (0 = off).
     pub stats_secs: u64,
+    /// Joining an EXISTING cluster (`--repl-join`): skip the initial-membership
+    /// bootstrap and wait to be added via `/_repl/add-learner` +
+    /// `/_repl/change-membership` — the leader ships a snapshot + log.
+    pub join: bool,
+    /// When set, the Raft vote is fsynced here (and reloaded at boot), making
+    /// restart-rejoin election-safe. Production boots set it; tests may not.
+    pub vote_path: Option<std::path::PathBuf>,
 }
 
 impl ReplConfig {
@@ -114,22 +121,24 @@ pub async fn start_with_listener(
     };
     let config = Arc::new(config.validate().expect("invalid raft config"));
 
-    let log_store = log_store::LogStore::<types::TypeConfig>::default();
+    let log_store = match &cfg.vote_path {
+        Some(p) => log_store::LogStore::<types::TypeConfig>::with_vote_path(p.clone())
+            .expect("failed to load vote file"),
+        None => log_store::LogStore::<types::TypeConfig>::default(),
+    };
     let sm = sm::StateMachine::new(Arc::clone(&store));
     sm.spawn_meta_sweeper();
 
-    let clients: HashMap<u64, Arc<net::RpcClient>> = cfg
-        .peers
-        .iter()
-        .filter(|(id, _)| *id != cfg.id)
-        .map(|(id, addr)| (*id, net::RpcClient::new(addr.clone())))
-        .collect();
+    let clients = Arc::new(net::Clients::default());
+    for (id, addr) in cfg.peers.iter().filter(|(id, _)| *id != cfg.id) {
+        clients.get_or_create(*id, addr);
+    }
 
     let raft = types::Raft::new(
         cfg.id,
         config,
         net::MeshFactory {
-            clients: clients.clone(),
+            clients: Arc::clone(&clients),
         },
         log_store.clone(),
         Arc::clone(&sm),
@@ -137,16 +146,25 @@ pub async fn start_with_listener(
     .await
     .expect("failed to start raft");
 
-    net::spawn_server(listener, raft.clone());
+    // Wire the snapshot-install fetch path (leader lookup + mesh clients).
+    let _ = sm.install_ctx.set(sm::InstallCtx {
+        self_id: cfg.id,
+        clients: Arc::clone(&clients),
+        metrics: raft.metrics(),
+    });
 
-    // Bootstrap: every node proposes the same initial membership; on an
-    // already-initialized node this errs (NotAllowed) and is ignored.
-    let members: BTreeMap<u64, BasicNode> = cfg
-        .peers
-        .iter()
-        .map(|(id, addr)| (*id, BasicNode::new(addr.clone())))
-        .collect();
-    let _ = raft.initialize(members).await;
+    net::spawn_server(listener, raft.clone(), Arc::clone(&store));
+
+    if !cfg.join {
+        // Bootstrap: every founding node proposes the same initial membership;
+        // on an already-initialized node this errs (NotAllowed) and is ignored.
+        let members: BTreeMap<u64, BasicNode> = cfg
+            .peers
+            .iter()
+            .map(|(id, addr)| (*id, BasicNode::new(addr.clone())))
+            .collect();
+        let _ = raft.initialize(members).await;
+    }
 
     let handle = ReplHandle::new(cfg.id, raft, sm, log_store, clients, cfg.ack_timeout);
     if cfg.stats_secs > 0 {

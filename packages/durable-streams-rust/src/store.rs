@@ -693,6 +693,22 @@ impl Store {
         self.delete_impl(st, true)
     }
 
+    /// Drop EVERY stream — in-memory state and on-disk files — regardless of
+    /// fork refcounts. Used by replicated-mode snapshot install (the incoming
+    /// manifest replaces the whole store) and by replicated-mode boot (the
+    /// consensus log/snapshot is the source of truth; stale local files must
+    /// not double-apply). Readers racing a wipe see 404s, matching a follower
+    /// that is legitimately behind.
+    pub fn wipe_all(&self) -> std::io::Result<()> {
+        self.streams.clear();
+        let dir = self.data_dir.join("streams");
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let _ = std::fs::remove_file(entry.path());
+        }
+        Ok(())
+    }
+
     fn delete_impl(&self, st: &Arc<StreamState>, durable: bool) -> std::io::Result<()> {
         let soft = {
             let mut s = st.shared.write().unwrap();

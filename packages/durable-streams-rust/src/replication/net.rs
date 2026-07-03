@@ -21,6 +21,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::entry::{LogOp, OpOutcome};
 use super::types::{typ, NodeId, Raft, TypeConfig};
+use crate::store::Store;
 
 const MAX_FRAME: u32 = 256 * 1024 * 1024;
 const RECONNECT_BACKOFF: Duration = Duration::from_millis(500);
@@ -35,6 +36,14 @@ pub(super) enum RpcRequest {
     /// Proposal forwarded from a non-leader node: the leader runs
     /// `client_write` and returns the apply outcome + log index.
     Forward(LogOp),
+    /// Snapshot-install byte pull: the immutable prefix `[from, to)` of a
+    /// stream (verified by `id` against delete+recreate races).
+    FetchStream {
+        path: String,
+        id: u64,
+        from: u64,
+        to: u64,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -43,6 +52,7 @@ pub(super) enum RpcReply {
     Vote(Result<VoteResponse<NodeId>, String>),
     Snapshot(Result<InstallSnapshotResponse<NodeId>, String>),
     Forward(Result<(OpOutcome, u64), String>),
+    FetchStream(Result<Vec<u8>, String>),
 }
 
 // ---------- client ----------
@@ -167,10 +177,71 @@ async fn write_loop(mut wr: OwnedWriteHalf, mut rx: mpsc::Receiver<Vec<u8>>) {
     }
 }
 
+/// Fetch a stream's byte range for snapshot install.
+impl RpcClient {
+    pub async fn fetch_stream(
+        &self,
+        path: &str,
+        id: u64,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<u8>, String> {
+        match self
+            .call(RpcRequest::FetchStream {
+                path: path.to_string(),
+                id,
+                from,
+                to,
+            })
+            .await
+        {
+            Ok(RpcReply::FetchStream(r)) => r,
+            Ok(_) => Err("mismatched rpc reply".into()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
+// ---------- dynamic client registry ----------
+
+/// Per-peer RPC clients, keyed by node id and created lazily from membership
+/// addresses — so membership changes (added learners/voters) get mesh links
+/// without a restart.
+#[derive(Default)]
+pub struct Clients {
+    map: dashmap::DashMap<NodeId, Arc<RpcClient>>,
+}
+
+impl Clients {
+    pub fn get_or_create(&self, id: NodeId, addr: &str) -> Arc<RpcClient> {
+        // Replace the client if the node re-registered under a new address.
+        if let Some(c) = self.map.get(&id) {
+            if c.addr == addr {
+                return Arc::clone(&c);
+            }
+        }
+        let c = RpcClient::new(addr.to_string());
+        self.map.insert(id, Arc::clone(&c));
+        c
+    }
+
+    pub fn get(&self, id: NodeId) -> Option<Arc<RpcClient>> {
+        self.map.get(&id).map(|c| Arc::clone(&c))
+    }
+
+    pub fn connected_ids(&self) -> Vec<NodeId> {
+        self.map
+            .iter()
+            .filter(|e| e.value().connected.load(Ordering::Relaxed))
+            .map(|e| *e.key())
+            .collect()
+    }
+}
+
 // ---------- openraft network adapter ----------
 
 pub(super) struct MeshFactory {
-    pub clients: std::collections::HashMap<NodeId, Arc<RpcClient>>,
+    pub clients: Arc<Clients>,
 }
 
 pub(super) struct NodeClient {
@@ -180,9 +251,9 @@ pub(super) struct NodeClient {
 impl RaftNetworkFactory<TypeConfig> for MeshFactory {
     type Network = NodeClient;
 
-    async fn new_client(&mut self, target: NodeId, _node: &BasicNode) -> Self::Network {
+    async fn new_client(&mut self, target: NodeId, node: &BasicNode) -> Self::Network {
         NodeClient {
-            client: Arc::clone(self.clients.get(&target).expect("unknown peer id")),
+            client: self.clients.get_or_create(target, &node.addr),
         }
     }
 }
@@ -252,14 +323,15 @@ impl RaftNetwork<TypeConfig> for NodeClient {
 /// Accept loop: serve openraft RPCs + forwarded proposals against the local
 /// Raft. Each request runs as its own task so a slow apply (Forward) doesn't
 /// head-of-line-block heartbeats on the same connection.
-pub(super) fn spawn_server(listener: TcpListener, raft: Raft) {
+pub(super) fn spawn_server(listener: TcpListener, raft: Raft, store: Arc<Store>) {
     tokio::spawn(async move {
         loop {
             match listener.accept().await {
                 Ok((sock, _)) => {
                     let _ = sock.set_nodelay(true);
                     let raft = raft.clone();
-                    tokio::spawn(serve_conn(sock, raft));
+                    let store = Arc::clone(&store);
+                    tokio::spawn(serve_conn(sock, raft, store));
                 }
                 Err(_) => tokio::time::sleep(RECONNECT_BACKOFF).await,
             }
@@ -267,7 +339,7 @@ pub(super) fn spawn_server(listener: TcpListener, raft: Raft) {
     });
 }
 
-async fn serve_conn(sock: TcpStream, raft: Raft) {
+async fn serve_conn(sock: TcpStream, raft: Raft, store: Arc<Store>) {
     let (mut rd, wr) = sock.into_split();
     let (tx, rx) = mpsc::channel::<Vec<u8>>(1024);
     tokio::spawn(write_loop(wr, rx));
@@ -288,9 +360,10 @@ async fn serve_conn(sock: TcpStream, raft: Raft) {
             return;
         };
         let raft = raft.clone();
+        let store = Arc::clone(&store);
         let tx = tx.clone();
         tokio::spawn(async move {
-            let reply = handle_rpc(&raft, req).await;
+            let reply = handle_rpc(&raft, &store, req).await;
             let Ok(body) = bincode::serialize(&(req_id, reply)) else {
                 return;
             };
@@ -302,7 +375,7 @@ async fn serve_conn(sock: TcpStream, raft: Raft) {
     }
 }
 
-async fn handle_rpc(raft: &Raft, req: RpcRequest) -> RpcReply {
+async fn handle_rpc(raft: &Raft, store: &Arc<Store>, req: RpcRequest) -> RpcReply {
     match req {
         RpcRequest::Append(r) => {
             RpcReply::Append(raft.append_entries(r).await.map_err(|e| e.to_string()))
@@ -317,5 +390,31 @@ async fn handle_rpc(raft: &Raft, req: RpcRequest) -> RpcReply {
                 .map(|resp| (resp.data, resp.log_id.index))
                 .map_err(|e| e.to_string()),
         ),
+        RpcRequest::FetchStream { path, id, from, to } => {
+            RpcReply::FetchStream(fetch_stream(store, &path, id, from, to).await)
+        }
     }
+}
+
+/// Serve a snapshot-install byte pull. `[from, to)` of a live stream is an
+/// immutable prefix once `to ≤ durable_tail`, so this is safe against any
+/// concurrent appends; the `id` check catches delete+recreate races.
+async fn fetch_stream(
+    store: &Arc<Store>,
+    path: &str,
+    id: u64,
+    from: u64,
+    to: u64,
+) -> Result<Vec<u8>, String> {
+    let st = store.get(path).ok_or_else(|| format!("{path}: not found"))?;
+    if st.id != id {
+        return Err(format!("{path}: stream id changed (deleted+recreated)"));
+    }
+    if st.tail().bytes < to {
+        return Err(format!("{path}: tail below requested range"));
+    }
+    crate::handlers::read_range_bytes(&st, from, to)
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| e.to_string())
 }

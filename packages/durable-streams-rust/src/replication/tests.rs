@@ -30,6 +30,7 @@ fn tmp(tag: &str, node: u64) -> std::path::PathBuf {
 
 struct Cluster {
     nodes: Vec<(Arc<Store>, Arc<ReplHandle>)>,
+    peers: Vec<(u64, String)>,
 }
 
 /// Boot an n-node cluster on ephemeral loopback ports and wait for a leader.
@@ -54,6 +55,8 @@ async fn cluster(tag: &str, n: u64) -> Cluster {
             ack_timeout: Duration::from_secs(10),
             snapshot_logs: 64, // snapshot/purge frequently so tests cover it
             stats_secs: 0,
+            join: false,
+            vote_path: None,
         };
         let handle = start_with_listener(Arc::clone(&store), &cfg, listener).await;
         nodes.push((store, handle));
@@ -74,7 +77,7 @@ async fn cluster(tag: &str, n: u64) -> Cluster {
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    Cluster { nodes }
+    Cluster { nodes, peers }
 }
 
 fn plain_config() -> StreamConfig {
@@ -307,4 +310,132 @@ async fn initial_body_and_fork_offsets_replicate() {
         let bytes = crate::handlers::read_range_bytes(&st, 0, 4).await.unwrap();
         assert_eq!(&bytes[..], b"0123");
     }
+}
+
+
+/// The "lift fail-stop" milestone end to end: run a 3-node cluster far past
+/// the purge horizon, then bring up a FRESH node 4 (empty store, --repl-join
+/// semantics) and add it via add_learner + change_membership. It can only
+/// catch up via the manifest snapshot + FetchStream byte pull — the log
+/// behind the snapshot is gone. Then verify it serves byte-identical data
+/// and participates as a voter.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn learner_joins_after_purge_via_manifest_snapshot() {
+    let cl = cluster("join", 3).await;
+    let path = "/repl-join";
+    cl.nodes[0].1.propose_and_wait(create_op(path)).await.unwrap();
+
+    // Push well past snapshot_logs=64 PLUS the 256-entry purge margin
+    // (max_in_snapshot_log_to_keep) so the log genuinely purges.
+    let mut expected = String::new();
+    for i in 0..600 {
+        let payload = format!("r{i:04};");
+        expected.push_str(&payload);
+        cl.nodes[i % 3]
+            .1
+            .propose_and_wait(append_op(path, payload.as_bytes()))
+            .await
+            .unwrap();
+    }
+    let tail = expected.len() as u64;
+    wait_converged(&cl, path, tail).await;
+    // The purge must actually have happened for this test to mean anything.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let purged = cl.nodes[0]
+            .1
+            .raft
+            .metrics()
+            .borrow()
+            .purged
+            .map(|l| l.index)
+            .unwrap_or(0);
+        if purged > 0 {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "log never purged; metrics: {:?}",
+            cl.nodes[0].1.raft.metrics().borrow().clone()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // Fresh node 4: empty store, join mode (no initialize).
+    let l4 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr4 = l4.local_addr().unwrap().to_string();
+    let store4 = Arc::new(
+        Store::new_with_tier(tmp("join", 4), TierConfig::default()).expect("store init"),
+    );
+    let mut peers4 = cl.peers.clone();
+    peers4.push((4, addr4.clone()));
+    let cfg4 = ReplConfig {
+        id: 4,
+        peers: peers4,
+        listen: String::new(),
+        ack_timeout: Duration::from_secs(10),
+        snapshot_logs: 64,
+        stats_secs: 0,
+        join: true,
+        vote_path: None,
+    };
+    let h4 = start_with_listener(Arc::clone(&store4), &cfg4, l4).await;
+
+    // Add as learner (blocking: returns once caught up), then promote.
+    let leader = cl.nodes[0].1.raft.metrics().borrow().current_leader.unwrap();
+    let lh = &cl.nodes[(leader - 1) as usize].1;
+    lh.raft
+        .add_learner(4, openraft::BasicNode::new(addr4), true)
+        .await
+        .expect("add_learner");
+    lh.raft
+        .change_membership([1u64, 2, 3, 4].into_iter().collect::<std::collections::BTreeSet<_>>(), false)
+        .await
+        .expect("change_membership");
+
+    // Node 4 must have byte-identical content, fetched via the snapshot path.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        if store4.get(path).map(|st| st.tail().bytes) == Some(tail) {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "node 4 never caught up (tail {:?} want {tail})",
+            store4.get(path).map(|st| st.tail().bytes)
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let st = store4.get(path).unwrap();
+    let bytes = crate::handlers::read_range_bytes(&st, 0, tail).await.unwrap();
+    assert_eq!(std::str::from_utf8(&bytes).unwrap(), expected);
+
+    // And it participates: writes proposed via node 4 ack and replicate.
+    let out = h4.propose_and_wait(append_op(path, b"after-join;")).await.unwrap();
+    assert!(matches!(
+        out,
+        OpOutcome::Append(AppendApplyOutcome::Applied { .. })
+    ));
+    wait_converged(&cl, path, tail + 11).await;
+}
+
+/// The durable vote: saved through the log store, fsynced, and reloaded on a
+/// fresh instance with the same path — the restart-election-safety invariant.
+#[tokio::test]
+async fn vote_survives_restart_via_vote_file() {
+    use openraft::storage::RaftLogStorage;
+    let dir = tmp("vote", 1);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("repl.vote");
+    let vote = openraft::Vote::<u64>::new(7, 3);
+    {
+        let mut ls =
+            super::log_store::LogStore::<super::types::TypeConfig>::with_vote_path(path.clone())
+                .unwrap();
+        ls.save_vote(&vote).await.unwrap();
+    }
+    let mut ls2 =
+        super::log_store::LogStore::<super::types::TypeConfig>::with_vote_path(path).unwrap();
+    let restored = ls2.read_vote().await.unwrap();
+    assert_eq!(restored, Some(vote));
 }

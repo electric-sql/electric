@@ -7,14 +7,13 @@
 //! mesh; the origin then waits until its OWN applied index covers the entry,
 //! preserving read-your-writes on the node that took the HTTP request.
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::entry::{LogOp, OpOutcome};
 use super::log_store::LogStore;
-use super::net::{RpcClient, RpcReply, RpcRequest};
+use super::net::{Clients, RpcReply, RpcRequest};
 use super::sm::StateMachine;
 use super::types::{typ, NodeId, Raft, TypeConfig};
 
@@ -29,7 +28,7 @@ pub struct ReplHandle {
     pub raft: Raft,
     pub(super) sm: Arc<StateMachine>,
     pub(super) log_store: LogStore<TypeConfig>,
-    pub(super) clients: HashMap<NodeId, Arc<RpcClient>>,
+    pub(super) clients: Arc<Clients>,
     ack_timeout: Duration,
     /// Ops proposed by THIS node (cumulative).
     pub proposed: AtomicU64,
@@ -45,7 +44,7 @@ impl ReplHandle {
         raft: Raft,
         sm: Arc<StateMachine>,
         log_store: LogStore<TypeConfig>,
-        clients: HashMap<NodeId, Arc<RpcClient>>,
+        clients: Arc<Clients>,
         ack_timeout: Duration,
     ) -> Arc<Self> {
         Arc::new(ReplHandle {
@@ -86,9 +85,26 @@ impl ReplHandle {
             self.timeouts.fetch_add(1, Ordering::Relaxed);
             return Err(AckTimeout);
         };
-        let Some(client) = self.clients.get(&leader) else {
-            self.timeouts.fetch_add(1, Ordering::Relaxed);
-            return Err(AckTimeout);
+        // Resolve the leader's mesh client — from the registry, or lazily
+        // from the current membership (handles freshly added nodes).
+        let client = match self.clients.get(leader) {
+            Some(c) => c,
+            None => {
+                let m = self.raft.metrics().borrow().clone();
+                let addr = m
+                    .membership_config
+                    .membership()
+                    .nodes()
+                    .find(|(id, _)| **id == leader)
+                    .map(|(_, n)| n.addr.clone());
+                match addr {
+                    Some(a) => self.clients.get_or_create(leader, &a),
+                    None => {
+                        self.timeouts.fetch_add(1, Ordering::Relaxed);
+                        return Err(AckTimeout);
+                    }
+                }
+            }
         };
         self.forwarded.fetch_add(1, Ordering::Relaxed);
         let call = client.call(RpcRequest::Forward(op));
@@ -119,9 +135,9 @@ impl ReplHandle {
         let m = self.raft.metrics().borrow().clone();
         let mut peers: Vec<String> = self
             .clients
-            .iter()
-            .filter(|(_, c)| c.connected.load(Ordering::Relaxed))
-            .map(|(id, _)| id.to_string())
+            .connected_ids()
+            .into_iter()
+            .map(|id| id.to_string())
             .collect();
         peers.sort();
         let applied = m.last_applied.map(|l| l.index).unwrap_or(0);

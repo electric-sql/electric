@@ -165,15 +165,17 @@ Accepted trade-offs, stated plainly:
    failure (1 of 3, 2 of 5). It does not survive simultaneous power loss of a
    majority. Deploy replicas across failure domains (zones) to make that
    event as unlikely as your availability target requires.
-2. **Fail-stop assumption / no restart-rejoin in v1.** The Raft vote and log
-   are in memory, so a crashed replica must not rejoin the running cluster
-   with the same id after amnesia (classic consensus requirement), and a
-   purged log couldn't catch it up anyway (snapshots are markers; installing
-   one is refused). v1 operational rule: **a failed node stays down; to
-   recover full redundancy, restart the cluster** (fresh data dirs) during a
-   maintenance window. Real snapshots (stream-file state transfer) + a
-   durable vote are the roadmap items that lift this — both natural fits in
-   openraft.
+2. **Restart-rejoin and node replacement are SUPPORTED.** Two mechanisms:
+   the Raft **vote is durable** (fsynced to `<data-dir>/repl.vote`; it
+   changes only at election time, never on the append path), which makes a
+   restarted node election-safe; and snapshots are **manifests** — stream
+   metadata whose byte content the joining node pulls over the mesh
+   (`FetchStream`), which the append-only model makes exact (a `[0, tail)`
+   prefix is immutable). A restarted node wipes its stale stream files at
+   boot (the log/snapshot is the source of truth) and resyncs; a brand-new
+   node joins with `--repl-join` + `POST /_repl/add-learner` +
+   `POST /_repl/change-membership`. What remains fatal is only simultaneous
+   majority memory loss (trade-off 1).
 3. **One consensus group.** All streams share one decided sequence — a single
    ordering pipeline (like a 1-partition Kafka topic, though batching makes
    the pipeline wide). Sharding streams across N groups is a natural follow-up
@@ -201,6 +203,8 @@ durable-streams-server \
 ```
 
 - `--repl-id` — this node's id (1-based, must appear in `--repl-peers`).
+- `--repl-join` — start as a JOINING node: skip the initial-membership
+  bootstrap and wait to be added via the admin endpoints below.
 - `--repl-peers` — the **full cluster membership including this node**, as
   `id@host:port` of the replication (peer) listeners. Must be identical on
   every node. 3 or 5 nodes are the sensible sizes.
@@ -248,6 +252,17 @@ again (fail-over) → verify byte-identical streams on the survivors.
   `{"id":1,"leader":2,"decided_idx":1234,"connected_peers":[2,3]}` — use it
   for readiness checks (`leader != null`) and to find the leader for
   lowest-latency writes.
+- **Replacing / adding a node** (send both to the LEADER):
+  1. boot the new node with `--durability replicated --repl-join --repl-id 4
+--repl-peers <existing peers>,4@host:port`
+  2. `POST /_repl/add-learner {"id":4,"addr":"host:port"}` — blocks until the
+     learner has caught up (snapshot manifest + byte fetch + log replay)
+  3. `POST /_repl/change-membership {"members":[1,2,3,4]}` — joint-consensus
+     voter switch (also how a dead node is retired: omit it from `members`)
+- **Restarting a node in place**: just start it again with the same flags and
+  data dir — stale stream files are wiped at boot and the durable vote makes
+  the rejoin election-safe (`local-cluster.sh restart <i>` locally; the smoke
+  test exercises exactly this).
 - **Sizing**: replication traffic ≈ append traffic × (n-1). The consensus log
   holds ≤ `--repl-snapshot-logs` + a small margin of entries per node in
   memory (log RSS ≈ that × payload size — lower the flag for large payloads).
@@ -326,13 +341,6 @@ purge keeping up; `apply_max_us` large with idle CPU ⇒ store stalls;
 
 ## Roadmap
 
-- **Real snapshots / state transfer** — stream-file shipping via openraft's
-  snapshot machinery so a fresh or restarted replica can join a running
-  cluster past the purged log (replaces the marker-snapshot refusal).
-- **Durable vote** — fsync the (tiny, election-time-only) Raft vote so fast
-  restart-rejoin is safe; off the append hot path.
-- **Membership change** — wire `Raft::change_membership` (joint consensus,
-  learners) to an admin endpoint to replace nodes without full restart.
 - **Deterministic simulation** — port the seeded fault-injection harness
   (git history: `replication/sim_tests.rs`) to openraft via a simulated
   `AsyncRuntime`.
@@ -340,6 +348,9 @@ purge keeping up; `apply_max_us` large with idle CPU ⇒ store stalls;
   single group's commit pipeline saturates.
 - **Large-payload copy reduction** — `Arc<[u8]>` payloads + `serde_bytes`;
   16 KB appends are still copied several times per node.
+- **Streaming snapshot install** — install currently rebuilds the store
+  stream-by-stream before reporting completion; fine at bench scale,
+  parallel fetch + resumability would help huge stores.
 - **Bench integration** — a `replicated` deploy mode in ds-bench
   (`scripts/bench`) to put numbers on the wal / memory / replicated triangle
   on real (separate-machine) hardware.

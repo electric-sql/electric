@@ -280,6 +280,14 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
         } else {
             text_response(404, "not in replicated mode")
         }
+    } else if path == "/_repl/add-learner" || path == "/_repl/change-membership" {
+        if durability() != DurabilityMode::Replicated {
+            text_response(404, "not in replicated mode")
+        } else if req.method != Method::Post {
+            text_response(405, "method not allowed")
+        } else {
+            handle_repl_admin(&path, &req.body).await
+        }
     } else {
         match req.method {
             Method::Put => handle_create(store, req, path).await,
@@ -289,6 +297,48 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
             Method::Delete => handle_delete(store, path).await,
             Method::Options => ResponseBuilder::new(204).body(empty()),
             Method::Other => text_response(405, "method not allowed"),
+        }
+    }
+}
+
+// ---------- replicated-mode admin (leader-only membership ops) ----------
+
+/// `POST /_repl/add-learner    {"id":4,"addr":"host:port"}` — start replicating
+/// (snapshot manifest + byte fetch + log) to a new node without a vote.
+/// `POST /_repl/change-membership {"members":[1,2,3,4]}` — joint-consensus
+/// switch of the voter set (promote learners / retire nodes).
+/// Both must be sent to the leader (see `/_repl/status`); elsewhere → 503.
+async fn handle_repl_admin(path: &str, body: &Bytes) -> Resp {
+    let raft = &crate::replication::handle().raft;
+    if path == "/_repl/add-learner" {
+        #[derive(serde::Deserialize)]
+        struct AddLearner {
+            id: u64,
+            addr: String,
+        }
+        let req: AddLearner = match serde_json::from_slice(body) {
+            Ok(v) => v,
+            Err(e) => return text_response(400, &format!("bad body: {e}")),
+        };
+        match raft
+            .add_learner(req.id, openraft::BasicNode::new(req.addr), true)
+            .await
+        {
+            Ok(_) => text_response(200, "learner added and caught up"),
+            Err(e) => text_response(503, &format!("add-learner failed: {e}")),
+        }
+    } else {
+        #[derive(serde::Deserialize)]
+        struct ChangeMembership {
+            members: std::collections::BTreeSet<u64>,
+        }
+        let req: ChangeMembership = match serde_json::from_slice(body) {
+            Ok(v) => v,
+            Err(e) => return text_response(400, &format!("bad body: {e}")),
+        };
+        match raft.change_membership(req.members, false).await {
+            Ok(_) => text_response(200, "membership changed"),
+            Err(e) => text_response(503, &format!("change-membership failed: {e}")),
         }
     }
 }
@@ -796,7 +846,7 @@ async fn wait_durable_lsn(store: &Arc<Store>, st: &Arc<StreamState>, lsn: u64) {
 /// ordering — PROTOCOL.md §4.1). Adds no fsync: the per-stream file stays
 /// async/WAL-recoverable; the only durability barrier is the WAL `fdatasync`
 /// awaited in `wait_durable_lsn`.
-fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
+pub(crate) fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
     use std::io::Write;
     (&*ap.file).write_all(wire)?;
     ap.written += wire.len() as u64;
@@ -819,7 +869,7 @@ fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Res
 /// concurrent appenders (whose group-commit fsyncs may resolve out of order)
 /// safe: a later appender publishing the higher frontier first is fine (all
 /// lower bytes are durable too), and the earlier appender then no-ops.
-fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
+pub(crate) fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
     let closed;
     {
         let mut s = st.shared.write().unwrap();

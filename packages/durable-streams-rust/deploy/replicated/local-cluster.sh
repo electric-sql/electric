@@ -104,9 +104,43 @@ down() {
   echo "cluster down"
 }
 
+# Restart one node in place (same data dir: streams are wiped at boot and
+# resynced from the cluster; the durable vote file is what makes the rejoin
+# election-safe). Usage: local-cluster.sh restart <i>
+restart_node() {
+  local i="$1"
+  [ "$MODE" = replicated ] || { echo "restart is for MODE=replicated" >&2; exit 2; }
+  local http=$((HTTP_BASE + i - 1)) repl=$((REPL_BASE + i - 1))
+  local data="$STATE/node$i/data"
+  [ -d "$data" ] || { echo "node $i has no state dir" >&2; exit 2; }
+  if [ -f "$STATE/node$i.pid" ]; then
+    kill "$(cat "$STATE/node$i.pid")" 2>/dev/null || true
+    sleep 0.3
+  fi
+  BIN=target/release/durable-streams-server
+  [ "$PROFILE" = release ] || BIN=target/debug/durable-streams-server
+  local mode_args=(
+    --durability replicated
+    --repl-id "$i"
+    --repl-peers "$(peers)"
+    --repl-listen "127.0.0.1:$repl"
+    --repl-snapshot-logs "$SNAPSHOT_LOGS"
+  )
+  [ "$REPL_STATS_SECS" != 0 ] && mode_args+=(--repl-stats "$REPL_STATS_SECS")
+  # shellcheck disable=SC2086
+  "$BIN" \
+    --host 127.0.0.1 --port "$http" \
+    --data-dir "$data" \
+    "${mode_args[@]}" ${EXTRA_ARGS:-} \
+    >>"$STATE/node$i.log" 2>&1 &
+  echo $! >"$STATE/node$i.pid"
+  echo "node $i restarted (pid $!)"
+}
+
 case "${1:-}" in
   up) up ;;
   status) status ;;
   down) down ;;
-  *) echo "usage: $0 {up|status|down}" >&2; exit 2 ;;
+  restart) restart_node "${2:?usage: $0 restart <i>}" ;;
+  *) echo "usage: $0 {up|status|down|restart <i>}" >&2; exit 2 ;;
 esac

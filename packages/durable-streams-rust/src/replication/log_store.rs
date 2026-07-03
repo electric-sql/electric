@@ -3,8 +3,10 @@
 //! Vendored from openraft's `examples/memstore` (MIT/Apache-2.0) — the
 //! reference in-memory `RaftLogStorage` — to avoid an examples-only dep.
 //!
-//! The in-memory vote carries the same fail-stop caveat as before: a crashed
-//! node must not rejoin with amnesia under the same id (v1 operational rule).
+//! The VOTE, however, is durable when a `vote_path` is configured (it is in
+//! production boots): it changes only at election time — never on the append
+//! hot path — and persisting it is what makes restart-rejoin safe (a node
+//! that forgot its vote could grant conflicting elections).
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -18,6 +20,8 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug, Default)]
 pub struct LogStore<C: RaftTypeConfig> {
     inner: Arc<Mutex<LogStoreInner<C>>>,
+    /// When set, the vote is fsynced here on every change and reloaded at boot.
+    vote_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug)]
@@ -36,6 +40,32 @@ impl<C: RaftTypeConfig> Default for LogStoreInner<C> {
             committed: None,
             vote: None,
         }
+    }
+}
+
+impl<C: RaftTypeConfig> LogStore<C>
+where
+    Vote<C::NodeId>: serde::Serialize + serde::de::DeserializeOwned,
+{
+    /// A log store with a durable vote file (loaded now if present).
+    pub fn with_vote_path(path: std::path::PathBuf) -> std::io::Result<Self> {
+        let mut inner = LogStoreInner::<C>::default();
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                inner.vote = Some(bincode::deserialize(&bytes).map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("corrupt vote file {}: {e}", path.display()),
+                    )
+                })?);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        Ok(LogStore {
+            inner: Arc::new(Mutex::new(inner)),
+            vote_path: Some(path),
+        })
     }
 }
 
@@ -94,6 +124,33 @@ where
     }
 
     async fn save_vote(&mut self, vote: &Vote<C::NodeId>) -> Result<(), StorageError<C::NodeId>> {
+        // Durable BEFORE visible: a vote acknowledged and then forgotten can
+        // grant two conflicting elections. Election-time only — never on the
+        // append hot path.
+        if let Some(path) = &self.vote_path {
+            let write = || -> std::io::Result<()> {
+                let bytes = bincode::serialize(vote)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let tmp = path.with_extension("tmp");
+                {
+                    use std::io::Write;
+                    let mut f = std::fs::File::create(&tmp)?;
+                    f.write_all(&bytes)?;
+                    f.sync_all()?;
+                }
+                std::fs::rename(&tmp, path)?;
+                Ok(())
+            };
+            let path2 = path.clone();
+            write().map_err(|e| {
+                StorageError::from(openraft::StorageIOError::write_vote(
+                    &std::io::Error::new(
+                        e.kind(),
+                        format!("vote file {}: {e}", path2.display()),
+                    ),
+                ))
+            })?;
+        }
         self.inner.lock().await.vote = Some(vote.clone());
         Ok(())
     }

@@ -145,6 +145,7 @@ fn main() {
     let mut repl_ack_timeout_ms: u64 = 10_000;
     let mut repl_snapshot_logs: u64 = 5000;
     let mut repl_stats_secs: u64 = 0;
+    let mut repl_join = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -246,6 +247,7 @@ fn main() {
                 repl_snapshot_logs = parse_val(args.next(), "--repl-snapshot-logs")
             }
             "--repl-stats" => repl_stats_secs = parse_val(args.next(), "--repl-stats"),
+            "--repl-join" => repl_join = true,
             "--durability" => {
                 let v = val(args.next(), "--durability");
                 match handlers::parse_durability(&v) {
@@ -310,6 +312,9 @@ fn main() {
                 ack_timeout: std::time::Duration::from_millis(repl_ack_timeout_ms),
                 snapshot_logs: repl_snapshot_logs,
                 stats_secs: repl_stats_secs,
+                join: repl_join,
+                // Durable vote: election-safety across restarts (REPLICATION.md).
+                vote_path: Some(data_dir.join("repl.vote")),
             };
             cfg.listen = match repl_listen {
                 Some(l) => l,
@@ -434,9 +439,21 @@ fn main() {
         // ---- replication wiring (Replicated mode only) ----
         // Start the peer mesh + consensus core BEFORE serving so no append can
         // race the OnceLock install. Serving does not wait for an elected
-        // leader: proposals buffer inside OmniPaxos until the election
-        // (~500 ms) resolves; readiness is `/_repl/status` reporting a leader.
+        // leader; readiness is `/_repl/status` reporting a leader.
         if let Some(cfg) = &repl_config {
+            // The consensus log/snapshot is the source of truth in this mode:
+            // stale local stream files from a previous run must not
+            // double-apply under log replay — wipe them and let Raft resync
+            // this node (snapshot manifest + byte fetch + log replay). The
+            // durable vote file is intentionally preserved.
+            let n_stale = store.streams.len();
+            if n_stale > 0 {
+                store.wipe_all().expect("failed to clear stale streams");
+                println!(
+                    "replication: cleared {n_stale} stale local stream(s); \
+                     state will resync from the cluster"
+                );
+            }
             let h = replication::start(Arc::clone(&store), cfg)
                 .await
                 .unwrap_or_else(|e| {

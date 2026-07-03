@@ -82,4 +82,20 @@ for i in 1 2 3; do
   pass "survivor node $i reads 'hello world!'"
 done
 
-echo "SMOKE OK — create/append/read on all nodes, quorum survives leader loss"
+echo "== restart-rejoin (durable vote + snapshot/log resync)"
+./local-cluster.sh restart "$leader"
+ok=""
+for _ in $(seq 1 100); do
+  body="$(curl -sf "$(url "$leader" "$STREAM")")" || body=""
+  [ "$body" = "hello world!" ] && { ok=1; break; }
+  sleep 0.2
+done
+[ -n "$ok" ] || fail "restarted node $leader never caught up (read: $(printf %q "$body"))"
+pass "restarted node $leader rejoined and reads 'hello world!'"
+
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  -H 'content-type: application/octet-stream' --data-binary '?' "$(url "$leader" "$STREAM")")"
+[ "$code" = 204 ] || fail "append on restarted node → $code (want 204)"
+pass "restarted node accepts writes again → 204"
+
+echo "SMOKE OK — writes on all nodes, leader loss, restart-rejoin, byte-identical everywhere"
