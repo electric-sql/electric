@@ -39,6 +39,8 @@ pub struct ReplConfig {
     pub ack_timeout: Duration,
     /// Log-trim cadence in seconds (0 = never trim).
     pub trim_secs: u64,
+    /// `REPL_STATS` stderr emit cadence in seconds (0 = off).
+    pub stats_secs: u64,
 }
 
 impl ReplConfig {
@@ -92,7 +94,14 @@ pub fn start_with_listener(
 ) -> Arc<ReplHandle> {
     let (incoming_tx, incoming_rx) = core::incoming_channel();
     let mesh = net::spawn(listener, &cfg.peers, cfg.id, incoming_tx);
-    core::spawn_core(store, cfg, mesh, incoming_rx)
+    let handle = core::spawn_core(store, cfg, mesh, incoming_rx);
+    if cfg.stats_secs > 0 {
+        core::spawn_stats_emitter(
+            Arc::clone(&handle),
+            std::time::Duration::from_secs(cfg.stats_secs),
+        );
+    }
+    handle
 }
 
 // The process-wide instance the HTTP handlers use. Set once by main; tests

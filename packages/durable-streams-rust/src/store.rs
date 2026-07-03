@@ -774,6 +774,22 @@ impl Store {
         parent: Option<Arc<StreamState>>,
         base_offset: u64,
     ) -> std::io::Result<CreateResult> {
+        self.create_with_meta_durability(path, config, parent, base_offset, true)
+    }
+
+    /// `create` with the meta-sidecar fsync optional. The replicated applier
+    /// passes `durable_meta: false`: the decided log entry is the create's
+    /// durability there, and the fsync would serialize every stream creation
+    /// through the single applier task (REPLICATION.md). The sidecar is still
+    /// written (non-durably) so local tooling sees it.
+    pub fn create_with_meta_durability(
+        &self,
+        path: &str,
+        config: StreamConfig,
+        parent: Option<Arc<StreamState>>,
+        base_offset: u64,
+        durable_meta: bool,
+    ) -> std::io::Result<CreateResult> {
         use dashmap::mapref::entry::Entry;
         // Fast path: existing stream → config comparison.
         if let Some(existing) = self.get(path) {
@@ -862,9 +878,9 @@ impl Store {
                 // rejected/raced creates never leak a refcount on the source.
                 if let Some(p) = &parent {
                     p.shared.write().unwrap().ref_count += 1;
-                    write_meta_sync(p, true)?;
+                    write_meta_sync(p, durable_meta)?;
                 }
-                write_meta_sync(&state, true)?;
+                write_meta_sync(&state, durable_meta)?;
                 Ok(CreateResult::Created(state))
             }
         }

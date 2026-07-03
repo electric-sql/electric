@@ -957,8 +957,13 @@ pub(crate) async fn apply_replicated_create(
     let result = {
         let store2 = Arc::clone(store);
         let path2 = path.to_string();
-        match tokio::task::spawn_blocking(move || store2.create(&path2, config, parent, base_offset))
-            .await
+        // durable_meta: false — the decided log entry is the create's
+        // durability; an fsync here would serialize all creates through this
+        // single applier task (macOS F_FULLFSYNC makes that seconds per 1000).
+        match tokio::task::spawn_blocking(move || {
+            store2.create_with_meta_durability(&path2, config, parent, base_offset, false)
+        })
+        .await
         {
             Ok(Ok(r)) => r,
             _ => return C::WriteFailed,
@@ -1146,7 +1151,9 @@ pub(crate) async fn apply_replicated_append(
         let s = st.shared.read().unwrap();
         (s.durable_tail, s.closed_durable)
     };
-    st.schedule_meta_flush();
+    // No per-append meta flush here: the shard applier sweeps dirty sidecars
+    // every few seconds (core::META_SWEEP) — per-append 100 ms-debounced
+    // rewrites generated enough rename churn to stall the fs journal.
     A::Applied { tail, closed }
 }
 

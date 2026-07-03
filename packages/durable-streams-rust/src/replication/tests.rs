@@ -53,6 +53,7 @@ async fn cluster(tag: &str, n: u64) -> Cluster {
             listen: String::new(), // pre-bound listener supplied below
             ack_timeout: Duration::from_secs(10),
             trim_secs: 1,
+            stats_secs: 0,
         };
         let handle = start_with_listener(Arc::clone(&store), &cfg, listener);
         nodes.push((store, handle));

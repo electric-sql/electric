@@ -8,13 +8,19 @@
 # Ports: HTTP 4437/4438/4439, replication mesh 5437/5438/5439 (loopback only).
 # State: ./.local-cluster/{node<i>/data,node<i>.log,node<i>.pid}
 # Env:   NODES=3   HTTP_BASE=4437   REPL_BASE=5437   PROFILE=release
+#        MODE=replicated|memory|wal  (memory/wal: single-node baseline, no mesh)
+#        REPL_STATS_SECS=5  TRIM_SECS=5  EXTRA_ARGS="..."
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+MODE="${MODE:-replicated}"
 NODES="${NODES:-3}"
+[ "$MODE" = replicated ] || NODES=1
 HTTP_BASE="${HTTP_BASE:-4437}"
 REPL_BASE="${REPL_BASE:-5437}"
 PROFILE="${PROFILE:-release}"
+REPL_STATS_SECS="${REPL_STATS_SECS:-5}"
+TRIM_SECS="${TRIM_SECS:-5}"
 STATE=".local-cluster"
 
 peers() {
@@ -38,17 +44,33 @@ up() {
     local http=$((HTTP_BASE + i - 1)) repl=$((REPL_BASE + i - 1))
     local data="$STATE/node$i/data"
     mkdir -p "$data"
+    local mode_args=()
+    if [ "$MODE" = replicated ]; then
+      mode_args=(
+        --durability replicated
+        --repl-id "$i"
+        --repl-peers "$(peers)"
+        --repl-listen "127.0.0.1:$repl"
+        --repl-trim-secs "$TRIM_SECS"
+      )
+      [ "$REPL_STATS_SECS" != 0 ] && mode_args+=(--repl-stats "$REPL_STATS_SECS")
+    else
+      mode_args=(--durability "$MODE")
+    fi
+    # shellcheck disable=SC2086
     "$BIN" \
       --host 127.0.0.1 --port "$http" \
       --data-dir "$data" \
-      --durability replicated \
-      --repl-id "$i" \
-      --repl-peers "$(peers)" \
-      --repl-listen "127.0.0.1:$repl" \
+      "${mode_args[@]}" ${EXTRA_ARGS:-} \
       >"$STATE/node$i.log" 2>&1 &
     echo $! >"$STATE/node$i.pid"
-    echo "node $i: http://127.0.0.1:$http  repl 127.0.0.1:$repl  (pid $!)"
+    echo "node $i: http://127.0.0.1:$http  ($MODE, pid $!)"
   done
+  if [ "$MODE" != replicated ]; then
+    sleep 0.3
+    curl -sf "http://127.0.0.1:$HTTP_BASE/health" >/dev/null && echo "single-node $MODE server up"
+    return 0
+  fi
   # Wait for a leader (election timeout is ~500 ms).
   for _ in $(seq 1 50); do
     leader="$(curl -sf "http://127.0.0.1:$HTTP_BASE/_repl/status" 2>/dev/null \
