@@ -10,7 +10,7 @@
 
 [invoke setup_pg]
 
-[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s ELECTRIC_OTEL_SAMPLING_RATIO=1.0 DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
+[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_STACK_TELEMETRY_INIT_DELAY=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s ELECTRIC_OTEL_SAMPLING_RATIO=1.0 ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
 
 # Spawn a process containing off-heap binary references and ensure it's in the top 5 by memory footprint.
 [shell electric]
@@ -66,7 +66,7 @@
   # until it times out and returns an empty (no-change) up-to-date 200 response
   # (this is the only path that sets ot_is_empty_response). Its Plug_shape_get root
   # span carries shape_req.is_empty_response=true and must be tail-dropped
-  # (ELECTRIC_DROP_EMPTY_RESPONSE_SPANS defaults to true), so it must never reach
+  # (ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true is set above), so it must never reach
   # the collector. Verified below. The long-poll timeout is 20s by default, so allow
   # ample time for the response.
   [timeout 60]
