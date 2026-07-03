@@ -103,7 +103,7 @@ pub(crate) mod test_support {
     }
 }
 
-fn long_poll_timeout_dur() -> Duration {
+pub(crate) fn long_poll_timeout_dur() -> Duration {
     Duration::from_millis(LONG_POLL_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
@@ -776,7 +776,7 @@ fn publish_durable_tail(st: &StreamState, tail: u64, wire: &Bytes) {
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
     // Wake any reactor-served subscribers of this stream (no-op when none).
     #[cfg(target_os = "linux")]
-    crate::sse_reactor::wake_stream(st);
+    crate::reactor::wake_stream(st);
 }
 
 // ---------- POST (append) ----------
@@ -1155,7 +1155,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         };
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
         #[cfg(target_os = "linux")]
-        crate::sse_reactor::wake_stream(&st);
+        crate::reactor::wake_stream(&st);
     } else {
         st.schedule_meta_flush();
     }
@@ -1355,7 +1355,7 @@ where
     };
     st.tail_tx.send_replace(Tail { bytes: tail, closed });
     #[cfg(target_os = "linux")]
-    crate::sse_reactor::wake_stream(&st);
+    crate::reactor::wake_stream(&st);
 
     // Shared response builder: captures `st`, `producer` by ref.
     let make_ok = || {
@@ -1768,6 +1768,26 @@ async fn handle_long_poll(
         return long_poll_close(t0.bytes, cursor);
     }
 
+    // Caught up at the live tail with the stream still open: this poll must wait.
+    // On Linux, hand the wait to the epoll reactor (which frees this connection
+    // task's future for the up-to-30s park — the dominant per-poll cost) when the
+    // stream is reactor-eligible; the reactor writes the single response on
+    // data/close/timeout and hands the socket back for keep-alive. Cold/forked/
+    // tiered streams and non-Linux fall through to the inline wait below.
+    #[cfg(target_os = "linux")]
+    if reactor_eligible_long_poll(&st) {
+        // Status is a placeholder: the engine intercepts `LongPollWait` before
+        // serialization and the reactor builds the real response head itself.
+        let mut resp = Resp::new(200);
+        resp.body = Body::LongPollWait(crate::api::LongPollReg {
+            st,
+            from,
+            client_cursor,
+            keep_alive: false,
+        });
+        return resp;
+    }
+
     // Wait for new data / closure / timeout.
     let mut rx = st.tail_tx.subscribe();
     let deadline = Instant::now() + long_poll_timeout_dur();
@@ -1806,8 +1826,22 @@ async fn long_poll_data(
     hot: bool,
     cache_hit: &mut bool,
 ) -> Resp {
-    let cursor = compute_cursor(client_cursor);
     let body = read_range_body(st, from, t.bytes, hot, "long-poll", cache_hit).await;
+    long_poll_data_resp(st, from, t, client_cursor, body)
+}
+
+/// Build the `200` response for a long-poll that delivered `from..t.bytes`, given
+/// an already-materialized body. Sync and free of any read, so it is shared by
+/// the inline path (async body via `read_range_body`) and the reactor (sync body
+/// materialized by hand) — both must emit byte-identical headers.
+pub(crate) fn long_poll_data_resp(
+    st: &StreamState,
+    from: u64,
+    t: Tail,
+    client_cursor: Option<u64>,
+    body: Body,
+) -> Resp {
+    let cursor = compute_cursor(client_cursor);
     let mut b = ResponseBuilder::new(200)
         .h("content-type", st.config.content_type.clone())
         .h(H_NEXT_OFFSET, format_offset(t.bytes))
@@ -1821,7 +1855,26 @@ async fn long_poll_data(
     b.body(body)
 }
 
-fn long_poll_close(tail: u64, cursor: u64) -> Resp {
+/// Wrap the wire bytes of a delivered long-poll range (`from..tail`) as a
+/// fixed-length body, matching `read_range_body`'s framing: JSON streams strip
+/// the trailing record comma and wrap the records in `[ ]`; others pass through.
+/// Used by the reactor, which materializes the bytes itself rather than producing
+/// a `Body::FileRange`.
+#[cfg(target_os = "linux")]
+pub(crate) fn long_poll_full_body(is_json: bool, data: Bytes) -> Body {
+    if is_json {
+        let inner = &data[..data.len().saturating_sub(1)];
+        let mut out = BytesMut::with_capacity(inner.len() + 2);
+        out.put_u8(b'[');
+        out.put_slice(inner);
+        out.put_u8(b']');
+        Body::Full(out.freeze())
+    } else {
+        Body::Full(data)
+    }
+}
+
+pub(crate) fn long_poll_close(tail: u64, cursor: u64) -> Resp {
     ResponseBuilder::new(204)
         .h(H_NEXT_OFFSET, format_offset(tail))
         .h(H_CURSOR, cursor.to_string())
@@ -1831,7 +1884,7 @@ fn long_poll_close(tail: u64, cursor: u64) -> Resp {
         .body(empty())
 }
 
-fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
+pub(crate) fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
     let mut b = ResponseBuilder::new(204)
         .h(H_NEXT_OFFSET, format_offset(tail))
         .h(H_CURSOR, cursor.to_string())
@@ -1841,6 +1894,18 @@ fn long_poll_timeout(tail: u64, cursor: u64, closed: bool) -> Resp {
         b = b.hs(H_CLOSED, "true");
     }
     b.body(empty())
+}
+
+/// Whether a caught-up long-poll on `st` can wait in the epoll reactor. Mirrors
+/// the SSE live-tail gate (`SseSource::reactor_reg`): the reactor serves the live
+/// data file by `pread`, so a forked (`parent`) or tiered (`blobstore`) stream
+/// stays on the inline path. No `file_base` check is needed — a caught-up poll's
+/// `from == tail >= file_base`, and the bytes it waits for are appended to the
+/// live file (a rare concurrent compaction past `from` is handled at produce time
+/// by ending the connection so the client retries through the cold path).
+#[cfg(target_os = "linux")]
+fn reactor_eligible_long_poll(st: &StreamState) -> bool {
+    st.parent.is_none() && st.blobstore.is_none()
 }
 
 // ---------- SSE ----------

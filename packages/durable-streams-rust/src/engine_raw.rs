@@ -114,7 +114,36 @@ pub async fn drain(grace: std::time::Duration) {
     let _ = tokio::time::timeout(grace, sema.acquire_many(MAX_CONNECTIONS as u32)).await;
 }
 
+/// Resume an async connection loop on a socket the long-poll reactor handed back
+/// after writing a keep-alive response. Called from a reactor thread (NOT a tokio
+/// worker), so it spawns onto the runtime handle captured in `serve`. `leftover`
+/// is any data the client pipelined behind its poll. On any failure (no runtime —
+/// only in unit tests — or the fd can't be adopted) everything is dropped, which
+/// closes the socket and releases the permit.
+#[cfg(target_os = "linux")]
+pub(crate) fn resume_after_longpoll(
+    store: Arc<Store>,
+    std_stream: std::net::TcpStream,
+    leftover: BytesMut,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) {
+    let Some(handle) = CONN_RUNTIME.get() else { return };
+    handle.spawn(async move {
+        if let Ok(stream) = TcpStream::from_std(std_stream) {
+            let _ = conn_loop(store, stream, leftover, permit).await;
+        }
+    });
+}
+
+/// Runtime handle captured at startup so the long-poll reactor (running on its
+/// own non-tokio threads) can hand a socket back to the async connection loop
+/// for keep-alive. See `resume_after_longpoll`.
+#[cfg(target_os = "linux")]
+static CONN_RUNTIME: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
+
 pub async fn serve(store: Arc<Store>, listener: TcpListener) {
+    #[cfg(target_os = "linux")]
+    let _ = CONN_RUNTIME.set(tokio::runtime::Handle::current());
     let conns = conn_limiter().clone();
     loop {
         let (stream, _) = match listener.accept().await {
@@ -178,7 +207,7 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
             // detached SSE streaming task (keeping the connection counted while
             // the big conn_loop future is freed); otherwise it is released when
             // conn_loop returns.
-            let _ = conn_loop(store, stream, permit).await;
+            let _ = conn_loop(store, stream, BytesMut::with_capacity(4 * 1024), permit).await;
         });
     }
 }
@@ -186,18 +215,19 @@ pub async fn serve(store: Arc<Store>, listener: TcpListener) {
 async fn conn_loop(
     store: Arc<Store>,
     mut stream: TcpStream,
+    mut buf: BytesMut,
     permit: tokio::sync::OwnedSemaphorePermit,
 ) -> std::io::Result<()> {
     const BAD_REQUEST: &[u8] =
         b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
     const TOO_LARGE: &[u8] =
         b"HTTP/1.1 413 Payload Too Large\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
-    // Initial capacity for the per-connection read buffer. Small on purpose:
-    // it persists for the whole (possibly long-lived, idle) connection, and
-    // `read_buf` grows it on demand, so a request head/body larger than this
-    // still parses — it just triggers a reserve. 4 KiB covers a typical request
-    // head in one read while keeping idle SSE subscribers cheap.
-    let mut buf = BytesMut::with_capacity(4 * 1024);
+    // The per-connection read buffer is passed in (a fresh 4 KiB for a new
+    // connection; for a connection handed back from the long-poll reactor after
+    // keep-alive, any bytes the client pipelined behind its poll). Small on
+    // purpose: it persists for the whole (possibly long-lived, idle) connection,
+    // and `read_buf` grows it on demand, so a larger request head/body still
+    // parses — it just triggers a reserve.
     loop {
         // ---- read request head ----
         let head = match http1::read_head(&mut stream, &mut buf).await? {
@@ -331,6 +361,25 @@ async fn conn_loop(
             body,
         };
         let resp = handlers::handle(store.clone(), req).await;
+        // Long-poll (Linux): a caught-up poll on a reactor-eligible stream comes
+        // back as `LongPollWait` instead of having blocked inline. Hand the socket
+        // to the reactor — which parks for the wait without holding this conn_loop
+        // future, writes the single response, and (for keep-alive) hands the socket
+        // back so the next poll reuses the connection. `buf` carries any bytes the
+        // client pipelined behind the poll, fed back on resume.
+        #[cfg(target_os = "linux")]
+        let mut resp = resp;
+        #[cfg(target_os = "linux")]
+        if !is_head && matches!(resp.body, Body::LongPollWait(_)) {
+            let Body::LongPollWait(mut reg) =
+                std::mem::replace(&mut resp.body, Body::Empty)
+            else {
+                unreachable!()
+            };
+            reg.keep_alive = keep_alive;
+            crate::reactor::register_long_poll(stream, reg, buf, store, permit);
+            return Ok(());
+        }
         // SSE: hand the connection off to a DETACHED, minimal streaming task and
         // return. An SSE subscriber parks for up to SSE_MAX_DURATION; driving it
         // inline would keep this whole `conn_loop` future (sized to the largest
@@ -351,7 +400,7 @@ async fn conn_loop(
                 if let Some(reg) = src.reactor_reg() {
                     let mut head: Vec<u8> = Vec::with_capacity(256);
                     http1::write_head(&mut head, resp.status, &resp.headers, None, keep_alive);
-                    crate::sse_reactor::register(stream, head, reg, permit);
+                    crate::reactor::register(stream, head, reg, permit);
                     return Ok(());
                 }
             }
@@ -398,6 +447,10 @@ async fn write_response(
     }
 
     match resp.body {
+        // A caught-up long-poll on Linux is intercepted in `conn_loop` and handed
+        // to the reactor before reaching here, so this is never serialized inline.
+        #[cfg(target_os = "linux")]
+        Body::LongPollWait(_) => unreachable!("LongPollWait is handed to the reactor"),
         Body::Empty => {
             stream.write_all(&head).await?;
         }

@@ -182,9 +182,9 @@ pub struct StreamState {
     /// Reactor-served SSE subscribers of this stream (Linux). `None` while the
     /// stream has none — the common case — so idle streams cost only the lock +
     /// a null pointer; the list (and its allocation) exist only while subscribers
-    /// are attached. See sse_reactor.rs.
+    /// are attached. See reactor.rs.
     #[cfg(target_os = "linux")]
-    pub sse_subs: StdMutex<Option<Box<StreamSubs>>>,
+    pub reactor_subs: StdMutex<Option<Box<StreamSubs>>>,
 }
 
 /// Reactor subscriber list for one stream — populated only while subscribers are
@@ -601,7 +601,7 @@ impl Store {
             // cell starts clear; the next meta write persists the cleared marker.
             compaction: StdMutex::new(None),
             #[cfg(target_os = "linux")]
-            sse_subs: StdMutex::new(None),
+            reactor_subs: StdMutex::new(None),
             config: StreamConfig {
                 content_type: meta.content_type.clone(),
                 ttl_seconds: meta.ttl_seconds,
@@ -764,7 +764,7 @@ impl Store {
             blobstore: self.blobstore.clone(),
             compaction: StdMutex::new(None),
             #[cfg(target_os = "linux")]
-            sse_subs: StdMutex::new(None),
+            reactor_subs: StdMutex::new(None),
             config,
         });
         match self.streams.entry(path.to_string()) {

@@ -4,7 +4,7 @@ mod engine_raw;
 mod handlers;
 mod http1;
 #[cfg(target_os = "linux")]
-mod sse_reactor;
+mod reactor;
 mod store;
 mod telemetry;
 mod tier;
@@ -353,7 +353,7 @@ fn main() {
                 // Close reactor-served SSE subscribers first so their permits are
                 // released and `drain` doesn't wait out the full grace period.
                 #[cfg(target_os = "linux")]
-                sse_reactor::shutdown();
+                reactor::shutdown();
                 engine_raw::drain(std::time::Duration::from_secs(25)).await;
                 telemetry_guard.shutdown();
             }
