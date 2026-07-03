@@ -25,20 +25,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 httparse = "1"
 
-# Consensus for `--durability replicated` (REPLICATION.md): OmniPaxos (Sequence
-# Paxos) with serde-serializable messages for our TCP mesh; batch_accept
-# coalesces outstanding proposals into single Accept rounds (group commit).
-# Default features are OFF to skip the derive-macros dep (we impl Entry by hand).
-#
-# PINNED TO A GIT REV, deliberately: crates.io 0.2.2 (Nov 2023) has a consensus
-# SAFETY bug our deterministic simulation (replication/sim_tests.rs) reproduces
-# — a follower's cached Promise message is not cleared on AcceptSync, so a
-# resend after a partition + leader change feeds the new leader stale log
-# state and the decided logs diverge (an acked entry vanishes on the new
-# leader). Fixed upstream post-release in e6ddc52 ("Clear
-# cached_promise_message when handling AcceptSync"), never published. The rev
-# is upstream main incl. that fix + two leader-election fixes (#154, #156).
-omnipaxos = { git = "https://github.com/haraldng/omnipaxos.git", rev = "bd234be231626ebb552a8e2f1825901aa0d19ba7", default-features = false, features = ["serde"] }
+# Consensus for `--durability replicated` (REPLICATION.md): openraft (Raft),
+# actively maintained and production-proven (Databend, CnosDB). Replaced
+# OmniPaxos after our deterministic simulation caught an unpublished-fix
+# consensus safety bug in the last released version and the project proved
+# unmaintained (see REPLICATION.md "History: why openraft").
+openraft = { version = "0.9.21", features = ["serde", "storage-v2"] }
 # Peer-message framing for the replication mesh.
 bincode = "1"
 libc = "0.2"

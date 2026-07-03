@@ -143,7 +143,7 @@ fn main() {
     let mut repl_peers: Option<String> = None;
     let mut repl_listen: Option<String> = None;
     let mut repl_ack_timeout_ms: u64 = 10_000;
-    let mut repl_trim_secs: u64 = 5;
+    let mut repl_snapshot_logs: u64 = 5000;
     let mut repl_stats_secs: u64 = 0;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -242,7 +242,9 @@ fn main() {
             "--repl-ack-timeout-ms" => {
                 repl_ack_timeout_ms = parse_val(args.next(), "--repl-ack-timeout-ms")
             }
-            "--repl-trim-secs" => repl_trim_secs = parse_val(args.next(), "--repl-trim-secs"),
+            "--repl-snapshot-logs" => {
+                repl_snapshot_logs = parse_val(args.next(), "--repl-snapshot-logs")
+            }
             "--repl-stats" => repl_stats_secs = parse_val(args.next(), "--repl-stats"),
             "--durability" => {
                 let v = val(args.next(), "--durability");
@@ -306,7 +308,7 @@ fn main() {
                 peers,
                 listen: String::new(),
                 ack_timeout: std::time::Duration::from_millis(repl_ack_timeout_ms),
-                trim_secs: repl_trim_secs,
+                snapshot_logs: repl_snapshot_logs,
                 stats_secs: repl_stats_secs,
             };
             cfg.listen = match repl_listen {

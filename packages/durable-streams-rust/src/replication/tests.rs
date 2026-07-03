@@ -52,18 +52,18 @@ async fn cluster(tag: &str, n: u64) -> Cluster {
             peers: peers.clone(),
             listen: String::new(), // pre-bound listener supplied below
             ack_timeout: Duration::from_secs(10),
-            trim_secs: 1,
+            snapshot_logs: 64, // snapshot/purge frequently so tests cover it
             stats_secs: 0,
         };
-        let handle = start_with_listener(Arc::clone(&store), &cfg, listener);
+        let handle = start_with_listener(Arc::clone(&store), &cfg, listener).await;
         nodes.push((store, handle));
     }
-    // Wait for an agreed leader everywhere (election timeout is 500 ms).
+    // Wait for an agreed leader everywhere (election timeout is 500-1000 ms).
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
         let leaders: Vec<u64> = nodes
             .iter()
-            .map(|(_, h)| h.leader.load(std::sync::atomic::Ordering::Relaxed))
+            .map(|(_, h)| h.raft.metrics().borrow().current_leader.unwrap_or(0))
             .collect();
         if leaders.iter().all(|l| *l != 0) && leaders.windows(2).all(|w| w[0] == w[1]) {
             break;

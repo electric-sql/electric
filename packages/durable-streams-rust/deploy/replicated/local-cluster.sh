@@ -9,7 +9,7 @@
 # State: ./.local-cluster/{node<i>/data,node<i>.log,node<i>.pid}
 # Env:   NODES=3   HTTP_BASE=4437   REPL_BASE=5437   PROFILE=release
 #        MODE=replicated|memory|wal  (memory/wal: single-node baseline, no mesh)
-#        REPL_STATS_SECS=5  TRIM_SECS=5  EXTRA_ARGS="..."
+#        REPL_STATS_SECS=5  SNAPSHOT_LOGS=5000  EXTRA_ARGS="..."
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -20,7 +20,7 @@ HTTP_BASE="${HTTP_BASE:-4437}"
 REPL_BASE="${REPL_BASE:-5437}"
 PROFILE="${PROFILE:-release}"
 REPL_STATS_SECS="${REPL_STATS_SECS:-5}"
-TRIM_SECS="${TRIM_SECS:-5}"
+SNAPSHOT_LOGS="${SNAPSHOT_LOGS:-5000}"
 STATE=".local-cluster"
 
 peers() {
@@ -51,7 +51,7 @@ up() {
         --repl-id "$i"
         --repl-peers "$(peers)"
         --repl-listen "127.0.0.1:$repl"
-        --repl-trim-secs "$TRIM_SECS"
+        --repl-snapshot-logs "$SNAPSHOT_LOGS"
       )
       [ "$REPL_STATS_SECS" != 0 ] && mode_args+=(--repl-stats "$REPL_STATS_SECS")
     else

@@ -1,139 +1,321 @@
-//! TCP mesh between replicas: one outbound connection per peer with automatic
-//! reconnect; frames are `u32-BE length + bincode(Message<ReplEntry>)`. Losing
-//! a link (or dropping queued messages while a peer is down) is safe —
-//! OmniPaxos's resend timer reissues anything unacknowledged.
+//! RPC mesh between replicas: one persistent outbound connection per peer
+//! with correlation ids and automatic reconnect; frames are
+//! `u32-BE length + bincode((req_id, payload))`. Carries openraft's three
+//! RPCs plus our forward-to-leader proposal RPC.
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use omnipaxos::messages::Message;
-use omnipaxos::util::NodeId;
+use openraft::error::{InstallSnapshotError, NetworkError, Unreachable};
+use openraft::network::{RPCOption, RaftNetwork, RaftNetworkFactory};
+use openraft::raft::{
+    AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
+    VoteRequest, VoteResponse,
+};
+use openraft::BasicNode;
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
+use tokio::net::{tcp::OwnedWriteHalf, TcpListener, TcpStream};
+use tokio::sync::{mpsc, oneshot, Mutex};
 
-use super::entry::ReplEntry;
+use super::entry::{LogOp, OpOutcome};
+use super::types::{typ, NodeId, Raft, TypeConfig};
 
-/// Cap on a single frame (a batched Accept can carry many appends; 256 MiB is
-/// far above any sane batch and small enough to reject stray/corrupt frames).
 const MAX_FRAME: u32 = 256 * 1024 * 1024;
-/// Per-peer outbound queue. Overflow drops (peer down / stalled) — resends cover it.
-const OUTBOX_DEPTH: usize = 4096;
 const RECONNECT_BACKOFF: Duration = Duration::from_millis(500);
+/// Cap on any single RPC round trip (openraft also applies its own ttls).
+const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub(super) struct Mesh {
-    outboxes: HashMap<NodeId, mpsc::Sender<Message<ReplEntry>>>,
-    /// Live state of each outbound link, for `/_repl/status`.
-    pub connected: HashMap<NodeId, Arc<AtomicBool>>,
+#[derive(Serialize, Deserialize)]
+pub(super) enum RpcRequest {
+    Append(AppendEntriesRequest<TypeConfig>),
+    Vote(VoteRequest<NodeId>),
+    Snapshot(InstallSnapshotRequest<TypeConfig>),
+    /// Proposal forwarded from a non-leader node: the leader runs
+    /// `client_write` and returns the apply outcome + log index.
+    Forward(LogOp),
 }
 
-impl Mesh {
-    /// Route one outgoing consensus message. Messages to unknown receivers or
-    /// full/down links are dropped (OmniPaxos resends).
-    pub fn send(&self, msg: Message<ReplEntry>) {
-        if let Some(tx) = self.outboxes.get(&msg.get_receiver()) {
-            let _ = tx.try_send(msg);
-        }
+#[derive(Serialize, Deserialize)]
+pub(super) enum RpcReply {
+    Append(Result<AppendEntriesResponse<NodeId>, String>),
+    Vote(Result<VoteResponse<NodeId>, String>),
+    Snapshot(Result<InstallSnapshotResponse<NodeId>, String>),
+    Forward(Result<(OpOutcome, u64), String>),
+}
+
+// ---------- client ----------
+
+struct Conn {
+    tx: mpsc::Sender<Vec<u8>>,
+    pending: Arc<dashmap::DashMap<u64, oneshot::Sender<RpcReply>>>,
+}
+
+/// A lazily-connected, auto-reconnecting RPC client for one peer.
+pub(super) struct RpcClient {
+    pub addr: String,
+    conn: Mutex<Option<Conn>>,
+    next_id: AtomicU64,
+    pub connected: AtomicBool,
+}
+
+impl RpcClient {
+    pub fn new(addr: String) -> Arc<Self> {
+        Arc::new(RpcClient {
+            addr,
+            conn: Mutex::new(None),
+            next_id: AtomicU64::new(1),
+            connected: AtomicBool::new(false),
+        })
     }
-}
 
-/// Spawn the accept loop (feeding `incoming_tx`) and one reconnecting sender
-/// task per peer. `listener` is pre-bound so tests can use ephemeral ports.
-pub(super) fn spawn(
-    listener: TcpListener,
-    peers: &[(NodeId, String)],
-    self_id: NodeId,
-    incoming_tx: mpsc::Sender<Message<ReplEntry>>,
-) -> Mesh {
-    tokio::spawn(accept_loop(listener, incoming_tx));
-
-    let mut outboxes = HashMap::new();
-    let mut connected = HashMap::new();
-    for (id, addr) in peers {
-        if *id == self_id {
-            continue;
-        }
-        let (tx, rx) = mpsc::channel(OUTBOX_DEPTH);
-        let up = Arc::new(AtomicBool::new(false));
-        tokio::spawn(peer_sender(addr.clone(), rx, Arc::clone(&up)));
-        outboxes.insert(*id, tx);
-        connected.insert(*id, up);
-    }
-    Mesh { outboxes, connected }
-}
-
-async fn accept_loop(listener: TcpListener, incoming_tx: mpsc::Sender<Message<ReplEntry>>) {
-    loop {
-        match listener.accept().await {
-            Ok((sock, _)) => {
-                let tx = incoming_tx.clone();
-                tokio::spawn(async move {
-                    let _ = read_frames(sock, tx).await;
-                });
+    async fn ensure_conn(&self) -> std::io::Result<(mpsc::Sender<Vec<u8>>, Arc<dashmap::DashMap<u64, oneshot::Sender<RpcReply>>>)>
+    {
+        let mut guard = self.conn.lock().await;
+        if let Some(c) = guard.as_ref() {
+            if !c.tx.is_closed() {
+                return Ok((c.tx.clone(), Arc::clone(&c.pending)));
             }
-            Err(_) => tokio::time::sleep(RECONNECT_BACKOFF).await,
+        }
+        let sock = TcpStream::connect(&self.addr).await?;
+        let _ = sock.set_nodelay(true);
+        let (mut rd, wr) = sock.into_split();
+        let (tx, rx) = mpsc::channel::<Vec<u8>>(1024);
+        let pending: Arc<dashmap::DashMap<u64, oneshot::Sender<RpcReply>>> =
+            Arc::new(dashmap::DashMap::new());
+        tokio::spawn(write_loop(wr, rx));
+        let pending2 = Arc::clone(&pending);
+        tokio::spawn(async move {
+            // Reader: match replies to pending calls; on EOF/err fail them all
+            // (their oneshot senders drop → callers see a network error).
+            let mut len_buf = [0u8; 4];
+            loop {
+                if rd.read_exact(&mut len_buf).await.is_err() {
+                    break;
+                }
+                let len = u32::from_be_bytes(len_buf);
+                if len == 0 || len > MAX_FRAME {
+                    break;
+                }
+                let mut buf = vec![0u8; len as usize];
+                if rd.read_exact(&mut buf).await.is_err() {
+                    break;
+                }
+                let Ok((req_id, reply)) = bincode::deserialize::<(u64, RpcReply)>(&buf) else {
+                    break;
+                };
+                if let Some((_, tx)) = pending2.remove(&req_id) {
+                    let _ = tx.send(reply);
+                }
+            }
+            pending2.clear();
+        });
+        *guard = Some(Conn {
+            tx: tx.clone(),
+            pending: Arc::clone(&pending),
+        });
+        self.connected.store(true, Ordering::Relaxed);
+        Ok((tx, pending))
+    }
+
+    pub async fn call(&self, req: RpcRequest) -> Result<RpcReply, std::io::Error> {
+        let (tx, pending) = match self.ensure_conn().await {
+            Ok(v) => v,
+            Err(e) => {
+                self.connected.store(false, Ordering::Relaxed);
+                return Err(e);
+            }
+        };
+        let req_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let (otx, orx) = oneshot::channel();
+        pending.insert(req_id, otx);
+        let mut frame = Vec::new();
+        let body = bincode::serialize(&(req_id, req))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        frame.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        frame.extend_from_slice(&body);
+        if tx.send(frame).await.is_err() {
+            pending.remove(&req_id);
+            self.connected.store(false, Ordering::Relaxed);
+            *self.conn.lock().await = None;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "peer connection lost",
+            ));
+        }
+        match tokio::time::timeout(RPC_TIMEOUT, orx).await {
+            Ok(Ok(reply)) => Ok(reply),
+            _ => {
+                pending.remove(&req_id);
+                self.connected.store(false, Ordering::Relaxed);
+                *self.conn.lock().await = None;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "rpc timeout / connection lost",
+                ))
+            }
         }
     }
 }
 
-async fn read_frames(
-    mut sock: TcpStream,
-    tx: mpsc::Sender<Message<ReplEntry>>,
-) -> std::io::Result<()> {
+async fn write_loop(mut wr: OwnedWriteHalf, mut rx: mpsc::Receiver<Vec<u8>>) {
+    while let Some(frame) = rx.recv().await {
+        if wr.write_all(&frame).await.is_err() {
+            return; // dropping rx closes the channel; callers reconnect
+        }
+    }
+}
+
+// ---------- openraft network adapter ----------
+
+pub(super) struct MeshFactory {
+    pub clients: std::collections::HashMap<NodeId, Arc<RpcClient>>,
+}
+
+pub(super) struct NodeClient {
+    client: Arc<RpcClient>,
+}
+
+impl RaftNetworkFactory<TypeConfig> for MeshFactory {
+    type Network = NodeClient;
+
+    async fn new_client(&mut self, target: NodeId, _node: &BasicNode) -> Self::Network {
+        NodeClient {
+            client: Arc::clone(self.clients.get(&target).expect("unknown peer id")),
+        }
+    }
+}
+
+fn net_err<E>(e: std::io::Error) -> openraft::error::RPCError<NodeId, BasicNode, E>
+where
+    E: std::error::Error,
+{
+    if e.kind() == std::io::ErrorKind::ConnectionRefused {
+        openraft::error::RPCError::Unreachable(Unreachable::new(&e))
+    } else {
+        openraft::error::RPCError::Network(NetworkError::new(&e))
+    }
+}
+
+fn remote_err<E>(msg: String) -> openraft::error::RPCError<NodeId, BasicNode, E>
+where
+    E: std::error::Error,
+{
+    let e = std::io::Error::other(msg);
+    openraft::error::RPCError::Network(NetworkError::new(&e))
+}
+
+impl RaftNetwork<TypeConfig> for NodeClient {
+    async fn append_entries(
+        &mut self,
+        req: AppendEntriesRequest<TypeConfig>,
+        _option: RPCOption,
+    ) -> Result<AppendEntriesResponse<NodeId>, typ::RPCError> {
+        match self.client.call(RpcRequest::Append(req)).await {
+            Ok(RpcReply::Append(Ok(resp))) => Ok(resp),
+            Ok(RpcReply::Append(Err(m))) => Err(remote_err(m)),
+            Ok(_) => Err(remote_err("mismatched rpc reply".into())),
+            Err(e) => Err(net_err(e)),
+        }
+    }
+
+    async fn install_snapshot(
+        &mut self,
+        req: InstallSnapshotRequest<TypeConfig>,
+        _option: RPCOption,
+    ) -> Result<InstallSnapshotResponse<NodeId>, typ::RPCError<InstallSnapshotError>> {
+        match self.client.call(RpcRequest::Snapshot(req)).await {
+            Ok(RpcReply::Snapshot(Ok(resp))) => Ok(resp),
+            Ok(RpcReply::Snapshot(Err(m))) => Err(remote_err(m)),
+            Ok(_) => Err(remote_err("mismatched rpc reply".into())),
+            Err(e) => Err(net_err(e)),
+        }
+    }
+
+    async fn vote(
+        &mut self,
+        req: VoteRequest<NodeId>,
+        _option: RPCOption,
+    ) -> Result<VoteResponse<NodeId>, typ::RPCError> {
+        match self.client.call(RpcRequest::Vote(req)).await {
+            Ok(RpcReply::Vote(Ok(resp))) => Ok(resp),
+            Ok(RpcReply::Vote(Err(m))) => Err(remote_err(m)),
+            Ok(_) => Err(remote_err("mismatched rpc reply".into())),
+            Err(e) => Err(net_err(e)),
+        }
+    }
+}
+
+// ---------- server ----------
+
+/// Accept loop: serve openraft RPCs + forwarded proposals against the local
+/// Raft. Each request runs as its own task so a slow apply (Forward) doesn't
+/// head-of-line-block heartbeats on the same connection.
+pub(super) fn spawn_server(listener: TcpListener, raft: Raft) {
+    tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((sock, _)) => {
+                    let _ = sock.set_nodelay(true);
+                    let raft = raft.clone();
+                    tokio::spawn(serve_conn(sock, raft));
+                }
+                Err(_) => tokio::time::sleep(RECONNECT_BACKOFF).await,
+            }
+        }
+    });
+}
+
+async fn serve_conn(sock: TcpStream, raft: Raft) {
+    let (mut rd, wr) = sock.into_split();
+    let (tx, rx) = mpsc::channel::<Vec<u8>>(1024);
+    tokio::spawn(write_loop(wr, rx));
     let mut len_buf = [0u8; 4];
     loop {
-        sock.read_exact(&mut len_buf).await?;
+        if rd.read_exact(&mut len_buf).await.is_err() {
+            return;
+        }
         let len = u32::from_be_bytes(len_buf);
         if len == 0 || len > MAX_FRAME {
-            return Ok(()); // corrupt/hostile frame: drop the connection
+            return;
         }
         let mut buf = vec![0u8; len as usize];
-        sock.read_exact(&mut buf).await?;
-        let Ok(msg) = bincode::deserialize::<Message<ReplEntry>>(&buf) else {
-            return Ok(());
-        };
-        if tx.send(msg).await.is_err() {
-            return Ok(()); // core gone (shutdown)
+        if rd.read_exact(&mut buf).await.is_err() {
+            return;
         }
+        let Ok((req_id, req)) = bincode::deserialize::<(u64, RpcRequest)>(&buf) else {
+            return;
+        };
+        let raft = raft.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let reply = handle_rpc(&raft, req).await;
+            let Ok(body) = bincode::serialize(&(req_id, reply)) else {
+                return;
+            };
+            let mut frame = Vec::with_capacity(4 + body.len());
+            frame.extend_from_slice(&(body.len() as u32).to_be_bytes());
+            frame.extend_from_slice(&body);
+            let _ = tx.send(frame).await;
+        });
     }
 }
 
-async fn peer_sender(
-    addr: String,
-    mut rx: mpsc::Receiver<Message<ReplEntry>>,
-    up: Arc<AtomicBool>,
-) {
-    loop {
-        let mut sock = loop {
-            match TcpStream::connect(&addr).await {
-                Ok(s) => {
-                    let _ = s.set_nodelay(true);
-                    break s;
-                }
-                Err(_) => {
-                    up.store(false, Ordering::Relaxed);
-                    // Drain (drop) queued messages while down so the queue holds
-                    // fresh traffic when the link returns; resends re-cover them.
-                    while rx.try_recv().is_ok() {}
-                    tokio::time::sleep(RECONNECT_BACKOFF).await;
-                }
-            }
-        };
-        up.store(true, Ordering::Relaxed);
-        while let Some(msg) = rx.recv().await {
-            let Ok(bytes) = bincode::serialize(&msg) else {
-                continue;
-            };
-            let len = (bytes.len() as u32).to_be_bytes();
-            if sock.write_all(&len).await.is_err() || sock.write_all(&bytes).await.is_err() {
-                up.store(false, Ordering::Relaxed);
-                break; // reconnect
-            }
+async fn handle_rpc(raft: &Raft, req: RpcRequest) -> RpcReply {
+    match req {
+        RpcRequest::Append(r) => {
+            RpcReply::Append(raft.append_entries(r).await.map_err(|e| e.to_string()))
         }
-        if rx.is_closed() && rx.try_recv().is_err() {
-            return; // core gone (shutdown)
+        RpcRequest::Vote(r) => RpcReply::Vote(raft.vote(r).await.map_err(|e| e.to_string())),
+        RpcRequest::Snapshot(r) => {
+            RpcReply::Snapshot(raft.install_snapshot(r).await.map_err(|e| e.to_string()))
         }
+        RpcRequest::Forward(op) => RpcReply::Forward(
+            raft.client_write(op)
+                .await
+                .map(|resp| (resp.data, resp.log_id.index))
+                .map_err(|e| e.to_string()),
+        ),
     }
 }

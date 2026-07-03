@@ -1,24 +1,15 @@
-//! The replicated-log entry types (what goes through consensus) and the apply
-//! outcomes (what comes back). See REPLICATION.md.
+//! The replicated-log operation types (what goes through consensus) and the
+//! apply outcomes (what comes back). See REPLICATION.md.
+//!
+//! With openraft, `LogOp` is the Raft `D` (app data) type and `OpOutcome` the
+//! `R` (response) type: `Raft::client_write(LogOp)` resolves with the outcome
+//! the state machine computed when it applied the decided entry — the ack IS
+//! the apply result. Outcomes are serde because they also travel back over
+//! the forward-to-leader RPC.
 
-use omnipaxos::storage::{Entry, NoSnapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::store::StreamConfig;
-
-/// One entry in the OmniPaxos log. `origin`/`req_id` tag the proposing node's
-/// pending HTTP request so the applier can resolve the ack on that node; every
-/// other node applies the op and ignores the tag.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ReplEntry {
-    pub origin: u64,
-    pub req_id: u64,
-    pub op: LogOp,
-}
-
-impl Entry for ReplEntry {
-    type Snapshot = NoSnapshot;
-}
 
 /// Producer identity for idempotent appends, replicated so dedup/fencing is
 /// evaluated deterministically at apply time on every node.
@@ -55,18 +46,31 @@ pub enum LogOp {
     Delete { path: String },
 }
 
-// ---------- apply outcomes (local, not serialized) ----------
+impl LogOp {
+    pub fn path(&self) -> &str {
+        match self {
+            LogOp::Create { path, .. } | LogOp::Append { path, .. } | LogOp::Delete { path } => {
+                path
+            }
+        }
+    }
+}
 
-/// Outcome of applying a decided `LogOp`, resolved to the pending HTTP request
-/// on the origin node. Mirrors the single-node handlers' response cases.
-#[derive(Clone, Debug)]
+// ---------- apply outcomes ----------
+
+/// Outcome of applying a decided `LogOp`, returned to the proposing client.
+/// Mirrors the single-node handlers' response cases.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OpOutcome {
     Append(AppendApplyOutcome),
     Create(CreateApplyOutcome),
     Delete(DeleteApplyOutcome),
+    /// Raft-internal entries (blank on leader change, membership) — never
+    /// surfaced to an HTTP client.
+    Noop,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AppendApplyOutcome {
     /// Bytes written (and/or closed) — the success ack.
     Applied { tail: u64, closed: bool },
@@ -87,7 +91,7 @@ pub enum AppendApplyOutcome {
     WriteFailed,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CreateApplyOutcome {
     Created { tail: u64, closed: bool },
     Exists { tail: u64, closed: bool, content_type: String },
@@ -97,7 +101,7 @@ pub enum CreateApplyOutcome {
     WriteFailed,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum DeleteApplyOutcome {
     Deleted,
     NotFound,

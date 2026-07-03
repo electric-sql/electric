@@ -1,9 +1,12 @@
-//! Paxos-replicated durability (`--durability replicated`) — see REPLICATION.md.
+//! Raft-replicated durability (`--durability replicated`) — see REPLICATION.md.
 //!
 //! Layering:
-//! - `entry`   — what goes through the log (`LogOp`) and apply outcomes
-//! - `net`     — TCP mesh between replicas (length-prefixed bincode frames)
-//! - `core`    — the OmniPaxos instance + event loop + decided-entry applier
+//! - `entry`     — what goes through the log (`LogOp`) and apply outcomes
+//! - `types`     — openraft type wiring (D = LogOp, R = OpOutcome)
+//! - `log_store` — in-memory Raft log + vote (vendored reference impl)
+//! - `sm`        — the state machine: sharded log-first apply into the Store
+//! - `net`       — RPC mesh (openraft RPCs + forward-to-leader proposals)
+//! - `core`      — ReplHandle: propose/ack, status, stats
 //! - the semantic apply functions (`apply_replicated_*`) live in `handlers.rs`,
 //!   next to their single-node twins
 //!
@@ -12,17 +15,20 @@
 
 pub mod core;
 pub mod entry;
-mod mem_storage;
+mod log_store;
 mod net;
-#[cfg(test)]
-mod sim_tests;
+mod sm;
+pub mod types;
+
 #[cfg(test)]
 mod tests;
 
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-pub use core::ReplHandle;
+pub use core::{AckTimeout, ReplHandle};
+use openraft::BasicNode;
 
 use crate::store::Store;
 
@@ -37,10 +43,12 @@ pub struct ReplConfig {
     pub peers: Vec<(u64, String)>,
     /// Peer-listener bind address.
     pub listen: String,
-    /// How long `propose_and_wait` waits for the decided outcome before 503.
+    /// How long `propose_and_wait` waits for the acked outcome before 503.
     pub ack_timeout: Duration,
-    /// Log-trim cadence in seconds (0 = never trim).
-    pub trim_secs: u64,
+    /// Snapshot (log-purge) cadence in log entries: a marker snapshot is
+    /// taken every N entries and the log behind it is purged, bounding the
+    /// in-memory log to roughly N + keep-margin entries per node.
+    pub snapshot_logs: u64,
     /// `REPL_STATS` stderr emit cadence in seconds (0 = off).
     pub stats_secs: u64,
 }
@@ -82,21 +90,65 @@ impl ReplConfig {
     }
 }
 
-/// Bind the peer listener and spawn the mesh + consensus core. Separated from
-/// `install()` so tests can run several nodes in one process.
+/// Bind the peer listener and start the Raft node. Separated from `install()`
+/// so tests can run several nodes in one process.
 pub async fn start(store: Arc<Store>, cfg: &ReplConfig) -> std::io::Result<Arc<ReplHandle>> {
     let listener = tokio::net::TcpListener::bind(&cfg.listen).await?;
-    Ok(start_with_listener(store, cfg, listener))
+    Ok(start_with_listener(store, cfg, listener).await)
 }
 
-pub fn start_with_listener(
+pub async fn start_with_listener(
     store: Arc<Store>,
     cfg: &ReplConfig,
     listener: tokio::net::TcpListener,
 ) -> Arc<ReplHandle> {
-    let (incoming_tx, incoming_rx) = core::incoming_channel();
-    let mesh = net::spawn(listener, &cfg.peers, cfg.id, incoming_tx);
-    let handle = core::spawn_core(store, cfg, mesh, incoming_rx);
+    // Election/heartbeat sized to match the omnipaxos incarnation (~500 ms
+    // fail-over) so the comparison and the documented behavior carry over.
+    let config = openraft::Config {
+        heartbeat_interval: 100,
+        election_timeout_min: 500,
+        election_timeout_max: 1000,
+        snapshot_policy: openraft::SnapshotPolicy::LogsSinceLast(cfg.snapshot_logs.max(1)),
+        max_in_snapshot_log_to_keep: 256,
+        ..Default::default()
+    };
+    let config = Arc::new(config.validate().expect("invalid raft config"));
+
+    let log_store = log_store::LogStore::<types::TypeConfig>::default();
+    let sm = sm::StateMachine::new(Arc::clone(&store));
+    sm.spawn_meta_sweeper();
+
+    let clients: HashMap<u64, Arc<net::RpcClient>> = cfg
+        .peers
+        .iter()
+        .filter(|(id, _)| *id != cfg.id)
+        .map(|(id, addr)| (*id, net::RpcClient::new(addr.clone())))
+        .collect();
+
+    let raft = types::Raft::new(
+        cfg.id,
+        config,
+        net::MeshFactory {
+            clients: clients.clone(),
+        },
+        log_store.clone(),
+        Arc::clone(&sm),
+    )
+    .await
+    .expect("failed to start raft");
+
+    net::spawn_server(listener, raft.clone());
+
+    // Bootstrap: every node proposes the same initial membership; on an
+    // already-initialized node this errs (NotAllowed) and is ignored.
+    let members: BTreeMap<u64, BasicNode> = cfg
+        .peers
+        .iter()
+        .map(|(id, addr)| (*id, BasicNode::new(addr.clone())))
+        .collect();
+    let _ = raft.initialize(members).await;
+
+    let handle = ReplHandle::new(cfg.id, raft, sm, log_store, clients, cfg.ack_timeout);
     if cfg.stats_secs > 0 {
         core::spawn_stats_emitter(
             Arc::clone(&handle),
