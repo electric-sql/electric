@@ -541,16 +541,23 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp response_trace_attrs(%Conn{assigns: assigns}) do
+  # Resolves the request and response structs from the conn assigns as bare maps.
+  # The response may live directly on the conn or nested under the request
+  # (its emit-time home), depending on where in the pipeline this runs.
+  defp request_and_response(assigns) do
     request = Map.get(assigns, :request, %{}) |> bare_map()
     response = (Map.get(assigns, :response) || Map.get(request, :response) || %{}) |> bare_map()
+    {request, response}
+  end
+
+  defp response_trace_attrs(%Conn{assigns: assigns}) do
+    {_request, response} = request_and_response(assigns)
     Map.get(response, :trace_attrs, %{})
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
-    request = Map.get(assigns, :request, %{}) |> bare_map()
+    {request, response} = request_and_response(assigns)
     params = Map.get(request, :params, %{}) |> bare_map()
-    response = (Map.get(assigns, :response) || Map.get(request, :response) || %{}) |> bare_map()
     attrs = Map.get(response, :trace_attrs, %{})
     maybe_up_to_date = Map.get(response, :up_to_date, false)
 
