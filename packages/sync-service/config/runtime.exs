@@ -226,6 +226,7 @@ config :electric,
       env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
   consumer_partitions: env!("ELECTRIC_CONSUMER_PARTITIONS", :integer, nil),
   max_concurrent_requests: max_concurrent_requests,
+  long_poll_timeout: env!("ELECTRIC_LONG_POLL_TIMEOUT", :integer, nil),
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
