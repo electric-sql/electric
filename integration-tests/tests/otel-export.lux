@@ -101,6 +101,22 @@
   # Verify the presence of process.memory.total metric
   [invoke grep_otel_collector_output "Metric process\.memory\.total .*process_type=A_memory_hog.*Value=[0-9]+"]
 
+  # Verify BEAM allocator metrics (vm.alloc.*) from SystemMetrics. These come from
+  # :recon_alloc and are cross-platform; they are sampled every poll tick.
+  [invoke grep_otel_collector_output "Metric vm\.alloc\.allocated .*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric vm\.alloc\.used .*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric vm\.alloc\.unused .*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric vm\.alloc\.carrier_usage .*Value=[.0-9]+"]
+
+  # Verify host /proc metrics (host.mem.* / host.proc.beam.*) from SystemMetrics.
+  # These read /proc and are populated on Linux (the CI runner).
+  [invoke grep_otel_collector_output "Metric host\.mem\.total .*Value=[0-9]+"]
+  [invoke grep_otel_collector_output "Metric host\.proc\.beam\.vm_rss .*Value=[0-9]+"]
+
+  # Verify cgroup accounting metrics (cgroup.*) from SystemMetrics. Populated when a
+  # cgroup is detected — cgroup v2 on the CI runner.
+  [invoke grep_otel_collector_output "Metric cgroup\.memory\.current .*Value=[0-9]+"]
+
   # Verify that LSN metrics are exported
   [invoke grep_otel_collector_output "Metric electric\.postgres\.replication\.pg_wal_offset .*stack_id=single_stack"]
   [invoke grep_otel_collector_output "Metric electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag .*stack_id=single_stack"]
