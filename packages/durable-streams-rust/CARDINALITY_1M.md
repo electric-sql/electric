@@ -18,7 +18,7 @@ The key mechanism: **at high cardinality, ops/stream/checkpoint-interval drops b
 | 3   | **Per-append meta sidecar flush**: with inter-append gap > the 100 ms debounce (always, at high cardinality) every producer append did JSON + `File::create(.meta.tmp)` + `rename` → all workers spin on the **data-dir inode rwsem** | perf: `osq_lock`+`rwsem_spin_on_owner` under `write_meta_sync` = **38–46% of ALL server CPU at every cardinality** | WAL-staged appends only mark `meta_dirty`; checkpoint writes sidecars for drained streams after recycle (memory-mode keeps the debounced flush). Producer/access staleness bound: 100 ms debounce → checkpoint cadence (contract already allows lag) |
 | 4   | Two registry lookups per append (`handle_append` metric label + `_inner`) — 2× SipHash + cold DashMap walk at 1M keys                                                                                                                 | code inspection                                                                                                    | `_inner` returns `is_json`                                                                                                                                                                                                                           |
 
-## Local A/B (contention-repro-linux.sh, 6 srv cores, conn=256, shards=6)
+## Local A/B (Linux harness, 6 srv cores, conn=256, shards=6)
 
 | streams | before        | after      | p99          |
 | ------- | ------------- | ---------- | ------------ |

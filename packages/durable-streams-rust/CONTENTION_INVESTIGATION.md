@@ -42,8 +42,8 @@ Added always-on, dependency-free contention telemetry (independent of the heavy
 
 ## Phase 0 — local reproduction (DONE / caveated)
 
-`scripts/contention-repro.sh` drives the server with the `ds-bench multi-stream`
-pool client and prints throughput + CPU + steady-state `WAL_CONT`.
+Local reproduction drives the server with the `ds-bench multi-stream` pool
+client and reads throughput + CPU + steady-state `WAL_CONT`.
 
 **macOS caveats (why a Linux harness is also needed):**
 
@@ -56,14 +56,13 @@ pool client and prints throughput + CPU + steady-state `WAL_CONT`.
   ceiling is confounded (a flat ~1600 ops/s independent of shards/connections).
   The **contention telemetry signals are valid** on macOS (use them for relative
   before/after of a change); the **throughput-ceiling** comparison must run on
-  Linux with a tmpfs data dir and CPU isolation (`contention-repro-linux.sh`).
+  Linux with a tmpfs data dir and CPU isolation.
 
-Use a RAM disk for cheap fsync on macOS:
+Use a RAM disk for cheap fsync on macOS (point the server's data dir at it):
 
 ```
 DEV=$(hdiutil attach -nomount ram://6291456 | awk '{print $1}')
 diskutil erasevolume HFS+ dsram "$DEV"          # → /Volumes/dsram
-TMPDIR=/Volumes/dsram scripts/contention-repro.sh --shards 1 --connections 256
 ```
 
 ## Baseline (Linux harness, 6 server cores / 4 client cores, tmpfs, conn=256)
