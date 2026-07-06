@@ -18,13 +18,13 @@ use std::io;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use tokio::task::JoinHandle;
 
 use crate::api::{Method, Req};
 use crate::handlers;
 use crate::handlers::test_support::DurabilityGuard;
 use crate::store::Store;
 use crate::tier::TierConfig;
+use crate::wal::shard::CommitterHandle;
 use crate::wal::walset::WalSet;
 
 /// A unique temp data dir for one test.
@@ -40,12 +40,15 @@ fn tmp(tag: &str) -> std::path::PathBuf {
 }
 
 /// A booted WAL-mode server harness: the store with its WAL attached and the
-/// per-shard committers running. Committer `JoinHandle`s are held so a test can
-/// `.abort()` them to simulate a crash (a graceful shutdown would drain them).
+/// per-shard committers running on their dedicated OS threads. Committer
+/// [`CommitterHandle`]s are held so a test can stop + join them to simulate a
+/// crash. (Every record a crash test relies on is already acked — hence durable —
+/// before the stop, so the final drain a graceful stop performs is a no-op for
+/// those records; the on-disk state matches an abrupt crash.)
 struct Harness {
     store: Arc<Store>,
     walset: Arc<WalSet>,
-    committers: Vec<JoinHandle<()>>,
+    committers: Vec<CommitterHandle>,
 }
 
 impl Harness {
@@ -60,7 +63,18 @@ impl Harness {
     /// the durable WAL into the per-stream files + fsync) → `reset_after_recovery`
     /// (wipe the old WAL) → attach + `spawn_committers`.
     fn boot(dir: &std::path::Path, shards: Option<usize>, default_n: usize) -> io::Result<Harness> {
-        let walset = WalSet::open(dir, shards, default_n)?;
+        Harness::boot_with_segment_size(dir, shards, default_n, crate::wal::segment::SEGMENT_BYTES)
+    }
+
+    /// [`Harness::boot`] with an explicit WAL segment size, so a test can force
+    /// segment rolls/recycles cheaply (multi-segment recovery coverage).
+    fn boot_with_segment_size(
+        dir: &std::path::Path,
+        shards: Option<usize>,
+        default_n: usize,
+        segment_size: u64,
+    ) -> io::Result<Harness> {
+        let walset = WalSet::open_with_segment_size(dir, shards, default_n, segment_size)?;
         let store = Arc::new(Store::new_with_tier(dir.to_path_buf(), TierConfig::default())?);
         crate::wal::recovery::recover(&store, &walset)?;
         walset.reset_after_recovery()?;
@@ -69,23 +83,29 @@ impl Harness {
             .set(Arc::clone(&walset))
             .unwrap_or_else(|_| panic!("WAL already attached"));
         // Spawn committers ourselves (not `walset.spawn_committers()`) so we keep
-        // the JoinHandles and can abort them to simulate a crash.
+        // the handles and can stop them to simulate a crash.
         let mut committers = Vec::new();
         for shard in walset.shards() {
-            let shard = Arc::clone(shard);
-            committers.push(tokio::spawn(shard.run_committer()));
+            committers.push(shard.spawn_committer());
         }
         Ok(Harness { store, walset, committers })
     }
 
-    /// Simulate a crash: abort the committers (so no further `durable_lsn`
+    /// Stop + join every committer thread (so no further `durable_lsn` advance can
+    /// race the test's subsequent file surgery). All records the caller cares
+    /// about are already acked/durable, so each committer's final drain is a
+    /// no-op for them.
+    fn stop_committers(&mut self) {
+        for h in self.committers.drain(..) {
+            h.stop();
+        }
+    }
+
+    /// Simulate a crash: stop the committers (so no further `durable_lsn`
     /// advance) and drop the store + WalSet WITHOUT a graceful drain/shutdown.
     /// The data dir on disk is left exactly as the live process left it.
-    fn crash(self) {
-        for h in &self.committers {
-            h.abort();
-        }
-        drop(self.committers);
+    fn crash(mut self) {
+        self.stop_committers();
         drop(self.store);
         drop(self.walset);
     }
@@ -253,7 +273,7 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
 
     let dir = tmp("noloss-unacked");
 
-    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
     create_stream(&h.store, "s", OCTET).await;
 
     // Two genuinely-acked appends through the real path (durable in the WAL).
@@ -267,9 +287,7 @@ async fn e2e_no_loss_unacked_tail_is_absent_after_crash() {
     //   (a) append the un-acked bytes to the per-stream file (page-cache write).
     //   (b) plant a TORN partial WAL record right after the two whole durable
     //       records: only a few header bytes, never a full framed record.
-    for c in &h.committers {
-        c.abort();
-    }
+    h.stop_committers();
     let st = h.store.get("s").unwrap();
     let unacked: &[u8] = b"UNACKED-NEVER-DURABLE|";
     {
@@ -480,7 +498,7 @@ async fn e2e_sharding_below_file_base_record_skipped() {
     let _guard = DurabilityGuard::wal();
     let dir = tmp("below-base");
 
-    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
     // Parent with content so a fork can diverge at offset > 0.
     create_stream(&h.store, "parent", OCTET).await;
     append_acked(&h.store, "parent", OCTET, b"0123456789").await; // tail = 10
@@ -507,10 +525,8 @@ async fn e2e_sharding_below_file_base_record_skipped() {
     // Stage a WAL record for the fork BELOW its file_base (stream_offset 2 < 5):
     // the frontier-skip case. It must be skipped on replay (re-applying would be
     // an out-of-range / double-apply; those bytes live in the parent/sealed
-    // prefix). Abort the committer first so we don't perturb the acked frontier.
-    for c in &h.committers {
-        c.abort();
-    }
+    // prefix). Stop the committers first so we don't perturb the acked frontier.
+    h.stop_committers();
     let shard = h.walset.shard_for(child.id);
     shard
         .reserve_and_stage(
@@ -522,11 +538,10 @@ async fn e2e_sharding_below_file_base_record_skipped() {
         .unwrap();
     // Re-run a committer briefly so this staged record DOES become durable in the
     // WAL (proving the skip is in recovery's replay, not just an un-acked drop).
-    let shard_arc = Arc::clone(shard);
-    let c = tokio::spawn(async move { shard_arc.run_committer().await });
+    let c = shard.spawn_committer();
     // Wait until durable so the record is genuinely in the WAL's durable range.
     shard.wait_durable(shard.tail_lsn()).await;
-    c.abort();
+    c.stop();
 
     drop(child);
     let store = h.store;
@@ -784,6 +799,15 @@ async fn strict_created_dir_reopens_wal_only_without_data_loss() {
             .await
             .unwrap()
             .unwrap();
+        // A strict-era server predates the `durable_tail` sidecar proof — strip
+        // the field the CURRENT writer emitted so the sidecar is byte-faithful
+        // to what an old deployment left behind (recovery must fall back to
+        // trusting the file size for such sidecars).
+        let meta_path = crate::store::meta_path(&st.file_path);
+        let mut v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&meta_path).unwrap()).unwrap();
+        v.as_object_mut().unwrap().remove("durable_tail");
+        std::fs::write(&meta_path, serde_json::to_vec(&v).unwrap()).unwrap();
     }
     // Remove any wal/ subtree — a strict-era dir has none.
     std::fs::remove_dir_all(dir.join("wal")).ok();
@@ -814,6 +838,261 @@ async fn strict_created_dir_reopens_wal_only_without_data_loss() {
         "recovered tail must equal the bytes written in Phase 1"
     );
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7b) MULTI-SEGMENT recovery: boot must not clobber sealed/recycled segments
+// ===========================================================================
+
+/// Acked records that live in WAL segments AFTER the first survive a crash.
+///
+/// With a small segment size, enough acked appends roll the WAL: `1.wal` is
+/// SEALED (truncated to its exactly-packed length + fsync'd) and later records
+/// land in `<n>.wal`. A crash + reboot must replay ALL retained segments.
+///
+/// Regression (sim seed 89837): `Shard::open` re-preallocated `1.wal` to full
+/// segment size, so the sealed segment grew a zero tail; replay read that tail
+/// as `Incomplete` (= end of the durable log) and silently dropped every
+/// record in later segments — then `reconcile_tail` TRUNCATED the per-stream
+/// files back to the stale frontier. Acked-data loss on the recovery path.
+#[tokio::test]
+async fn e2e_multi_segment_acked_records_after_first_seal_survive_crash() {
+    let _guard = DurabilityGuard::wal();
+    const SEG: u64 = 4096;
+    let dir = tmp("multi-seg");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "s", OCTET).await;
+
+    // Append acked records until the shard has rolled at least once (≥2
+    // on-disk segments), then a few more so the post-roll segment holds data.
+    let mut expected = Vec::new();
+    let mut i = 0usize;
+    while h.walset.shards()[0].wal_segments() < 2 || i < 40 {
+        let rec = format!("multi-seg-record-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+        i += 1;
+        assert!(i < 10_000, "never rolled a segment; check SEG/record sizing");
+    }
+    assert!(
+        h.walset.shards()[0].wal_segments() >= 2,
+        "test needs ≥2 retained segments"
+    );
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "s");
+    assert_eq!(
+        got.len(),
+        expected.len(),
+        "every acked record recovers across ALL retained segments (lost {} bytes)",
+        expected.len().saturating_sub(got.len())
+    );
+    assert_eq!(got, expected, "recovered bytes byte-identical across segment seams");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Acked records recover when `1.wal` was RECYCLED (checkpoint deleted it and
+/// the oldest retained segment starts at lsn > 1).
+///
+/// Regression (same root cause, worse case): `Shard::open` unconditionally
+/// created a fresh, all-zero `1.wal`. Replay walked segments in start-lsn
+/// order, began with the spurious zero-filled `1.wal`, decoded `Incomplete` at
+/// offset 0, and treated that as the end of the durable log — replaying
+/// NOTHING. Every acked record after the last checkpoint was truncated away.
+#[tokio::test]
+async fn e2e_recycled_first_segment_acked_records_survive_crash() {
+    let _guard = DurabilityGuard::wal();
+    const SEG: u64 = 4096;
+    let dir = tmp("recycled-first");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "s", OCTET).await;
+
+    // Phase 1: roll past 1.wal, then checkpoint → sealed segments fully below
+    // the floor (including 1.wal) are recycled (deleted).
+    let mut expected = Vec::new();
+    let mut i = 0usize;
+    while h.walset.shards()[0].wal_segments() < 3 {
+        let rec = format!("pre-ckpt-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+        i += 1;
+        assert!(i < 10_000, "never rolled; check SEG/record sizing");
+    }
+    h.walset.shards()[0].checkpoint().await.unwrap();
+    assert!(
+        !dir.join("wal").join("0").join("1.wal").exists(),
+        "checkpoint recycled 1.wal (else this test is vacuous)"
+    );
+
+    // Phase 2: more ACKED records after the checkpoint (they live only in the
+    // WAL + page cache; the checkpoint that would fsync them never runs).
+    for j in 0..25usize {
+        let rec = format!("post-ckpt-{j:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "s");
+    assert_eq!(
+        got.len(),
+        expected.len(),
+        "post-checkpoint acked records recover from the retained (recycle-survivor) segments"
+    );
+    assert_eq!(got, expected, "recovered bytes byte-identical");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7c) WAL-QUIET stream: torn unacked tail truncated via the sidecar proof
+// ===========================================================================
+
+/// A stream with NO durable WAL record and NO checkpoint `tails` entry (created
+/// after the last checkpoint; its only append was in-flight at the crash) must
+/// still have its torn, never-acked page-cache tail truncated on recovery.
+///
+/// Regression (sim seed 20230): with the WAL bytes for the in-flight append
+/// torn by power loss and its data-file bytes partially persisted, recovery had
+/// NO truncation proof for the stream — the sidecar pass trusted
+/// `tail = file size` and exposed the torn fragment to readers (the exact C1
+/// shape the WAL exists to prevent). The sidecar now persists a `durable_tail`
+/// proof (fsynced at create/close, refreshed at checkpoint + recovery), and
+/// recovery seeds every stream's frontier from it.
+#[tokio::test]
+async fn e2e_wal_quiet_stream_torn_unacked_tail_truncated() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("quiet-torn");
+
+    let mut h = Harness::boot(&dir, Some(1), 1).unwrap();
+
+    // An earlier checkpointed stream so the shard's tails file is non-empty
+    // (proves the fix is not just "empty tails == reconcile everything").
+    create_stream(&h.store, "older", OCTET).await;
+    append_acked(&h.store, "older", OCTET, b"older-rec|").await;
+    h.walset.shards()[0].checkpoint().await.unwrap();
+
+    // The WAL-quiet stream: created AFTER the checkpoint, never acked an append.
+    create_stream(&h.store, "fresh", OCTET).await;
+
+    // Its only append is in-flight at the crash: bytes reached the data file's
+    // page cache and the WAL staging buffer, but the committer never fsync'd
+    // (stop it first), so no ack was ever released.
+    h.stop_committers();
+    let st = h.store.get("fresh").unwrap();
+    let torn: &[u8] = b"TORN-IN-FLIGHT-NEVER-ACKED";
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new().append(true).open(&st.file_path).unwrap();
+        f.write_all(torn).unwrap();
+        f.sync_all().unwrap(); // even fully-persisted: still un-acked, must go
+    }
+    let shard = h.walset.shard_for(st.id).clone();
+    shard
+        .reserve_and_stage(crate::wal::codec::RecordKind::Append, st.id, 0, torn)
+        .unwrap();
+    // Power loss tears the staged (never-fdatasync'd) WAL record: zero it out.
+    // Everything at/above this record was never covered by an ack.
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let seg = crate::wal::segment::seg_path(&dir.join("wal").join("0"), 1);
+        let len = std::fs::metadata(&seg).unwrap().len();
+        let mut f = std::fs::OpenOptions::new().write(true).open(&seg).unwrap();
+        // The quiet stream's record is the LAST staged record; zeroing the whole
+        // segment suffix past the durable prefix models its loss. Find the
+        // offset by decoding up to the first record for `st.id`.
+        let bytes = std::fs::read(&seg).unwrap();
+        let mut off = 0usize;
+        while let crate::wal::codec::Decoded::Record { stream_id, total, .. } =
+            crate::wal::codec::decode_at(&bytes, off)
+        {
+            if stream_id == st.id {
+                break;
+            }
+            off += total;
+        }
+        f.seek(SeekFrom::Start(off as u64)).unwrap();
+        f.write_all(&vec![0u8; (len as usize) - off]).unwrap();
+        f.sync_all().unwrap();
+    }
+
+    drop(st);
+    let store = h.store;
+    let walset = h.walset;
+    drop(store);
+    drop(walset);
+
+    // Reopen: recovery must truncate the torn tail even though the stream has
+    // zero surviving WAL records and no tails entry — the sidecar's durable_tail
+    // proof (0, persisted at create) is the seed.
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    let got = stream_file_bytes(&h2.store, "fresh");
+    assert_eq!(
+        got,
+        b"",
+        "torn un-acked tail truncated on a WAL-quiet stream (sidecar durable_tail proof)"
+    );
+    let st2 = h2.store.get("fresh").unwrap();
+    assert_eq!(st2.tail().bytes, 0, "tail reconciled to the durable frontier (0)");
+    // The checkpointed stream is untouched.
+    assert_eq!(stream_file_bytes(&h2.store, "older"), b"older-rec|");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ===========================================================================
+// (7d) DELETE ack durability: an acked DELETE survives a crash
+// ===========================================================================
+
+/// The 204 for DELETE is a durability promise. Regression (sim seed 20387):
+/// `handle_delete` acked while the file + sidecar unlinks ran on a DETACHED
+/// blocking task — a crash right after the ack (before the task ran) left both
+/// files on disk and the stream RESURRECTED with all its data on reboot. The
+/// unlinks (+ parent-dir fsync) are now awaited before the 204.
+#[tokio::test]
+async fn e2e_acked_delete_is_durable_no_resurrection_after_crash() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("delete-durable");
+
+    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    create_stream(&h.store, "victim", OCTET).await;
+    append_acked(&h.store, "victim", OCTET, b"doomed-data|").await;
+    let file_path = h.store.get("victim").unwrap().file_path.clone();
+    let meta = crate::store::meta_path(&file_path);
+
+    let resp = handlers::handle(
+        Arc::clone(&h.store),
+        Req {
+            method: Method::Delete,
+            path: "victim".into(),
+            query: None,
+            headers: vec![],
+            body: Bytes::new(),
+        },
+    )
+    .await;
+    assert_eq!(resp.status, 204, "delete acked");
+    // The ack IS the durability point: both on-disk artifacts are already gone
+    // when the response returns (not on some detached task's schedule).
+    assert!(!file_path.exists(), "data file removed before the DELETE ack");
+    assert!(!meta.exists(), "meta sidecar removed before the DELETE ack");
+
+    // Crash + reboot: the stream must not resurrect.
+    h.crash();
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    assert!(
+        h2.store.get("victim").is_none(),
+        "acked-deleted stream must not resurrect after a crash"
+    );
+    h2.crash();
     let _ = std::fs::remove_dir_all(&dir);
 }
 

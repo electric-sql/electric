@@ -72,11 +72,11 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 
 **Durability** — controls how appends are made durable. See [ARCHITECTURE.md › Durability modes](ARCHITECTURE.md#durability-modes).
 
-| Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                                            |
-| --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--durability`        | `wal`     | `wal` (default) — durable group-commit `fdatasync`; an append acks only after its record is in the sharded WAL. `memory` (Linux-only) — no WAL; binary appends use zero-copy `socket→file` splice, ack on the page-cache write; **NOT locally crash-durable** — durability is delegated to (future) replication. Exits 2 on non-Linux. |
-| `--wal-shards`        | CPU cores | (`wal` mode) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                                   |
-| `--wal-segment-bytes` | `128 MiB` | (`wal` mode) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                                         |
+| Flag                  | Default   | Description                                                                                                                                                                                                                                                                                                               |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--durability`        | `wal`     | `wal` (default) — durable group-commit `fdatasync`; an append acks only after its record is in the sharded WAL. `memory` — no WAL, no fsync; the same buffered append path with the WAL stage/wait skipped, ack on the page-cache write; **NOT locally crash-durable** — durability is delegated to (future) replication. |
+| `--wal-shards`        | CPU cores | (`wal` mode) shard / group-commit-committer count; persisted on first run, a later run must match it                                                                                                                                                                                                                      |
+| `--wal-segment-bytes` | `128 MiB` | (`wal` mode) per-shard WAL segment size; lower it only to force segment rolls in tests/benches                                                                                                                                                                                                                            |
 
 **Read path** — performance knobs; none change protocol behaviour. Leave at defaults unless a benchmark says otherwise.
 
@@ -105,10 +105,33 @@ S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID`
 
 ### Choosing a configuration
 
-| Your situation                                    | Use                                                                                                         |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Bounded local disk with long history**          | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
-| **High fan-out p99 across many streams on Linux** | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
+| Your situation                                      | Use                                                                                                         |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Bounded local disk with long history**            | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
+| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
+| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                               |
+
+### macOS write latency (`F_FULLFSYNC`)
+
+In `wal` mode every acked append is durable, and on macOS that durability
+barrier is `fcntl(F_FULLFSYNC)` — a true flush of the drive's write cache. A
+plain macOS `fsync()` does **not** survive power loss, so the server pays the
+real barrier, and it costs **~2–10 ms per group commit** depending on the disk
+(measured ~3 ms on an M-series laptop SSD). On Linux this doesn't apply:
+`fdatasync` already issues the device barrier and is cheap on NVMe.
+
+So if you're benchmarking or demoing on a Mac and every write (and therefore
+every live read) shows a few milliseconds of latency: that's the disk barrier,
+not the server. Options, in order of preference:
+
+1. **`--durability memory`** — the honest "I don't need power-loss durability"
+   mode; write acks drop to ~0.2–0.5 ms.
+2. **`DS_UNSAFE_FAST_FSYNC=1`** (env var, bench-only) — keeps `wal` mode but
+   swaps `F_FULLFSYNC` for a plain `fsync`, approximating the Linux/NVMe
+   regime on a Mac (~0.3 ms acks). The WAL machinery still runs; only the
+   final barrier is weakened. A no-op on Linux. **Never set this in
+   production**: a power failure can lose acked writes, which silently breaks
+   the `wal`-mode contract (process/OS crashes are still fine).
 
 ### Run-configuration matrix
 
@@ -124,7 +147,7 @@ configurations CI guards.
 | `wal-default`             | _(none)_                   | WAL durability, buffered append, resident cache off (Linux) | all      |
 | `wal-resident-cache`      | `--tail-cache-bytes 65536` | WAL + resident tail cache on                                | all      |
 | `wal-read-offload-always` | `--read-offload always`    | reads served on the blocking pool                           | Linux    |
-| `memory`                  | `--durability memory`      | no WAL; zero-copy socket→file append; page-cache ack        | Linux    |
+| `memory`                  | `--durability memory`      | no WAL; buffered append; page-cache ack                     | all      |
 
 Run one configuration's conformance suite locally:
 
@@ -132,8 +155,7 @@ Run one configuration's conformance suite locally:
 RUST_SERVER_ARGS="--durability memory" pnpm vitest run --project server-rust
 ```
 
-(The Linux-only configs need a Linux host — e.g. Docker — because `memory`
-exits 2 elsewhere.)
+(The Linux-only config needs a Linux host — e.g. Docker.)
 
 ## What it implements
 
@@ -149,7 +171,7 @@ In `memory` mode there is no WAL and no WAL replay. Recovery is a sidecar pass: 
 - **Sharded WAL durability** — in `wal` mode (the default), appends are acked only after their record is durable in the sharded write-ahead log. One group-commit committer per shard batches many streams' appends into a single `fdatasync` (`F_FULLFSYNC` on macOS), minimizing fsync operations regardless of stream cardinality. Per-stream files are the read view; checkpoint periodically fsyncs them and recycles WAL segments. See [Durability](ARCHITECTURE.md#durability).
 - **Per-stream serialization, lock-free reads** — one async mutex per stream orders appends; reads take a brief snapshot and do positioned `pread`s, never blocking the writer.
 - **watch-channel wakeups** drive long-poll and SSE subscribers, so there's no polling loop.
-- **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte) and binary appends with `splice(2)`; elsewhere it falls back to positioned reads.
+- **A single, hand-rolled HTTP/1.1 engine** — no framework: it owns the socket, so on Linux it serves reads with `sendfile(2)` (zero-copy page cache → socket, ~10× less CPU per byte); elsewhere it falls back to positioned reads.
 
 ## Tiered storage (cold offload)
 

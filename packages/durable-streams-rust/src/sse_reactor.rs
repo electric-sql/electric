@@ -143,6 +143,12 @@ pub fn wake_stream(st: &StreamState) {
         // server) with no SSE subscribers never spawns a reactor thread.
         let guard = st.sse_subs.lock().unwrap();
         let Some(list) = guard.as_ref() else { return };
+        // Coalesce: if a wake for this stream is already queued and not yet
+        // flushed, this publish is covered by the flush's tail read — skip the
+        // queue pushes and the eventfd syscall entirely.
+        if list.wake_pending.swap(true, Ordering::AcqRel) {
+            return;
+        }
         // Subscribers exist only because `register` ran, so the pool is live.
         let pool = pool();
         for h in &list.subs {
@@ -278,6 +284,14 @@ impl Reactor {
                         .get(key as usize)
                         .is_some_and(|s| s.gen == gen && s.sub.is_some())
                     {
+                        // Clear the stream's coalescing latch BEFORE producing:
+                        // produce() reads the tail after the clear, so a publish
+                        // racing this flush is either included or re-queues.
+                        if let Some(sub) = self.slab[key as usize].sub.as_ref() {
+                            if let Some(list) = sub.st.sse_subs.lock().unwrap().as_ref() {
+                                list.wake_pending.store(false, Ordering::Release);
+                            }
+                        }
                         self.produce(key);
                         self.flush(key);
                     }
@@ -319,13 +333,21 @@ impl Reactor {
         // Link onto the stream so the append path can find and wake this sub.
         {
             let mut g = st.sse_subs.lock().unwrap();
-            g.get_or_insert_with(|| Box::new(StreamSubs { subs: Vec::new() }))
-                .subs
-                .push(SubHandle {
-                    shard: self.shard_idx,
-                    key,
-                    gen,
-                });
+            let list = g.get_or_insert_with(|| {
+                Box::new(StreamSubs {
+                    subs: Vec::new(),
+                    wake_pending: std::sync::atomic::AtomicBool::new(false),
+                })
+            });
+            list.subs.push(SubHandle {
+                shard: self.shard_idx,
+                key,
+                gen,
+            });
+            // A gen-stale wake (subscriber closed between queue and drain) is
+            // dropped without clearing the latch; reset it on every register so
+            // a fresh subscriber can never inherit a stale-set latch.
+            list.wake_pending.store(false, Ordering::Release);
         }
         // Watch for peer close/errors; EPOLLOUT is armed lazily by flush().
         let mut ev = libc::epoll_event {

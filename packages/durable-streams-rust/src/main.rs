@@ -120,10 +120,23 @@ fn main() {
     // core count; on an existing one reuse the persisted N. A value ≠ the persisted
     // N is rejected with exit 2 (spec §5).
     let mut wal_shards: Option<usize> = None;
+    // `--worker-threads N` sizes the tokio runtime's worker-thread pool (and the
+    // default WAL shard count). `None` ⇒ `available_parallelism()`. This is
+    // load-bearing under a cgroup cpu limit: `available_parallelism()` reads
+    // `cpu.max`, so on a big node with a small limit it would under-size the pool;
+    // an explicit value (e.g. the ds-bench pool suites' `--worker-threads 32`)
+    // pins the pool to the intended core count regardless.
+    let mut worker_threads: Option<usize> = None;
     // `--wal-segment-bytes N` overrides the per-shard WAL segment size (the
     // `fallocate` size + segment-roll threshold). `None` ⇒ the 128 MiB default.
     // Useful for forcing rolls in tests and benches without writing a full 128 MiB segment.
     let mut wal_segment_bytes: Option<u64> = None;
+    // `--wal-stats N`: every N seconds print a `WAL_CONT` line of per-interval WAL
+    // contention rates (lock-wait, wakeup fan-out, coalescing) to stderr, and arm
+    // the hot-path timing that feeds it. OFF by default (no clock reads on the
+    // append path). Dependency-free — the measurement vehicle for the contention
+    // investigation, independent of the heavy `telemetry` OTLP feature.
+    let mut wal_stats_secs: Option<u64> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -191,6 +204,14 @@ fn main() {
                 }
                 wal_shards = Some(n);
             }
+            "--worker-threads" => {
+                let n: usize = parse_val(args.next(), "--worker-threads");
+                if n == 0 {
+                    eprintln!("--worker-threads must be ≥ 1");
+                    std::process::exit(2);
+                }
+                worker_threads = Some(n);
+            }
             "--wal-segment-bytes" => {
                 let n: u64 = parse_val(args.next(), "--wal-segment-bytes");
                 if n == 0 {
@@ -198,6 +219,14 @@ fn main() {
                     std::process::exit(2);
                 }
                 wal_segment_bytes = Some(n);
+            }
+            "--wal-stats" => {
+                let n: u64 = parse_val(args.next(), "--wal-stats");
+                if n == 0 {
+                    eprintln!("--wal-stats must be ≥ 1 (seconds)");
+                    std::process::exit(2);
+                }
+                wal_stats_secs = Some(n);
             }
             "--durability" => {
                 let v = val(args.next(), "--durability");
@@ -216,8 +245,10 @@ fn main() {
         }
     }
 
-    // Apply --durability memory AFTER the arg loop. On non-Linux, reject immediately.
-    // On Linux, force the tail cache off (binary appends use the zero-copy socket→file splice).
+    // Apply --durability memory AFTER the arg loop. Memory mode is the buffered
+    // append path with the WAL stage/wait skipped (no splice intercept, no forced
+    // tail-cache-off — those belonged to the removed zero-copy path); the only
+    // gate is refusing to silently ignore a WAL left by a previous wal run.
     if handlers::durability() == handlers::DurabilityMode::Memory {
         // Fail fast on a WAL left by a previous `--durability wal` run: memory mode
         // never opens/replays it, so starting here would silently ignore those
@@ -235,19 +266,6 @@ fn main() {
             );
             std::process::exit(2);
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            eprintln!("--durability memory is Linux-only (zero-copy socket→file)");
-            std::process::exit(2);
-        }
-        #[cfg(target_os = "linux")]
-        {
-            if store::tail_cache_bytes() != 0 {
-                eprintln!("--durability memory disables the resident tail cache");
-            }
-            store::set_tail_cache_bytes(0);
-            engine_raw::set_zero_copy(true); // binary appends take the splice intercept
-        }
     }
 
     // S3 credentials come from env (never CLI flags), matching the OTEL_*/AWS
@@ -261,9 +279,9 @@ fn main() {
             .ok();
     }
 
-    let workers = std::thread::available_parallelism()
+    let workers = worker_threads.unwrap_or_else(|| std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(4);
+        .unwrap_or(4));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(workers)
         .enable_all()
@@ -307,6 +325,10 @@ fn main() {
         //      per-shard committers, and start the checkpoint ticker. No append can
         //      run before this point (we have not begun serving yet), so no durable
         //      record is lost and no new append collides with un-recovered WAL data.
+        // Held so the shutdown path can stop + join the dedicated committer
+        // threads (Tier-2a) after draining in-flight requests. `None` in
+        // `--durability memory` mode (no committers spawned).
+        let mut wal_for_shutdown: Option<Arc<wal::walset::WalSet>> = None;
         if handlers::durability() == handlers::DurabilityMode::Wal {
             let open_res = match wal_segment_bytes {
                 Some(sz) => wal::walset::WalSet::open_with_segment_size(
@@ -326,6 +348,17 @@ fn main() {
                 .wal
                 .set(Arc::clone(&walset))
                 .unwrap_or_else(|_| panic!("WAL already attached"));
+            // Arm the contention timing + spawn the dependency-free stderr
+            // emitter BEFORE committers/serving start, so every acquisition from
+            // the first append is timed. No-op (and no clock reads) when the flag
+            // is absent.
+            if let Some(secs) = wal_stats_secs {
+                wal::telemetry::set_stats_enabled(true);
+                wal::telemetry::spawn_stats_emitter(
+                    Arc::clone(&walset),
+                    std::time::Duration::from_secs(secs),
+                );
+            }
             walset.spawn_committers();
             // Per-shard checkpoint ticker (spec §7): periodically `fdatasync` each
             // shard's touched per-stream files and recycle its WAL below the
@@ -336,6 +369,7 @@ fn main() {
             // distribution + durability gauges. No-op unless built with
             // `--features telemetry`; off the hot commit/append path.
             wal::telemetry::spawn_emitter(Arc::clone(&walset));
+            wal_for_shutdown = Some(walset);
         }
 
         let addr: SocketAddr = (host, port).into();
@@ -355,6 +389,12 @@ fn main() {
                 #[cfg(target_os = "linux")]
                 sse_reactor::shutdown();
                 engine_raw::drain(std::time::Duration::from_secs(25)).await;
+                // Stop + join the dedicated committer threads (Tier-2a) AFTER the
+                // request drain, so any commit a just-drained request staged is
+                // covered by each committer's final drain before the thread exits.
+                if let Some(walset) = wal_for_shutdown.take() {
+                    walset.stop_committers();
+                }
                 telemetry_guard.shutdown();
             }
         }
@@ -382,11 +422,22 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
         ticker.tick().await;
         loop {
             ticker.tick().await;
+            // All shards checkpoint CONCURRENTLY. Each checkpoint is one
+            // spawn_blocking task (capture + per-stream fdatasyncs + tails/ckpt
+            // persist + recycle), so a serial walk makes every per-stream fsync
+            // across the whole server queue behind a single shard's — at high
+            // stream cardinality that serialization is what stretches the
+            // checkpoint wave (and on real disks wastes the device's parallelism).
+            let mut wave = tokio::task::JoinSet::new();
             for shard in walset.shards() {
-                if let Err(e) = shard.checkpoint().await {
-                    eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
-                }
+                let shard = Arc::clone(shard);
+                wave.spawn(async move {
+                    if let Err(e) = shard.checkpoint().await {
+                        eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
+                    }
+                });
             }
+            while wave.join_next().await.is_some() {}
         }
     });
 }

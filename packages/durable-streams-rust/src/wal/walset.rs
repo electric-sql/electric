@@ -21,9 +21,9 @@
 
 use std::io;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use super::shard::Shard;
+use super::shard::{CommitterHandle, Shard};
 
 /// The persisted-`N` file under the data dir: `<data-dir>/wal/shards`.
 const SHARDS_FILE: &str = "shards";
@@ -46,6 +46,12 @@ fn fnv1a(x: u64) -> u64 {
 pub struct WalSet {
     shards: Vec<Arc<Shard>>,
     n: usize,
+    /// Handles to the per-shard dedicated committer OS threads (Tier-2a). Spawned
+    /// by [`WalSet::spawn_committers`], joined by [`WalSet::stop_committers`] on
+    /// the process shutdown path so in-flight commits complete and the threads are
+    /// reaped rather than detached. Behind a `Mutex` for interior mutability (the
+    /// `WalSet` is shared behind an `Arc`).
+    committers: Mutex<Vec<CommitterHandle>>,
 }
 
 impl WalSet {
@@ -113,7 +119,11 @@ impl WalSet {
                 segment_size,
             )?);
         }
-        Ok(Arc::new(WalSet { shards, n }))
+        Ok(Arc::new(WalSet {
+            shards,
+            n,
+            committers: Mutex::new(Vec::new()),
+        }))
     }
 
     /// The shard a `stream_id` routes to — computed **only** from the persisted
@@ -143,11 +153,32 @@ impl WalSet {
         Ok(())
     }
 
-    /// Spawn each shard's committer (the tokio-task `run_committer`).
+    /// Spawn each shard's committer on its own **dedicated OS thread** (Tier-2a),
+    /// off the shared async runtime. The [`CommitterHandle`]s are retained so
+    /// [`WalSet::stop_committers`] can drain + join them on shutdown.
     pub fn spawn_committers(self: &Arc<Self>) {
+        let mut handles = self.committers.lock().unwrap();
         for shard in &self.shards {
-            let shard = Arc::clone(shard);
-            tokio::spawn(shard.run_committer());
+            handles.push(shard.spawn_committer());
+        }
+    }
+
+    /// Stop every committer thread: signal all of them first (so they shut down
+    /// concurrently), then join all. Each thread performs a **final drain** so any
+    /// already-contiguous-written records still become durable before it exits —
+    /// keeping the no-loss invariant across a graceful shutdown. Idempotent (a
+    /// second call finds the handle list empty). Called from the process shutdown
+    /// path (`main.rs`, after `engine_raw::drain`).
+    pub fn stop_committers(&self) {
+        let handles: Vec<CommitterHandle> =
+            std::mem::take(&mut *self.committers.lock().unwrap());
+        // Signal all, then join all, so a slow shard's final drain overlaps the
+        // others rather than serializing shutdown.
+        for h in &handles {
+            h.signal_stop();
+        }
+        for h in handles {
+            h.join();
         }
     }
 }

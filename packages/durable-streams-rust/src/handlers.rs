@@ -272,7 +272,7 @@ async fn dispatch(store: Arc<Store>, req: Req) -> Resp {
             Method::Post => handle_append(store, req, path).await,
             Method::Get => handle_read(store, req, path).await,
             Method::Head => handle_head(store, path),
-            Method::Delete => handle_delete(store, path),
+            Method::Delete => handle_delete(store, path).await,
             Method::Options => ResponseBuilder::new(204).body(empty()),
             Method::Other => text_response(405, "method not allowed"),
         }
@@ -886,25 +886,26 @@ impl AppendOutcome {
 
 async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
     let t0 = crate::telemetry::Timer::start();
-    // is_json is needed for the metric label even on the not-found path, where we
-    // don't have a stream; default to false there.
-    let is_json = store.get(&path).map(|s| s.is_json).unwrap_or(false);
-    let (resp, outcome) = handle_append_inner(store, req, path).await;
+    // is_json comes back from the inner handler (false on the not-found path) so
+    // the metric label doesn't cost a SECOND registry lookup per append — at high
+    // stream cardinality each lookup is a cold walk of a million-key map.
+    let (resp, outcome, is_json) = handle_append_inner(store, req, path).await;
     crate::telemetry::record_append(t0.elapsed_secs(), outcome.label(), is_json);
     resp
 }
 
-async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp, AppendOutcome) {
+async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp, AppendOutcome, bool) {
     use AppendOutcome::*;
-    macro_rules! ret {
-        ($resp:expr, $oc:expr) => {
-            return ($resp, $oc)
-        };
-    }
     let st = match store.get(&path) {
         Some(s) => s,
-        None => ret!(text_response(404, "stream not found"), Conflict),
+        None => return (text_response(404, "stream not found"), Conflict, false),
     };
+    let is_json = st.is_json;
+    macro_rules! ret {
+        ($resp:expr, $oc:expr) => {
+            return ($resp, $oc, is_json)
+        };
+    }
     if st.shared.read().unwrap().soft_deleted {
         ret!(gone(), Conflict);
     }
@@ -1156,7 +1157,18 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         st.tail_tx.send_replace(Tail { bytes: tail, closed: true });
         #[cfg(target_os = "linux")]
         crate::sse_reactor::wake_stream(&st);
+    } else if staged_lsn.is_some() {
+        // WAL mode: the stream is in its shard's dirty set (register_dirty ran
+        // during staging), so the ~3 s checkpoint will write the sidecar for us —
+        // just mark it. This keeps the meta `File::create`+`rename` (and its
+        // parent-directory rwsem, measured at ~40% of server CPU under write
+        // saturation) plus a timer task OFF the per-append path. Producer/access
+        // updates are already documented as a non-durable, lagging flush; the lag
+        // bound moves from the 100 ms debounce to the checkpoint cadence.
+        st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
     } else {
+        // No WAL record staged (memory durability): no checkpoint will flush the
+        // sidecar — keep the debounced flush.
         st.schedule_meta_flush();
     }
     if !wire.is_empty() {
@@ -1178,7 +1190,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     if tail.closed {
         b = b.hs(H_CLOSED, "true");
     }
-    (b.body(empty()), Accept)
+    (b.body(empty()), Accept, is_json)
 }
 
 fn closed_conflict(tail: u64) -> Resp {
@@ -1188,214 +1200,6 @@ fn closed_conflict(tail: u64) -> Resp {
         .body(full("stream is closed"))
 }
 
-// ---------- POST (append) — zero-copy socket→file splice path (Linux, --durability memory) ----------
-
-/// Result of the zero-copy append entry. `Fallback` means the engine must fall
-/// back to the buffered append path (read the whole body, run `handle`): the
-/// request is anything but the simple happy-path append (a producer dup/gap/
-/// stale-epoch, a `Stream-Seq` regression, a closed stream, a close request, a
-/// missing/mismatched content-type, …). Every such edge case is handled
-/// byte-for-byte by the existing buffered handler — the splice path deliberately
-/// covers only the accept-and-write case so its critical section is a tight
-/// mirror of `write_wire` (memory mode has no WAL stage).
-#[cfg(target_os = "linux")]
-pub enum ZeroCopyOutcome {
-    /// Append handled; send `resp` and continue keep-alive as normal.
-    Done(Resp),
-    /// A splice leg failed mid-append: some body bytes may have already been
-    /// consumed from the socket, so the HTTP framing is desynced. Send `resp`
-    /// (a 500) but then CLOSE the connection — it must NOT be reused as
-    /// keep-alive (a stale partial body would corrupt the next request).
-    DoneClose(Resp),
-    Fallback,
-}
-
-/// Zero-copy binary append (`--durability memory`): relay the request body
-/// socket→file via `splice(2)` while holding the appender lock, then ack — the
-/// offset/producer semantics are identical to the buffered append, only the byte
-/// movement differs (no userspace `Bytes`). There is no WAL in memory mode: the
-/// per-stream file write is the ack (durability comes from replication).
-///
-/// The caller (engine) has already confirmed: `--durability memory` (the engine
-/// zero-copy intercept), `POST`, a known
-/// `content_length` (not chunked), and a binary (non-JSON) target stream.
-/// `prefix` is the leading body bytes the HTTP parser over-read; `splice_rest`
-/// moves the remaining `content_len - prefix.len()` bytes from the socket to the
-/// given `(file_fd, offset)` (the engine owns the socket fd + pipe machinery).
-///
-/// Returns `Fallback` for anything that is not a plain accept (see
-/// `ZeroCopyOutcome`); the engine then reads the body buffered and runs the
-/// normal handler. No stream state is mutated before the accept decision, so the
-/// fallback re-validates from scratch and is fully idempotent.
-///
-/// `splice_rest` moves the remaining `content_len - prefix.len()` body bytes from
-/// the socket to `(file_fd, offset)` and is `async`: the socket is non-blocking,
-/// so the socket→file splice awaits read-readiness (it may park if the body has
-/// not fully arrived). It is awaited here WHILE the appender `AsyncMutex` is held
-/// — intended per-stream serialization; holding it across `.await` is supported.
-#[cfg(target_os = "linux")]
-pub async fn handle_binary_append_zero_copy<F, Fut>(
-    store: Arc<Store>,
-    req: &Req,
-    prefix: &[u8],
-    content_len: usize,
-    splice_rest: F,
-) -> ZeroCopyOutcome
-where
-    F: FnOnce(std::os::fd::RawFd, i64) -> Fut,
-    Fut: std::future::Future<Output = std::io::Result<()>>,
-{
-    use std::os::fd::AsRawFd;
-
-    let path = req.path.clone();
-    // Route. A missing/soft-deleted/JSON stream, or one whose content-type does
-    // not match, is an edge case → buffered fallback.
-    let st = match store.get(&path) {
-        Some(s) => s,
-        None => return ZeroCopyOutcome::Fallback,
-    };
-    if st.is_json || st.shared.read().unwrap().soft_deleted {
-        return ZeroCopyOutcome::Fallback;
-    }
-    // A close request, an empty body, or producer headers that don't parse are
-    // all handled by the buffered path. Likewise any explicit close.
-    if header_is_true(req, H_CLOSED) || content_len == 0 {
-        return ZeroCopyOutcome::Fallback;
-    }
-    let producer = match parse_producer_headers(req) {
-        Ok(p) => p,
-        Err(_) => return ZeroCopyOutcome::Fallback,
-    };
-    let seq_header = header_str(req, H_SEQ).map(|s| s.to_string());
-    // Content-type must be present and match (binary stream): a missing or
-    // mismatched type is a 4xx the buffered path renders.
-    match header_str(req, "content-type") {
-        None => return ZeroCopyOutcome::Fallback,
-        Some(ct) => {
-            if media_type(ct) != media_type(&st.config.content_type) {
-                return ZeroCopyOutcome::Fallback;
-            }
-        }
-    }
-
-    // Serialize per stream — same lock the buffered path holds across the byte
-    // write. Held across the socket→file splice (the appender's per-stream
-    // serialization).
-    let lock_t0 = crate::telemetry::Timer::start();
-    let mut ap = st.appender.lock().await;
-    crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
-
-    // Re-check closed / producer / seq under the lock. ANY non-accept outcome →
-    // fall back (the lock is released on drop, no state mutated).
-    {
-        let s = st.shared.read().unwrap();
-        if s.closed {
-            return ZeroCopyOutcome::Fallback;
-        }
-    }
-    if let Some(p) = &producer {
-        let outcome = {
-            let s = st.shared.read().unwrap();
-            validate_producer(&s, p)
-        };
-        if !matches!(outcome, ProducerOutcome::Accept) {
-            return ZeroCopyOutcome::Fallback;
-        }
-    }
-    if let Some(seq) = &seq_header {
-        let s = st.shared.read().unwrap();
-        if let Some(last) = &s.last_seq_header {
-            if seq.as_str() <= last.as_str() {
-                return ZeroCopyOutcome::Fallback;
-            }
-        }
-    }
-
-    // ---- accepted: drive the socket→file splice ----
-    // File offset O where this append lands in the stream's own data file.
-    let file_off = ap.written;
-
-    // Open a fresh non-O_APPEND fd for positioned writes (splice rejects O_APPEND).
-    let splice_file = match st.open_splice_fd() {
-        Ok(f) => f,
-        Err(_) => return ZeroCopyOutcome::Fallback,
-    };
-    let file_fd = splice_file.as_raw_fd();
-
-    // Write the already-buffered prefix at O (positioned). On failure the
-    // remaining body is still unconsumed on the socket, so the HTTP framing is
-    // desynced → force-close (see DoneClose).
-    if !prefix.is_empty() {
-        use std::os::unix::fs::FileExt;
-        if splice_file.write_all_at(prefix, file_off).is_err() {
-            return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
-        }
-    }
-    // Relay the rest socket→file at O+prefix.len() (awaits socket read-readiness
-    // — the socket is non-blocking). On failure some body bytes may already be
-    // consumed from the socket → desynced → force-close.
-    let rest_off = (file_off + prefix.len() as u64) as i64;
-    if splice_rest(file_fd, rest_off).await.is_err() {
-        return ZeroCopyOutcome::DoneClose(text_response(500, "write failed"));
-    }
-
-    // Publish the new logical tail. `ap.written` and `s.tail` advance under the
-    // lock exactly as in `write_wire`. The tail cache is OFF under
-    // --durability memory, so we do NOT call set_last_chunk.
-    ap.written += content_len as u64;
-    let (tail, closed) = {
-        let mut s = st.shared.write().unwrap();
-        let tail = s.file_base + ap.written;
-        s.tail = tail;
-        // memory mode: the page-cache write IS the ack, so the bytes are
-        // reader-visible immediately (no WAL fsync to wait for).
-        s.durable_tail = tail;
-        s.last_access = SystemTime::now();
-        (tail, s.closed_durable)
-    };
-    st.tail_tx.send_replace(Tail { bytes: tail, closed });
-    #[cfg(target_os = "linux")]
-    crate::sse_reactor::wake_stream(&st);
-
-    // Shared response builder: captures `st`, `producer` by ref.
-    let make_ok = || {
-        let t = st.tail();
-        let status = if producer.is_some() { 200 } else { 204 };
-        let mut b = ResponseBuilder::new(status).h(H_NEXT_OFFSET, format_offset(t.bytes));
-        if let Some(p) = &producer {
-            b = b
-                .h(H_PRODUCER_EPOCH, p.epoch.to_string())
-                .h(H_PRODUCER_SEQ, p.seq.to_string());
-        }
-        if t.closed {
-            b = b.hs(H_CLOSED, "true");
-        }
-        ZeroCopyOutcome::Done(b.body(empty()))
-    };
-
-    // This path is reached only in `--durability memory` (the engine zero-copy
-    // intercept is enabled solely by that mode). The per-stream file write IS the
-    // durable-enough ack (no WAL, no fsync — durability comes from replication).
-    debug_assert_eq!(durability(), DurabilityMode::Memory);
-    // Commit producer/seq dedup state under the appender lock so a concurrent
-    // same-producer request cannot double-accept.
-    {
-        let mut s = st.shared.write().unwrap();
-        if let Some(p) = &producer {
-            s.producers.insert(
-                p.id.clone(),
-                ProducerState { epoch: p.epoch, last_seq: p.seq },
-            );
-        }
-        if let Some(seq) = &seq_header {
-            s.last_seq_header = Some(seq.clone());
-        }
-    }
-    drop(ap); // critical section ends
-    st.schedule_meta_flush();
-    maybe_seal_bg(&store, &st);
-    make_ok()
-}
 
 // ---------- reading bodies from the data file ----------
 
@@ -2162,7 +1966,7 @@ fn handle_head(store: Arc<Store>, path: String) -> Resp {
 
 // ---------- DELETE ----------
 
-fn handle_delete(store: Arc<Store>, path: String) -> Resp {
+async fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     let st = match store.get(&path) {
         Some(s) => s,
         None => return text_response(404, "stream not found"),
@@ -2170,8 +1974,16 @@ fn handle_delete(store: Arc<Store>, path: String) -> Resp {
     if st.shared.read().unwrap().soft_deleted {
         return gone();
     }
-    store.delete_or_soft_delete(&st);
-    ResponseBuilder::new(204).body(empty())
+    // The 204 is a durability promise: once acked, a crash must never
+    // resurrect the stream. Await the on-disk removal (unlinks + parent-dir
+    // fsync, or the soft-delete meta flag) before responding — a detached
+    // removal task can be lost to a crash after the ack.
+    let store2 = Arc::clone(&store);
+    let st2 = Arc::clone(&st);
+    match tokio::task::spawn_blocking(move || store2.delete_or_soft_delete_durable(&st2)).await {
+        Ok(Ok(())) => ResponseBuilder::new(204).body(empty()),
+        _ => text_response(500, "delete not durable"),
+    }
 }
 
 #[cfg(test)]
