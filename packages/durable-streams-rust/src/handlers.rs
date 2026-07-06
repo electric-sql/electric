@@ -1167,9 +1167,11 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         // bound moves from the 100 ms debounce to the checkpoint cadence.
         st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
     } else {
-        // No WAL record staged (memory durability): no checkpoint will flush the
-        // sidecar — keep the debounced flush.
-        st.schedule_meta_flush();
+        // No WAL record staged (memory durability): no checkpoint will flush
+        // the sidecar — queue it for the store-level periodic sweeper. Same
+        // batched treatment the wal branch above gets from the checkpoint: no
+        // per-stream timer task, no per-append sidecar rewrite (#4691).
+        store.mark_meta_dirty(&st);
     }
     if !wire.is_empty() {
         maybe_seal_bg(&store, &st);
@@ -1416,7 +1418,7 @@ async fn handle_read(store: Arc<Store>, req: Req, path: String) -> Resp {
     // non-TTL streams to keep their read path lock-free.
     if st.config.ttl_seconds.is_some() {
         st.touch();
-        st.schedule_meta_flush(); // sliding TTL must survive restarts
+        store.mark_meta_dirty(&st); // sliding TTL must survive restarts
     }
     let q = match parse_query(req.query.as_deref()) {
         Ok(q) => q,
@@ -2237,6 +2239,61 @@ mod memory_mode_tests {
             std::fs::read(&st.file_path).unwrap(),
             b"hello-memory",
             "per-stream file must hold the appended bytes"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #4691: a memory-mode append must NOT flush the meta sidecar via a
+    /// per-stream debounced timer (100 ms sleep + spawn_blocking per stream —
+    /// ~5x wal-mode CPU at high stream cardinality). It only marks the stream
+    /// dirty; the store-level periodic sweeper writes the sidecar in batch,
+    /// mirroring wal mode's checkpoint treatment from #4675.
+    #[tokio::test]
+    async fn memory_append_defers_sidecar_to_store_sweep() {
+        let _guard = crate::handlers::test_support::DurabilityGuard::memory();
+        let dir = tmp("mem-sweep");
+        let store = Arc::new(
+            Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap(),
+        );
+
+        let resp = handle(Arc::clone(&store), put_req("m/s", "application/octet-stream")).await;
+        assert!((200..300).contains(&resp.status), "create: {}", resp.status);
+
+        // Append with a producer so the pending sidecar change is observable.
+        let mut req = post_req("m/s", "application/octet-stream", b"payload");
+        req.headers.push(("producer-id".into(), "p1".into()));
+        req.headers.push(("producer-epoch".into(), "1".into()));
+        req.headers.push(("producer-seq".into(), "0".into()));
+        let resp = handle(Arc::clone(&store), req).await;
+        assert!((200..300).contains(&resp.status), "append: {}", resp.status);
+
+        // Well past the old 100 ms debounce: the sidecar must still be
+        // unwritten — no per-append timer task may exist anymore.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let st = store.get("m/s").unwrap();
+        let meta: crate::store::Meta =
+            serde_json::from_slice(&std::fs::read(crate::store::meta_path(&st.file_path)).unwrap())
+                .unwrap();
+        assert!(
+            !meta.producers.contains_key("p1"),
+            "sidecar was flushed per-append (debounce timer still active)"
+        );
+
+        // The batched store sweep is what persists it.
+        let flushed = tokio::task::spawn_blocking({
+            let store = Arc::clone(&store);
+            move || store.sweep_meta_once()
+        })
+        .await
+        .unwrap();
+        assert_eq!(flushed, 1, "the appended stream is swept");
+        let meta: crate::store::Meta =
+            serde_json::from_slice(&std::fs::read(crate::store::meta_path(&st.file_path)).unwrap())
+                .unwrap();
+        assert!(
+            meta.producers.contains_key("p1"),
+            "sweep must persist the pending producer state"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
