@@ -105,10 +105,33 @@ S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID`
 
 ### Choosing a configuration
 
-| Your situation                                    | Use                                                                                                         |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Bounded local disk with long history**          | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
-| **High fan-out p99 across many streams on Linux** | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
+| Your situation                                      | Use                                                                                                         |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Bounded local disk with long history**            | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
+| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
+| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                               |
+
+### macOS write latency (`F_FULLFSYNC`)
+
+In `wal` mode every acked append is durable, and on macOS that durability
+barrier is `fcntl(F_FULLFSYNC)` — a true flush of the drive's write cache. A
+plain macOS `fsync()` does **not** survive power loss, so the server pays the
+real barrier, and it costs **~2–10 ms per group commit** depending on the disk
+(measured ~3 ms on an M-series laptop SSD). On Linux this doesn't apply:
+`fdatasync` already issues the device barrier and is cheap on NVMe.
+
+So if you're benchmarking or demoing on a Mac and every write (and therefore
+every live read) shows a few milliseconds of latency: that's the disk barrier,
+not the server. Options, in order of preference:
+
+1. **`--durability memory`** — the honest "I don't need power-loss durability"
+   mode; write acks drop to ~0.2–0.5 ms.
+2. **`DS_BENCH_FAST_FSYNC=1`** (env var, bench-only) — keeps `wal` mode but
+   swaps `F_FULLFSYNC` for a plain `fsync`, approximating the Linux/NVMe
+   regime on a Mac (~0.3 ms acks). The WAL machinery still runs; only the
+   final barrier is weakened. A no-op on Linux. **Never set this in
+   production**: a power failure can lose acked writes, which silently breaks
+   the `wal`-mode contract (process/OS crashes are still fine).
 
 ### Run-configuration matrix
 
