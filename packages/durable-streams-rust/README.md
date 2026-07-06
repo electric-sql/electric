@@ -126,7 +126,7 @@ not the server. Options, in order of preference:
 
 1. **`--durability memory`** — the honest "I don't need power-loss durability"
    mode; write acks drop to ~0.2–0.5 ms.
-2. **`DS_BENCH_FAST_FSYNC=1`** (env var, bench-only) — keeps `wal` mode but
+2. **`DS_UNSAFE_FAST_FSYNC=1`** (env var, bench-only) — keeps `wal` mode but
    swaps `F_FULLFSYNC` for a plain `fsync`, approximating the Linux/NVMe
    regime on a Mac (~0.3 ms acks). The WAL machinery still runs; only the
    final barrier is weakened. A no-op on Linux. **Never set this in

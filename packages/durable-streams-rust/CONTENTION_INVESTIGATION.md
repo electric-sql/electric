@@ -48,7 +48,7 @@ client and reads throughput + CPU + steady-state `WAL_CONT`.
 **macOS caveats (why a Linux harness is also needed):**
 
 - `F_FULLFSYNC` is a true drive barrier (~tens of ms) and dominates the commit
-  path, masking the lock. Added a **bench-only** `DS_BENCH_FAST_FSYNC` env
+  path, masking the lock. Added a **bench-only** `DS_UNSAFE_FAST_FSYNC` env
   (`src/store.rs`, `src/wal/segment.rs`) that uses plain `fsync` on macOS so a
   RAM-disk data dir gives cheap fsync (the Linux+NVMe regime). NOT durable; never
   set in production.
