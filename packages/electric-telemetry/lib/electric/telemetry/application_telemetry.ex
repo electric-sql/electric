@@ -88,17 +88,13 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
         &{__MODULE__, &1, [telemetry_opts]}
       ) ++
       [
-        # BEAM allocator metrics (vm.alloc.*) live in ElectricTelemetry.SystemMetrics.
-        # The cheap aggregate view runs every tick; the expensive per-allocator
-        # fragmentation breakdown is internally gated to ~once a minute.
+        # System metrics (vm.alloc.*, cgroup.*, host.*); each measurement no-ops
+        # where unsupported (no cgroup v2, non-Linux). The per-allocator
+        # fragmentation breakdown internally gates itself to ~once a minute.
         {ElectricTelemetry.SystemMetrics, :recon_alloc_measurement, [telemetry_opts]},
         {ElectricTelemetry.SystemMetrics, :allocator_fragmentation_measurement, [telemetry_opts]},
-        # cgroup (v1/v2) accounting metrics (cgroup.*) live in
-        # ElectricTelemetry.SystemMetrics.Cgroup; no-op when no cgroup is detected.
-        {ElectricTelemetry.SystemMetrics, :cgroup_measurement, [telemetry_opts]},
-        # host/process /proc metrics (host.mem.*, host.proc.beam.*) live in
-        # ElectricTelemetry.SystemMetrics.Proc; no-op on non-Linux.
-        {ElectricTelemetry.SystemMetrics, :proc_measurement, [telemetry_opts]}
+        {ElectricTelemetry.SystemMetrics.Cgroup, :measurement, [telemetry_opts]},
+        {ElectricTelemetry.SystemMetrics.Proc, :measurement, [telemetry_opts]}
       ]
   end
 
@@ -136,7 +132,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("vm.alloc.unused", unit: :byte),
       last_value("vm.alloc.carrier_usage"),
       last_value("vm.alloc.fragmentation.unused", tags: [:allocator], unit: :byte),
-      # cgroup (v1/v2) accounting metrics (emitted by
+      # cgroup v2 accounting metrics (emitted by
       # ElectricTelemetry.SystemMetrics.Cgroup).
       last_value("cgroup.memory.current", unit: :byte),
       last_value("cgroup.memory.anon", unit: :byte),
@@ -145,8 +141,6 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("cgroup.memory.max", unit: :byte),
       # PSI "full avg10" stall percentage (v2 only).
       last_value("cgroup.memory.pressure.full.avg10"),
-      # cpu usage / throttled time already in microseconds (v1 ns values are
-      # converted in the reader); :unit is a label only, no conversion.
       last_value("cgroup.cpu.usage_usec", unit: :microsecond),
       last_value("cgroup.cpu.nr_throttled"),
       last_value("cgroup.cpu.throttled_usec", unit: :microsecond),

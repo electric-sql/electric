@@ -1,7 +1,7 @@
 defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   @moduledoc """
-  Small, exhaustively defensive parsers for the flat `/proc` text files read by
-  `ElectricTelemetry.SystemMetrics.Proc`.
+  Small, exhaustively defensive parsers for the flat text files exposed by
+  procfs and cgroupfs.
 
   Every function degrades to an empty map (or `nil` for scalars) on a missing
   file, a permission error, or malformed content — it never raises. Parsing
@@ -13,80 +13,31 @@ defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   """
 
   @doc """
-  Parse `/proc/meminfo` into a map of `binary key => integer kB value`.
+  Parse a flat key/value file — `/proc/meminfo`, `/proc/<pid>/status`,
+  `/proc/<pid>/io`, cgroup `memory.stat`/`cpu.stat` — into a map of
+  `binary key => integer value`.
 
-  Lines look like `MemTotal:       16384000 kB`. The trailing `kB` unit (and any
-  line that doesn't match `<key>: <int> [kB]`) is handled gracefully; values are
-  returned in their native kB (the caller converts to bytes).
+  Handles both the `key value` and `Key:\twhitespace-padded value [unit]` line
+  layouts: the key is the first whitespace-delimited token with any trailing
+  `:` stripped, the value is the second token, and any trailing unit (e.g.
+  `kB`) is ignored. Lines whose value doesn't parse as an integer are dropped.
+  Values keep their native unit (the caller converts, e.g. kB -> bytes).
   """
-  @spec read_meminfo(Path.t()) :: %{optional(binary()) => integer()}
-  def read_meminfo(path) do
-    case read_raw_file(path) do
-      nil -> %{}
-      content -> parse_keyed_kv(content)
-    end
+  @spec read_kv_file(Path.t()) :: %{optional(binary()) => integer()}
+  def read_kv_file(path) do
+    for line <- String.split(read_raw_file(path) || "", "\n", trim: true),
+        [key, value | _] <- [String.split(line)],
+        int = parse_int(value),
+        into: %{},
+        do: {String.trim_trailing(key, ":"), int}
   end
 
   @doc """
-  Parse `/proc/<pid>/status` into a map of `binary key => integer kB value` for
-  the memory keys only.
-
-  Lines look like `RssAnon:\t  12345 kB` or `VmRSS:\t  67890 kB`. Only lines
-  whose value parses as an integer are kept; non-numeric keys (e.g. `Name`,
-  `State`) are simply dropped. Values are returned in their native kB (the
-  caller converts to bytes).
+  Read a single-integer file (e.g. cgroup `memory.current`), returning `nil`
+  on any read or parse error.
   """
-  @spec read_status(Path.t()) :: %{optional(binary()) => integer()}
-  def read_status(path) do
-    case read_raw_file(path) do
-      nil -> %{}
-      content -> parse_keyed_kv(content)
-    end
-  end
-
-  @doc """
-  Parse `/proc/<pid>/io` into a map of `binary key => integer byte value`.
-
-  Lines look like `read_bytes: 12345`. This file can be permission-restricted
-  (EACCES) even for the reading process itself in some sandboxes; that read
-  failure degrades to an empty map. Values are already in bytes.
-  """
-  @spec read_proc_io(Path.t()) :: %{optional(binary()) => integer()}
-  def read_proc_io(path) do
-    case read_raw_file(path) do
-      nil -> %{}
-      content -> parse_keyed_kv(content)
-    end
-  end
-
-  # Parse a "<Key>:<whitespace><int>[ <unit>]" file (status, io) into a map of
-  # binary key -> integer. The text after the colon is trimmed and split on
-  # spaces; the first token is taken as the value and any trailing unit (e.g.
-  # "kB") is ignored. Lines whose value doesn't parse as an integer are dropped.
-  defp parse_keyed_kv(content) do
-    content
-    |> String.split("\n", trim: true)
-    |> Enum.reduce(%{}, fn line, acc ->
-      case String.split(line, ":", parts: 2) do
-        [key, rest] ->
-          case rest |> String.trim() |> String.split(" ", trim: true) do
-            [value | _] ->
-              case parse_int(value) do
-                nil -> acc
-                int -> Map.put(acc, key, int)
-              end
-
-            _ ->
-              acc
-          end
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  ## low-level file/number helpers -----------------------------------------
+  @spec read_int_file(Path.t()) :: integer() | nil
+  def read_int_file(path), do: parse_int(read_raw_file(path))
 
   @doc """
   Read a file, returning its trimmed content or `nil` on any error (missing
@@ -110,6 +61,20 @@ defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   def parse_int(str) do
     case Integer.parse(String.trim(str)) do
       {int, ""} -> int
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Parse a string as a float, returning `nil` on `nil` input or any non-float
+  content.
+  """
+  @spec parse_float(binary() | nil) :: float() | nil
+  def parse_float(nil), do: nil
+
+  def parse_float(str) do
+    case Float.parse(String.trim(str)) do
+      {float, ""} -> float
       _ -> nil
     end
   end

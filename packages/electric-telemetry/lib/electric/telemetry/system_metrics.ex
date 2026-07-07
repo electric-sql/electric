@@ -3,43 +3,25 @@ defmodule ElectricTelemetry.SystemMetrics do
   Periodic measurement functions for low-level system/runtime metrics that
   complement the application-level VM stats in `ElectricTelemetry.ApplicationTelemetry`.
 
-  These functions are not a process; they are invoked by `ElectricTelemetry.Poller`
-  (via `telemetry_poller`) as `{__MODULE__, fun, [telemetry_opts]}` MFA tuples. The
-  poller wraps every invocation in `ElectricTelemetry.Poller.safe_invoke/3`, so a
-  crash here is logged and swallowed rather than removing the measurement.
+  These functions are not a process; `ElectricTelemetry.Poller` invokes them
+  (and the `SystemMetrics.Cgroup` / `SystemMetrics.Proc` readers) as MFA tuples,
+  wrapping every invocation in `safe_invoke/3` so a crash here is logged and
+  swallowed rather than removing the measurement.
 
-  This module currently exposes:
-
-    * BEAM allocator metrics (`vm.alloc.*`), derived from `:recon_alloc`. These are
-      cross-platform (recon works everywhere) and sit alongside the existing
-      `vm.memory.*` metrics. The cheap aggregate view is sampled every poll tick;
-      the expensive per-allocator fragmentation breakdown is gated to run roughly
-      once a minute.
-
-    * A cached platform/cgroup detection helper (`system_info/0`). Only the OS and
-      cgroup version are computed here; later tasks build cgroup/host readers on top
-      of this scaffolding.
+  This module holds the BEAM allocator metrics (`vm.alloc.*`, derived from
+  `:recon_alloc`), the cached platform/cgroup detection (`system_info/0`), and
+  the shared `emit/2` helper used by the cgroup//proc readers.
   """
 
   @system_info_key {__MODULE__, :system_info}
   @fragmentation_gate_key {__MODULE__, :fragmentation_gate}
 
-  # The poller runs all measurements at a single ~5s period. The per-allocator
-  # fragmentation breakdown (`:recon_alloc.fragmentation/1`) is O(carriers) and too
-  # expensive to run every tick, so we gate it to run roughly once a minute. With a
-  # 5s poll interval, every 12th tick is ~60s.
-  #
-  # We gate with an atomic `:counters` ref rather than a second `:telemetry_poller`
-  # child: the poller's period is shared across all measurements (see
-  # `ElectricTelemetry.Poller.child_spec/2`), so there is no per-measurement period
-  # to configure, and a counter-gate keeps this self-contained.
-  #
-  # The `:counters` ref is created once and cached in `:persistent_term` (a single
-  # put per gate key, ever). We deliberately avoid bumping the tick count via
-  # `:persistent_term.put` on every poll: each `:persistent_term.put` triggers a
-  # global scan of all process heaps for GC, which is exactly the per-tick overhead a
-  # cheap telemetry module must avoid. `:counters.add/3` is a lock-free atomic with no
-  # such cost and no read-modify-write race.
+  # The poller runs all measurements at a single ~5s period, and
+  # `:recon_alloc.fragmentation/1` is O(carriers) — too expensive for every
+  # tick — so it self-gates to every 12th tick (~once a minute). The gate is an
+  # atomic `:counters` ref cached in `:persistent_term`: `:counters.add/3` is a
+  # lock-free bump, whereas a `:persistent_term.put` per tick would trigger a
+  # global GC scan of all process heaps.
   @fragmentation_interval_ticks 12
 
   @doc """
@@ -49,6 +31,18 @@ defmodule ElectricTelemetry.SystemMetrics do
   def allocator_fragmentation_interval_ticks, do: @fragmentation_interval_ticks
 
   @doc """
+  Emit a telemetry event carrying the non-nil `measurements` in a single
+  `:telemetry.execute/2` call, or nothing when every value is nil (file
+  missing / unreadable / metric intentionally skipped).
+  """
+  @spec emit(:telemetry.event_name(), %{optional(atom()) => number() | nil}) :: :ok
+  def emit(event, measurements) do
+    measurements = Map.reject(measurements, fn {_key, value} -> is_nil(value) end)
+    if map_size(measurements) > 0, do: :telemetry.execute(event, measurements)
+    :ok
+  end
+
+  @doc """
   Boot-time platform/cgroup detection, computed once and cached in `:persistent_term`.
 
   Returns a map of the form `%{os: {family, name}, cgroup_version: :v2 | :none}`.
@@ -56,20 +50,10 @@ defmodule ElectricTelemetry.SystemMetrics do
   """
   @spec system_info() :: %{os: {atom(), atom()}, cgroup_version: :v2 | :none}
   def system_info do
-    case :persistent_term.get(@system_info_key, :undefined) do
-      :undefined ->
-        info = compute_system_info()
-        :persistent_term.put(@system_info_key, info)
-        info
-
-      info ->
-        info
-    end
-  end
-
-  defp compute_system_info do
-    os = :os.type()
-    %{os: os, cgroup_version: detect_cgroup_version(os)}
+    memoized(@system_info_key, fn ->
+      os = :os.type()
+      %{os: os, cgroup_version: detect_cgroup_version(os)}
+    end)
   end
 
   # The controllers list at the cgroup fs root is the canonical v2 marker.
@@ -88,42 +72,32 @@ defmodule ElectricTelemetry.SystemMetrics do
     * `:used`      — bytes actually in use by blocks
     * `:unused`    — `allocated - used`, i.e. fragmentation/headroom held in carriers
     * `:carrier_usage` — `used / allocated`, the carrier usage ratio in `0..1`
-
-  These map to the `vm.alloc.allocated`, `vm.alloc.unused`, and
-  `vm.alloc.carrier_usage` metrics (plus `vm.alloc.used`).
   """
   @spec recon_alloc_measurement(map()) :: :ok
   def recon_alloc_measurement(_telemetry_opts) do
+    # Each :recon_alloc.memory/1 call sweeps every allocator instance, so read
+    # the two base numbers once and derive the rest locally.
     allocated = :recon_alloc.memory(:allocated)
     used = :recon_alloc.memory(:used)
-    unused = max(allocated - used, 0)
-    carrier_usage = :recon_alloc.memory(:usage)
 
-    :telemetry.execute([:vm, :alloc], %{
+    emit([:vm, :alloc], %{
       allocated: allocated,
       used: used,
-      unused: unused,
-      carrier_usage: carrier_usage
+      unused: max(allocated - used, 0),
+      carrier_usage: if(allocated > 0, do: used / allocated)
     })
-
-    :ok
   end
 
   @doc """
-  Per-allocator fragmentation breakdown (slow tier, ~once a minute).
+  Per-allocator fragmentation breakdown (slow tier, ~once a minute — see
+  `@fragmentation_interval_ticks`).
 
-  Uses `:recon_alloc.fragmentation(:current)` (an O(carriers) call). It keys results
-  by `{type, instance}` (e.g. `{:eheap_alloc, 3}`); we compute unused bytes held in
-  carriers (`sbcs_carriers_size + mbcs_carriers_size - sbcs_block_size - mbcs_block_size`)
-  and sum them per allocator *type*. One `[:vm, :alloc, :fragmentation]` event is
-  emitted per type, tagged by `allocator` (the type name as a string).
-
-  Because the poller runs every measurement at one ~5s period, this is gated by a
-  counter in `:persistent_term` and early-returns on non-due ticks (see
-  `@fragmentation_interval_ticks`). Pass `force: true` to bypass the gate (tests).
+  Sums unused carrier bytes from `:recon_alloc.fragmentation(:current)` per
+  allocator *type* and emits one `[:vm, :alloc, :fragmentation]` event per
+  type, tagged by `allocator`.
 
   Options:
-    * `:force`    — when `true`, always run regardless of the gate
+    * `:force`    — when `true`, always run regardless of the gate (tests)
     * `:gate_key` — override the `:persistent_term` key holding the tick counter
       (used by tests to avoid contending with the live poller's counter)
   """
@@ -132,7 +106,8 @@ defmodule ElectricTelemetry.SystemMetrics do
     if due?(opts) do
       :recon_alloc.fragmentation(:current)
       |> Enum.reduce(%{}, fn {{type, _instance}, info}, acc ->
-        Map.update(acc, type, unused_bytes(info), &(&1 + unused_bytes(info)))
+        unused = unused_bytes(info)
+        Map.update(acc, type, unused, &(&1 + unused))
       end)
       |> Enum.each(fn {type, unused} ->
         :telemetry.execute(
@@ -146,68 +121,30 @@ defmodule ElectricTelemetry.SystemMetrics do
     :ok
   end
 
-  @doc """
-  cgroup (v1/v2) accounting metrics, sampled every poll tick.
-
-  Reads the container's cgroup files and emits the `cgroup.*` family (memory,
-  cpu, io, and — on v2 — PSI pressure). Parsing lives in
-  `ElectricTelemetry.SystemMetrics.Cgroup`; this is a thin delegator so it
-  registers like the other measurements. No-ops when no cgroup is detected.
-
-  Options are forwarded to `Cgroup.measurement/2` (`:cgroup_root` and
-  `:cgroup_version` overrides for tests).
-  """
-  @spec cgroup_measurement(map(), keyword()) :: :ok
-  def cgroup_measurement(telemetry_opts, opts \\ []) do
-    ElectricTelemetry.SystemMetrics.Cgroup.measurement(telemetry_opts, opts)
-  end
-
-  @doc """
-  Host/process `/proc` metrics, sampled every poll tick.
-
-  Reads `/proc/meminfo` and the BEAM's own `/proc/<pid>/status` and
-  `/proc/<pid>/io` and emits the `host.mem.*` and `host.proc.beam.*` families.
-  Parsing lives in `ElectricTelemetry.SystemMetrics.Proc`; this is a thin
-  delegator so it registers like the other measurements. No-ops on non-Linux.
-
-  Options are forwarded to `Proc.measurement/2` (`:proc_root`, `:pid` and `:os`
-  overrides for tests).
-  """
-  @spec proc_measurement(map(), keyword()) :: :ok
-  def proc_measurement(telemetry_opts, opts \\ []) do
-    ElectricTelemetry.SystemMetrics.Proc.measurement(telemetry_opts, opts)
-  end
-
   defp due?(opts) do
     if Keyword.get(opts, :force, false) do
       true
     else
       gate_key = Keyword.get(opts, :gate_key, @fragmentation_gate_key)
-      ref = gate_counter(gate_key)
+      ref = memoized(gate_key, fn -> :counters.new(1, [:write_concurrency]) end)
       :counters.add(ref, 1, 1)
       # The first tick reads 1, so the gate fires on the Nth tick (not on boot).
       rem(:counters.get(ref, 1), @fragmentation_interval_ticks) == 0
     end
   end
 
-  # Returns a cached single-slot `:counters` ref for the gate key, creating and
-  # caching it on first use. The `:persistent_term.put` here happens at most once per
-  # gate key (on first call), never on the per-tick hot path.
-  defp gate_counter(gate_key) do
-    case :persistent_term.get(gate_key, :undefined) do
-      :undefined ->
-        ref = :counters.new(1, [:write_concurrency])
-        :persistent_term.put(gate_key, ref)
-        ref
-
-      ref ->
-        ref
+  # Get-or-compute a `:persistent_term` entry. The put happens at most once per
+  # key (on first call), never on the per-tick hot path.
+  defp memoized(key, fun) do
+    with :undefined <- :persistent_term.get(key, :undefined) do
+      tap(fun.(), &:persistent_term.put(key, &1))
     end
   end
 
-  # `:recon_alloc.fragmentation/1` returns a proplist per allocator with carrier and
-  # block sizes for both single-block (sbcs) and multi-block (mbcs) carriers. Unused
-  # bytes are the carrier bytes the OS gave us minus the bytes actually filled by blocks.
+  # `:recon_alloc.fragmentation/1` returns a proplist per allocator with carrier
+  # and block sizes for both single-block (sbcs) and multi-block (mbcs)
+  # carriers. Unused bytes are the carrier bytes the OS gave us minus the bytes
+  # actually filled by blocks.
   defp unused_bytes(info) do
     carriers =
       Keyword.get(info, :sbcs_carriers_size, 0) + Keyword.get(info, :mbcs_carriers_size, 0)
