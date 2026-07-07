@@ -1019,7 +1019,7 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.5.23
+        specifier: 1.5.24
         version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
@@ -8809,8 +8809,8 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@react-grab/cli@0.1.47':
-    resolution: {integrity: sha512-Cc7d8mSwvoV8gpeTQbE8dMPdeXIyO6w+yIhzgi3jY06i03WLNhb/6jIxNBNF1cVRI7ujnFQXZA66BbnBNTpBSw==}
+  '@react-grab/cli@0.1.48':
+    resolution: {integrity: sha512-KXRZFN0b78BeVa4Tq1FC9kiXPpC5lS4pQp/mvQ1azy9dZUJ3zfc7Ei84+yvGh+WoYdceMCFxXfBp6qhU/G056g==}
     hasBin: true
 
   '@react-native-async-storage/async-storage@2.2.0':
@@ -12147,8 +12147,8 @@ packages:
     peerDependencies:
       react: '>=17.0.1'
 
-  bippy@0.5.42:
-    resolution: {integrity: sha512-K3tpfO9uGQB2k/Vi5P6jgfrnXvO/FAQNUE2tqKjQmT0a93fJCysMGLgJmRKzYYfybAoOtwWwmKm0vw/uXE0hMw==}
+  bippy@0.5.43:
+    resolution: {integrity: sha512-Tvu7b1M7+d8b9/YHaCeODEsi2CgbuoBql+dWSBrNnCuqJ1gMUeY3i0r+319hvjjl5GVBP6FFWxrKnq3fhZER0w==}
     peerDependencies:
       react: '>=17.0.1'
 
@@ -18602,8 +18602,8 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
 
-  react-grab@0.1.47:
-    resolution: {integrity: sha512-1GNy24KMJ4CY1IxorYO9mydItGi0L1HkQB19uYU3t0BMsJB0K+D/QYiaBz+rugRynyY8LzmXIuOcon1TykLlCg==}
+  react-grab@0.1.48:
+    resolution: {integrity: sha512-p3WnmK9LLvXE/c4ITPLlXcP1fkXo2VFEQqK94tIfcHIWKNdqdhYYFyNVioO50HR+uyHIwT63Z4txZDqJlVcD/Q==}
     hasBin: true
     peerDependencies:
       react: '>=17.0.0'
@@ -29977,7 +29977,7 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@react-grab/cli@0.1.47':
+  '@react-grab/cli@0.1.48':
     dependencies:
       agent-install: 0.0.6
       commander: 14.0.3
@@ -34789,7 +34789,7 @@ snapshots:
     dependencies:
       react: 19.1.0
 
-  bippy@0.5.42(react@19.1.0):
+  bippy@0.5.43(react@19.1.0):
     dependencies:
       react: 19.1.0
 
@@ -42924,10 +42924,10 @@ snapshots:
     dependencies:
       react: 19.1.0
 
-  react-grab@0.1.47(react@19.1.0):
+  react-grab@0.1.48(react@19.1.0):
     dependencies:
-      '@react-grab/cli': 0.1.47
-      bippy: 0.5.42(react@19.1.0)
+      '@react-grab/cli': 0.1.48
+      bippy: 0.5.43(react@19.1.0)
     optionalDependencies:
       react: 19.1.0
 
@@ -43280,7 +43280,7 @@ snapshots:
       prompts: 2.4.2
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
-      react-grab: 0.1.47(react@19.1.0)
+      react-grab: 0.1.48(react@19.1.0)
     optionalDependencies:
       esbuild: 0.27.7
       unplugin: 2.1.0
