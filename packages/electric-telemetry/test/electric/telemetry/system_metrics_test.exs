@@ -66,8 +66,8 @@ defmodule ElectricTelemetry.SystemMetricsTest do
     end
   end
 
-  describe "allocator_fragmentation_measurement/1" do
-    test "emits per-allocator unused bytes when due" do
+  describe "allocator_fragmentation_measurement/0" do
+    test "emits unused bytes per allocator type" do
       ref = make_ref()
       handler_id = {__MODULE__, ref}
 
@@ -84,54 +84,19 @@ defmodule ElectricTelemetry.SystemMetricsTest do
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
-      # Force a due tick regardless of the persistent counter.
-      assert :ok = SystemMetrics.allocator_fragmentation_measurement(%{}, force: true)
+      assert :ok = SystemMetrics.allocator_fragmentation_measurement()
 
       results = :ets.tab2list(events)
       assert results != []
+
+      # One event per distinct allocator *type*, not per scheduler instance.
+      assert length(results) == length(Enum.uniq_by(results, fn {allocator, _} -> allocator end))
 
       for {allocator, unused} <- results do
         assert is_binary(allocator)
         assert is_integer(unused)
         assert unused >= 0
       end
-    end
-
-    test "gating only fires every Nth tick" do
-      ref = make_ref()
-      handler_id = {__MODULE__, ref}
-
-      counter = :counters.new(1, [])
-
-      :telemetry.attach(
-        handler_id,
-        [:vm, :alloc, :fragmentation],
-        fn _event, _measurements, _meta, _ -> :counters.add(counter, 1, 1) end,
-        nil
-      )
-
-      on_exit(fn -> :telemetry.detach(handler_id) end)
-
-      # Use an isolated gate key so we don't interfere with the real poller's counter.
-      gate_key = {:test_gate, ref}
-      every = SystemMetrics.allocator_fragmentation_interval_ticks()
-
-      # Run exactly `every` ticks; exactly one of them should be due.
-      for _ <- 1..every do
-        SystemMetrics.allocator_fragmentation_measurement(%{}, gate_key: gate_key)
-      end
-
-      # Exactly one tick in `every` is due; on that tick we emit one event per
-      # distinct allocator *type*.
-      fired = :counters.get(counter, 1)
-
-      type_count =
-        :recon_alloc.fragmentation(:current)
-        |> Enum.map(fn {{type, _instance}, _info} -> type end)
-        |> Enum.uniq()
-        |> length()
-
-      assert fired == type_count
     end
   end
 

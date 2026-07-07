@@ -89,10 +89,10 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       ) ++
       [
         # System metrics (vm.alloc.*, cgroup.*, host.*); each measurement no-ops
-        # where unsupported (no cgroup v2, non-Linux). The per-allocator
-        # fragmentation breakdown internally gates itself to ~once a minute.
+        # where unsupported (no cgroup v2, non-Linux). The expensive
+        # vm.alloc.fragmentation.* breakdown is sampled by SystemMonitor on a
+        # one-minute timer instead of this poller.
         {ElectricTelemetry.SystemMetrics, :recon_alloc_measurement, [telemetry_opts]},
-        {ElectricTelemetry.SystemMetrics, :allocator_fragmentation_measurement, [telemetry_opts]},
         {ElectricTelemetry.SystemMetrics.Cgroup, :measurement, [telemetry_opts]},
         {ElectricTelemetry.SystemMetrics.Proc, :measurement, [telemetry_opts]}
       ]
