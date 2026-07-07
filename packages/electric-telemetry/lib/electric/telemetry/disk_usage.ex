@@ -16,15 +16,10 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   def current(stack_id) do
-    table = name(stack_id)
-
-    case :ets.lookup(table, :usage_bytes) do
-      [] -> :pending
-      [{:usage_bytes, _bytes, nil, _duration}] -> :pending
+    case lookup(stack_id, :usage_bytes) do
       [{:usage_bytes, bytes, %DateTime{}, duration}] -> {:ok, bytes, duration}
+      _ -> :pending
     end
-  rescue
-    ArgumentError -> :pending
   end
 
   @doc """
@@ -33,14 +28,17 @@ defmodule ElectricTelemetry.DiskUsage do
   measurement with grouping enabled has completed yet.
   """
   def current_dirs(stack_id) do
-    table = name(stack_id)
-
-    case :ets.lookup(table, :top_dirs) do
+    case lookup(stack_id, :top_dirs) do
       [{:top_dirs, dirs}] -> {:ok, dirs}
-      [] -> :pending
+      _ -> :pending
     end
+  end
+
+  # The table doesn't exist until this stack's DiskUsage server has started.
+  defp lookup(stack_id, key) do
+    :ets.lookup(name(stack_id), key)
   rescue
-    ArgumentError -> :pending
+    ArgumentError -> []
   end
 
   @impl GenServer
@@ -99,31 +97,18 @@ defmodule ElectricTelemetry.DiskUsage do
   defp read_disk_usage(state) do
     exclude = [usage_cache_file(state.storage_dir)]
 
-    {duration, {bytes, top_dirs}} =
+    {duration, {bytes, buckets}} =
       :timer.tc(
-        fn ->
-          case state.group_depth do
-            nil ->
-              {Disk.recursive_usage(state.storage_dir, exclude), nil}
-
-            depth when is_integer(depth) ->
-              {total, buckets} =
-                Disk.recursive_usage_grouped(state.storage_dir, exclude, depth)
-
-              {total, top_n(buckets, state.top_n)}
-          end
-        end,
+        fn -> Disk.recursive_usage_grouped(state.storage_dir, exclude, state.group_depth) end,
         :millisecond
       )
-
-    updated_at = DateTime.utc_now()
 
     %{
       state
       | usage_bytes: bytes,
-        updated_at: updated_at,
+        updated_at: DateTime.utc_now(),
         measurement_duration: duration,
-        top_dirs: top_dirs
+        top_dirs: state.group_depth && top_n(buckets, state.top_n)
     }
     |> ets_write()
     |> save_usage!()
@@ -131,17 +116,10 @@ defmodule ElectricTelemetry.DiskUsage do
     |> schedule_update()
   end
 
-  # Returns the `n` largest `{name, bytes}` buckets, sorted descending by size.
-  #
-  # Scale tradeoff: the full `%{dir => bytes}` map is materialized for the whole
-  # tree and sorted (O(k log k) in the number of buckets `k`) once per walk
-  # before being trimmed to the top `n`. Only the top `n` are retained in state
-  # and ETS, so steady-state memory stays bounded; the transient cost is the
-  # full map plus one sort per ~60s cycle. This is comfortable at ~10k shapes
-  # per stack and acceptable into the low hundreds of thousands. If a single
-  # stack ever holds enough shapes for that transient sort to cause real GC
-  # pressure, replace this with a running bounded top-N (min-heap) that never
-  # materializes the full sorted list.
+  # The `n` largest `{name, bytes}` buckets, sorted descending by size. The
+  # full bucket map is materialized and sorted once per (~60s) walk before
+  # being trimmed; fine at ~10k shapes per stack — replace with a bounded
+  # min-heap if a stack ever holds hundreds of thousands.
   defp top_n(buckets, n) do
     buckets
     |> Enum.sort_by(fn {_name, bytes} -> bytes end, :desc)
@@ -149,19 +127,12 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   defp ets_write(state) do
-    %{
-      usage_bytes: usage_bytes,
-      updated_at: updated_at,
-      table: table,
-      measurement_duration: duration
-    } = state
+    :ets.insert(
+      state.table,
+      {:usage_bytes, state.usage_bytes, state.updated_at, state.measurement_duration}
+    )
 
-    :ets.insert(table, {:usage_bytes, usage_bytes, updated_at, duration})
-
-    case Map.get(state, :top_dirs) do
-      nil -> :ok
-      dirs -> :ets.insert(table, {:top_dirs, dirs})
-    end
+    if dirs = state.top_dirs, do: :ets.insert(state.table, {:top_dirs, dirs})
 
     state
   end

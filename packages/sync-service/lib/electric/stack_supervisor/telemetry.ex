@@ -221,7 +221,7 @@ defmodule Electric.StackSupervisor.Telemetry do
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
         |> Keyword.put(:storage_dir, config.storage_dir)
-        |> Keyword.put(:shape_dir_group_depth, shape_dir_group_depth(config))
+        |> Keyword.put(:disk_usage_group_depth, shape_dir_group_depth(config))
         |> Keyword.put(:otel_opts, otel_opts)
         # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(

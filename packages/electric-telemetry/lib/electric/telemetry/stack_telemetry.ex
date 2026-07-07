@@ -67,21 +67,19 @@ defmodule ElectricTelemetry.StackTelemetry do
     ]
   end
 
-  # `:shape_dir_group_depth` is the directory depth (relative to the disk-usage
-  # walk root) at which a single shape's directory sits, supplied by the caller
-  # since it depends on the deployment's storage layout (the generic telemetry
-  # package stays layout-agnostic). When set, the disk walk additionally buckets
-  # per-shape subtotals keyed by shape handle and emits them as
-  # `electric.storage.dir.bytes` for the top-N largest shapes. When `nil` (e.g.
-  # storage backends without an on-disk shape layout), only the aggregate total
-  # is measured.
+  # `:disk_usage_group_depth` is supplied by the caller since it depends on the
+  # deployment's storage layout (sync-service derives it from the real shape
+  # storage path, keeping this package layout-agnostic). When set, the disk walk
+  # additionally buckets per-directory subtotals at that depth — for Electric
+  # these are shape dirs, emitted as `electric.storage.dir.bytes` for the top-N
+  # largest. When `nil`, only the aggregate total is measured.
   defp disk_usage_child_specs(%{stack_id: stack_id} = opts) do
     if storage_dir = Map.get(opts, :storage_dir) do
       [
         {ElectricTelemetry.DiskUsage,
          stack_id: stack_id,
          storage_dir: storage_dir,
-         group_depth: Map.get(opts, :shape_dir_group_depth)}
+         group_depth: Map.get(opts, :disk_usage_group_depth)}
       ]
     else
       []
