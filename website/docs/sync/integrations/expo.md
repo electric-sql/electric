@@ -62,6 +62,12 @@ npm run web
 
 If there's data in the `items` table of your Postgres, you should see it syncing into your app.
 
+## App lifecycle handling
+
+Expo uses Metro, which resolves the `react-native` condition in `@electric-sql/client`'s package exports for native builds. This means normal imports automatically use React Native's `AppState` to pause ShapeStreams while the app is backgrounded and resume with a catch-up request when the app becomes active again.
+
+If you've disabled Metro package exports or use a custom bundler setup, use the explicit `@electric-sql/client/react-native` entrypoint or pass `runtimeVisibility` explicitly. See the [TypeScript client docs](/docs/sync/api/clients/typescript#react-native-and-expo-lifecycle-handling) for details and examples.
+
 ## PGlite
 
 [PGlite](https://pglite.dev) doesn't _yet_ work in React Native.

@@ -88,6 +88,7 @@ import {
   ShapeStreamState,
 } from './shape-stream-state'
 import { PauseLock } from './pause-lock'
+import { getDefaultRuntimeVisibilityAdapterFactory } from './runtime-visibility'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -290,46 +291,10 @@ export function createReactNativeRuntimeVisibilityAdapter(
   }
 }
 
-function isReactNativeEnvironment(): boolean {
-  return (
-    typeof navigator === `object` &&
-    `product` in navigator &&
-    navigator.product === `ReactNative`
-  )
-}
-
-function getRuntimeRequire(): ((moduleName: string) => unknown) | undefined {
-  const globalRequire = (
-    globalThis as typeof globalThis & { require?: unknown }
-  ).require
-  if (typeof globalRequire === `function`) {
-    return globalRequire as (moduleName: string) => unknown
-  }
-
-  try {
-    return Function(
-      `return typeof require === "function" ? require : undefined`
-    )() as ((moduleName: string) => unknown) | undefined
-  } catch {
-    return undefined
-  }
-}
-
-function detectReactNativeRuntimeVisibilityAdapter():
+function getDefaultRuntimeVisibilityAdapter():
   | RuntimeVisibilityAdapter
   | undefined {
-  if (!isReactNativeEnvironment()) return undefined
-
-  try {
-    const runtimeRequire = getRuntimeRequire()
-    const reactNative = runtimeRequire?.(`react-native`) as
-      | { AppState?: ReactNativeAppStateLike }
-      | undefined
-    if (!reactNative?.AppState) return undefined
-    return createReactNativeRuntimeVisibilityAdapter(reactNative.AppState)
-  } catch {
-    return undefined
-  }
+  return getDefaultRuntimeVisibilityAdapterFactory()?.()
 }
 
 export interface ShapeStreamOptions<T = never> {
@@ -2020,8 +1985,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   #subscribeToVisibilityChanges() {
     const runtimeVisibility =
-      this.options.runtimeVisibility ??
-      detectReactNativeRuntimeVisibilityAdapter()
+      this.options.runtimeVisibility ?? getDefaultRuntimeVisibilityAdapter()
 
     if (runtimeVisibility) {
       this.#setVisibilityPaused(
