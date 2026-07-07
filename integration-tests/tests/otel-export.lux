@@ -108,9 +108,8 @@
   [invoke grep_otel_collector_output "Metric vm\.alloc\.unused .*Value=[0-9]+"]
   [invoke grep_otel_collector_output "Metric vm\.alloc\.carrier_usage .*Value=[.0-9]+"]
 
-  # Verify host /proc metrics (host.mem.* / host.proc.beam.*) from SystemMetrics.
+  # Verify per-process /proc metrics (host.proc.beam.*) from SystemMetrics.
   # These read /proc and are populated on Linux (the CI runner).
-  [invoke grep_otel_collector_output "Metric host\.mem\.total .*Value=[0-9]+"]
   [invoke grep_otel_collector_output "Metric host\.proc\.beam\.vm_rss .*Value=[0-9]+"]
 
   # Verify cgroup accounting metrics (cgroup.*) from SystemMetrics. Populated when a

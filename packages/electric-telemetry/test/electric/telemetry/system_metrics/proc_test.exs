@@ -15,7 +15,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
     ref = make_ref()
 
     events = [
-      [:host, :mem],
       [:host, :proc, :beam],
       [:host, :proc, :beam, :io]
     ]
@@ -62,17 +61,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
     File.write!(path, content)
   end
 
-  defp meminfo do
-    """
-    MemTotal:       16384000 kB
-    MemFree:         2048000 kB
-    MemAvailable:    8192000 kB
-    Buffers:          102400 kB
-    Cached:          4096000 kB
-    SwapTotal:             0 kB
-    """
-  end
-
   defp status do
     """
     Name:\tbeam.smp
@@ -103,22 +91,10 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
     setup %{tmp_dir: tmp_dir} do
       root = Path.join(tmp_dir, "proc")
 
-      write_file(root, "meminfo", meminfo())
       write_file(root, "#{@pid}/status", status())
       write_file(root, "#{@pid}/io", proc_io())
 
       %{root: root}
-    end
-
-    test "emits host memory metrics in bytes (kB * 1024)", %{root: root} do
-      m =
-        collect_host_metrics(fn ->
-          Proc.measurement(%{}, os: {:unix, :linux}, proc_root: root, pid: @pid)
-        end)
-
-      assert m["host.mem.total"] == 16_384_000 * 1024
-      assert m["host.mem.free"] == 2_048_000 * 1024
-      assert m["host.mem.cached"] == 4_096_000 * 1024
     end
 
     test "emits BEAM Rss*/VmRSS in bytes (kB * 1024)", %{root: root} do
@@ -156,7 +132,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
   describe "non-linux guard" do
     test "no-ops and emits nothing on macOS", %{tmp_dir: tmp_dir} do
       root = Path.join(tmp_dir, "proc")
-      write_file(root, "meminfo", meminfo())
       write_file(root, "#{@pid}/status", status())
       write_file(root, "#{@pid}/io", proc_io())
 
@@ -171,26 +146,8 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
   end
 
   describe "missing / malformed files" do
-    test "missing meminfo skips host.mem.* but still emits process metrics", %{tmp_dir: tmp_dir} do
-      root = Path.join(tmp_dir, "proc")
-      write_file(root, "#{@pid}/status", status())
-      write_file(root, "#{@pid}/io", proc_io())
-
-      m =
-        collect_host_metrics(fn ->
-          assert :ok = Proc.measurement(%{}, os: {:unix, :linux}, proc_root: root, pid: @pid)
-        end)
-
-      refute Map.has_key?(m, "host.mem.total")
-      refute Map.has_key?(m, "host.mem.free")
-      refute Map.has_key?(m, "host.mem.cached")
-      assert m["host.proc.beam.rss_anon"] == 300_000 * 1024
-      assert m["host.proc.beam.io.read_bytes"] == 65_536
-    end
-
     test "missing status file skips beam.rss_* but other metrics still emit", %{tmp_dir: tmp_dir} do
       root = Path.join(tmp_dir, "proc")
-      write_file(root, "meminfo", meminfo())
       write_file(root, "#{@pid}/io", proc_io())
 
       m =
@@ -200,7 +157,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
 
       refute Map.has_key?(m, "host.proc.beam.rss_anon")
       refute Map.has_key?(m, "host.proc.beam.vm_rss")
-      assert m["host.mem.total"] == 16_384_000 * 1024
       assert m["host.proc.beam.io.read_bytes"] == 65_536
     end
 
@@ -208,7 +164,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
       tmp_dir: tmp_dir
     } do
       root = Path.join(tmp_dir, "proc")
-      write_file(root, "meminfo", meminfo())
       write_file(root, "#{@pid}/status", status())
       # no io file written
 
@@ -219,18 +174,11 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
 
       refute Map.has_key?(m, "host.proc.beam.io.read_bytes")
       refute Map.has_key?(m, "host.proc.beam.io.write_bytes")
-      assert m["host.mem.total"] == 16_384_000 * 1024
       assert m["host.proc.beam.rss_anon"] == 300_000 * 1024
     end
 
     test "malformed value skips that metric, others still emitted", %{tmp_dir: tmp_dir} do
       root = Path.join(tmp_dir, "proc")
-
-      write_file(root, "meminfo", """
-      MemTotal:       notanumber kB
-      MemFree:         2048000 kB
-      Cached:          4096000 kB
-      """)
 
       write_file(root, "#{@pid}/status", """
       VmRSS:\t  garbage kB
@@ -246,10 +194,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
         collect_host_metrics(fn ->
           assert :ok = Proc.measurement(%{}, os: {:unix, :linux}, proc_root: root, pid: @pid)
         end)
-
-      refute Map.has_key?(m, "host.mem.total")
-      assert m["host.mem.free"] == 2_048_000 * 1024
-      assert m["host.mem.cached"] == 4_096_000 * 1024
 
       refute Map.has_key?(m, "host.proc.beam.vm_rss")
       assert m["host.proc.beam.rss_anon"] == 300_000 * 1024
@@ -276,9 +220,6 @@ defmodule ElectricTelemetry.SystemMetrics.ProcTest do
         ElectricTelemetry.ApplicationTelemetry.metrics(%{})
         |> Enum.map(& &1.name)
 
-      assert [:host, :mem, :total] in names
-      assert [:host, :mem, :free] in names
-      assert [:host, :mem, :cached] in names
       assert [:host, :proc, :beam, :rss_anon] in names
       assert [:host, :proc, :beam, :rss_file] in names
       assert [:host, :proc, :beam, :rss_shmem] in names

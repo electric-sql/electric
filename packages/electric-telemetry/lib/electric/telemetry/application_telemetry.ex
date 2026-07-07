@@ -147,11 +147,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("cgroup.cpu.pressure.full.avg10"),
       last_value("cgroup.io.rbytes", unit: :byte),
       last_value("cgroup.io.wbytes", unit: :byte),
-      # host/process /proc metrics (emitted by
+      # per-process /proc metrics (emitted by
       # ElectricTelemetry.SystemMetrics.Proc).
-      last_value("host.mem.total", unit: :byte),
-      last_value("host.mem.free", unit: :byte),
-      last_value("host.mem.cached", unit: :byte),
       last_value("host.proc.beam.rss_anon", unit: :byte),
       last_value("host.proc.beam.rss_file", unit: :byte),
       last_value("host.proc.beam.rss_shmem", unit: :byte),

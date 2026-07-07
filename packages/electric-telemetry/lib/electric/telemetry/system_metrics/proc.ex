@@ -1,13 +1,9 @@
 defmodule ElectricTelemetry.SystemMetrics.Proc do
   @moduledoc """
-  Reads Linux `/proc` accounting files and emits `host.mem.*` (from
-  `/proc/meminfo`) and `host.proc.beam.*` (from the BEAM's own
-  `/proc/<pid>/status` and `/proc/<pid>/io`) telemetry.
-
-  This bridges the cgroup plane and the BEAM allocator plane: the per-process
-  RSS breakdown (anon vs file vs shmem) shows cgroup `anon` tracking the BEAM
-  footprint, and meminfo gives the host-RAM ceiling/cache picture (one task per
-  host on EC2, so host ≈ container).
+  Reads the BEAM's own `/proc/<pid>/status` and `/proc/<pid>/io` and emits
+  `host.proc.beam.*` telemetry: the per-process RSS breakdown (anon vs file vs
+  shmem) shows cgroup `anon` tracking the BEAM's anonymous footprint, and the
+  IO byte counters give the kernel's view of this process's disk traffic.
 
   All reads are defensive: a missing file, a permission error (`/proc/<pid>/io`
   can be EACCES-restricted even for self in some sandboxes), or unexpected
@@ -15,7 +11,7 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
   `/proc` only exists on Linux, so the measurement is a clean no-op everywhere
   else.
 
-  meminfo values and status `Rss*`/`VmRSS` are in kB and converted to bytes;
+  Status `Rss*`/`VmRSS` values are in kB and converted to bytes;
   `/proc/<pid>/io` `read_bytes`/`write_bytes` are already bytes and emitted
   as-is.
   """
@@ -28,7 +24,7 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
   @default_root "/proc"
 
   @doc """
-  Read the `/proc` accounting files and emit `host.mem.*` / `host.proc.beam.*`
+  Read the BEAM's `/proc/<pid>` accounting files and emit `host.proc.beam.*`
   telemetry events.
 
   Reads every tick (no slow-tier gating). Options:
@@ -47,14 +43,6 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
     if os == {:unix, :linux} do
       root = Keyword.get(opts, :proc_root, @default_root)
       pid = opts |> Keyword.get_lazy(:pid, fn -> :os.getpid() end) |> to_string()
-
-      meminfo = read_kv_file(Path.join(root, "meminfo"))
-
-      emit([:host, :mem], %{
-        total: kb_to_bytes(meminfo["MemTotal"]),
-        free: kb_to_bytes(meminfo["MemFree"]),
-        cached: kb_to_bytes(meminfo["Cached"])
-      })
 
       status = read_kv_file(Path.join([root, pid, "status"]))
 
