@@ -103,9 +103,12 @@ defmodule ElectricTelemetry.SystemMetrics do
     :ok
   end
 
-  # Get-or-compute a `:persistent_term` entry. The put happens at most once per
-  # key (on first call), never on the per-tick hot path.
-  defp memoized(key, fun) do
+  @doc """
+  Get-or-compute a `:persistent_term` entry. The put happens at most once per
+  key (on first call), never on a per-tick hot path.
+  """
+  @spec memoized(term(), (-> value)) :: value when value: term()
+  def memoized(key, fun) do
     with :undefined <- :persistent_term.get(key, :undefined) do
       tap(fun.(), &:persistent_term.put(key, &1))
     end

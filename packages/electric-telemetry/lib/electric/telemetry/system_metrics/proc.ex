@@ -19,9 +19,12 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
   alias ElectricTelemetry.SystemMetrics
 
   import ElectricTelemetry.SystemMetrics, only: [emit: 2]
-  import ElectricTelemetry.SystemMetrics.ProcfsParse, only: [read_kv_file: 1]
+  import ElectricTelemetry.SystemMetrics.ProcfsParse, only: [read_kv_file: 2]
 
   @default_root "/proc"
+
+  @status_keys MapSet.new(~w(RssAnon RssFile RssShmem VmRSS))
+  @io_keys MapSet.new(~w(read_bytes write_bytes))
 
   @doc """
   Read the BEAM's `/proc/<pid>` accounting files and emit `host.proc.beam.*`
@@ -41,10 +44,9 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
     os = Keyword.get_lazy(opts, :os, fn -> SystemMetrics.system_info().os end)
 
     if os == {:unix, :linux} do
-      root = Keyword.get(opts, :proc_root, @default_root)
-      pid = opts |> Keyword.get_lazy(:pid, fn -> :os.getpid() end) |> to_string()
+      %{status: status_path, io: io_path} = paths(opts)
 
-      status = read_kv_file(Path.join([root, pid, "status"]))
+      status = read_kv_file(status_path, @status_keys)
 
       emit([:host, :proc, :beam], %{
         rss_anon: kb_to_bytes(status["RssAnon"]),
@@ -53,7 +55,7 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
         vm_rss: kb_to_bytes(status["VmRSS"])
       })
 
-      io = read_kv_file(Path.join([root, pid, "io"]))
+      io = read_kv_file(io_path, @io_keys)
 
       emit([:host, :proc, :beam, :io], %{
         read_bytes: io["read_bytes"],
@@ -62,6 +64,27 @@ defmodule ElectricTelemetry.SystemMetrics.Proc do
     end
 
     :ok
+  end
+
+  # In production (no opts) the BEAM pid and the file paths never change for
+  # the life of the VM, so resolve them once and cache in :persistent_term;
+  # test overrides recompute.
+  defp paths([]) do
+    SystemMetrics.memoized({__MODULE__, :paths}, fn ->
+      build_paths(@default_root, :os.getpid())
+    end)
+  end
+
+  defp paths(opts) do
+    build_paths(
+      Keyword.get(opts, :proc_root, @default_root),
+      Keyword.get_lazy(opts, :pid, fn -> :os.getpid() end)
+    )
+  end
+
+  defp build_paths(root, pid) do
+    dir = Path.join(root, to_string(pid))
+    %{status: Path.join(dir, "status"), io: Path.join(dir, "io")}
   end
 
   defp kb_to_bytes(nil), do: nil

@@ -13,9 +13,10 @@ defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   """
 
   @doc """
-  Parse a flat key/value file — `/proc/meminfo`, `/proc/<pid>/status`,
-  `/proc/<pid>/io`, cgroup `memory.stat`/`cpu.stat` — into a map of
-  `binary key => integer value`.
+  Parse a flat key/value file — `/proc/<pid>/status`, `/proc/<pid>/io`, cgroup
+  `memory.stat`/`cpu.stat` — into a map of `binary key => integer value`,
+  keeping only the keys in the `keys` set. These files carry dozens of lines of
+  which a caller consumes a handful; non-wanted lines skip value parsing.
 
   Handles both the `key value` and `Key:\twhitespace-padded value [unit]` line
   layouts: the key is the first whitespace-delimited token with any trailing
@@ -23,13 +24,15 @@ defmodule ElectricTelemetry.SystemMetrics.ProcfsParse do
   `kB`) is ignored. Lines whose value doesn't parse as an integer are dropped.
   Values keep their native unit (the caller converts, e.g. kB -> bytes).
   """
-  @spec read_kv_file(Path.t()) :: %{optional(binary()) => integer()}
-  def read_kv_file(path) do
+  @spec read_kv_file(Path.t(), MapSet.t(binary())) :: %{optional(binary()) => integer()}
+  def read_kv_file(path, keys) do
     for line <- String.split(read_raw_file(path) || "", "\n", trim: true),
         [key, value | _] <- [String.split(line)],
+        key = String.trim_trailing(key, ":"),
+        MapSet.member?(keys, key),
         int = parse_int(value),
         into: %{},
-        do: {String.trim_trailing(key, ":"), int}
+        do: {key, int}
   end
 
   @doc """

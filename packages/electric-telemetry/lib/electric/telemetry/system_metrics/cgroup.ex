@@ -18,9 +18,23 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
   import ElectricTelemetry.SystemMetrics, only: [emit: 2]
 
   import ElectricTelemetry.SystemMetrics.ProcfsParse,
-    only: [read_kv_file: 1, read_int_file: 1, read_raw_file: 1, parse_int: 1, parse_float: 1]
+    only: [read_kv_file: 2, read_int_file: 1, read_raw_file: 1, parse_int: 1, parse_float: 1]
 
   @default_root "/sys/fs/cgroup"
+
+  @files %{
+    memory_current: "memory.current",
+    memory_stat: "memory.stat",
+    memory_max: "memory.max",
+    memory_pressure: "memory.pressure",
+    cpu_stat: "cpu.stat",
+    cpu_pressure: "cpu.pressure",
+    io_stat: "io.stat"
+  }
+  @default_paths Map.new(@files, fn {key, file} -> {key, Path.join(@default_root, file)} end)
+
+  @memory_stat_keys MapSet.new(~w(anon file inactive_file))
+  @cpu_stat_keys MapSet.new(~w(usage_usec nr_throttled throttled_usec))
 
   @doc """
   Read the cgroup accounting files and emit `cgroup.*` telemetry events.
@@ -38,18 +52,23 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
       Keyword.get_lazy(opts, :cgroup_version, fn -> SystemMetrics.system_info().cgroup_version end)
 
     if version == :v2 do
-      root = Keyword.get(opts, :cgroup_root, @default_root)
-      emit_memory(root)
-      emit_cpu(root)
-      emit([:cgroup, :io], io_totals(read_raw_file(Path.join(root, "io.stat"))))
+      paths = opts |> Keyword.get(:cgroup_root, @default_root) |> paths()
+      emit_memory(paths)
+      emit_cpu(paths)
+      emit([:cgroup, :io], io_totals(read_raw_file(paths.io_stat)))
     end
 
     :ok
   end
 
-  defp emit_memory(root) do
-    current = read_int_file(Path.join(root, "memory.current"))
-    stat = read_kv_file(Path.join(root, "memory.stat"))
+  # The production file paths are compile-time constants; only tests pass a
+  # different root.
+  defp paths(@default_root), do: @default_paths
+  defp paths(root), do: Map.new(@files, fn {key, file} -> {key, Path.join(root, file)} end)
+
+  defp emit_memory(paths) do
+    current = read_int_file(paths.memory_current)
+    stat = read_kv_file(paths.memory_stat, @memory_stat_keys)
     inactive_file = stat["inactive_file"]
 
     emit([:cgroup, :memory], %{
@@ -59,14 +78,14 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
       working_set: current && inactive_file && max(current - inactive_file, 0),
       # An unlimited memory.max is the literal "max", which parses to nil and is
       # skipped (the host-RAM ceiling comes from the /proc reader).
-      max: read_int_file(Path.join(root, "memory.max"))
+      max: read_int_file(paths.memory_max)
     })
 
-    emit_pressure(root, "memory.pressure", :memory)
+    emit_pressure(paths.memory_pressure, :memory)
   end
 
-  defp emit_cpu(root) do
-    stat = read_kv_file(Path.join(root, "cpu.stat"))
+  defp emit_cpu(paths) do
+    stat = read_kv_file(paths.cpu_stat, @cpu_stat_keys)
 
     emit([:cgroup, :cpu], %{
       usage_usec: stat["usage_usec"],
@@ -74,14 +93,13 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
       throttled_usec: stat["throttled_usec"]
     })
 
-    emit_pressure(root, "cpu.pressure", :cpu)
+    emit_pressure(paths.cpu_pressure, :cpu)
   end
 
   # PSI files may be absent even on v2 (kernel built without PSI); a nil avg10
   # is dropped by emit/2, skipping the event.
-  defp emit_pressure(root, file, plane) do
-    avg10 = psi_full_avg10(read_raw_file(Path.join(root, file)))
-    emit([:cgroup, plane, :pressure, :full], %{avg10: avg10})
+  defp emit_pressure(path, plane) do
+    emit([:cgroup, plane, :pressure, :full], %{avg10: psi_full_avg10(read_raw_file(path))})
   end
 
   # io.stat is one line per device: "MAJ:MIN rbytes=… wbytes=… rios=… …".
