@@ -152,6 +152,7 @@ stream.subscribe((messages) => {
 ```
 
 **Benefits of SSE:**
+
 - Fewer HTTP requests - the client doesn't need to reconnect after each message
 - Lower latency for small messages arriving frequently (<100ms apart, such as token streaming)
 - Reduced bandwidth (no request overhead per update)
@@ -160,6 +161,7 @@ stream.subscribe((messages) => {
 **Automatic Fallback:**
 
 The client automatically detects when SSE is not working properly (e.g., due to proxy buffering) and falls back to long polling. This happens when:
+
 1. SSE connections close immediately (< 1 second)
 2. This occurs 3 times consecutively
 3. The client logs a warning and switches to long polling
@@ -174,7 +176,13 @@ React Native apps should pause active long-polls while the app is backgrounded a
 import { ShapeStream } from '@electric-sql/client'
 ```
 
-If your Metro configuration disables package exports or you use another non-browser runtime, pass `runtimeVisibility` explicitly:
+If your Metro configuration does not apply the root `react-native` condition but does support package subpaths, you can import the React Native entrypoint explicitly:
+
+```ts
+import { ShapeStream } from '@electric-sql/client/react-native'
+```
+
+If your bundler cannot resolve that entrypoint, or you use another non-browser runtime, pass `runtimeVisibility` explicitly:
 
 ```ts
 import { AppState } from 'react-native'
@@ -530,7 +538,6 @@ shape.subscribe((data) => {
 })
 ```
 
-
 ##### Column Mapping
 
 For transforming column names between database format (e.g., snake_case) and application format (e.g., camelCase), use the `columnMapper` option. This provides bidirectional transformation, automatically encoding column names in WHERE clauses and decoding them in query results.
@@ -557,9 +564,9 @@ const stream = new ShapeStream<CustomRow>({
 
 // Now you can use camelCase in WHERE clauses too:
 await stream.requestSnapshot({
-  where: "postTitle LIKE $1", // Automatically encoded to: post_title LIKE $1
-  params: { "1": "%electric%" },
-  orderBy: "createdAt DESC", // Automatically encoded to: created_at DESC
+  where: 'postTitle LIKE $1', // Automatically encoded to: post_title LIKE $1
+  params: { '1': '%electric%' },
+  orderBy: 'createdAt DESC', // Automatically encoded to: created_at DESC
   limit: 10,
 })
 ```
@@ -740,13 +747,13 @@ interface ShapeStreamOptions {
 
 The return value from `onError` controls whether syncing continues:
 
-| Return Value | Behavior |
-|--------------|----------|
-| `{}` (empty object) | Retry syncing with the same params and headers |
-| `{ params }` | Retry syncing with modified params |
-| `{ headers }` | Retry syncing with modified headers |
-| `{ params, headers }` | Retry syncing with both modified |
-| `void` or `undefined` | **Stop syncing permanently** |
+| Return Value          | Behavior                                       |
+| --------------------- | ---------------------------------------------- |
+| `{}` (empty object)   | Retry syncing with the same params and headers |
+| `{ params }`          | Retry syncing with modified params             |
+| `{ headers }`         | Retry syncing with modified headers            |
+| `{ params, headers }` | Retry syncing with both modified               |
+| `void` or `undefined` | **Stop syncing permanently**                   |
 
 **Critical**: If you want syncing to continue after an error, you **must** return at least an empty object `{}`. Simply logging the error and returning nothing will stop syncing.
 
@@ -771,12 +778,12 @@ const stream = new ShapeStream({
     if (error instanceof FetchError && error.status === 400) {
       // Bad request - maybe retry with different params
       return {
-        params: { table: 'items', where: 'id > 0' }
+        params: { table: 'items', where: 'id > 0' },
       }
     }
 
     // Stop on other errors (return void)
-  }
+  },
 })
 ```
 
@@ -787,7 +794,7 @@ const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: { table: 'items' },
   headers: {
-    Authorization: `Bearer ${initialToken}`
+    Authorization: `Bearer ${initialToken}`,
   },
   onError: async (error) => {
     if (error instanceof FetchError && error.status === 401) {
@@ -796,14 +803,14 @@ const stream = new ShapeStream({
 
       return {
         headers: {
-          Authorization: `Bearer ${newToken}`
-        }
+          Authorization: `Bearer ${newToken}`,
+        },
       }
     }
 
     // Retry other errors with same params
     return {}
-  }
+  },
 })
 ```
 
@@ -815,7 +822,7 @@ const stream = new ShapeStream({
   params: {
     table: 'items',
     where: 'user_id = $1',
-    params: [currentUserId]
+    params: [currentUserId],
   },
   onError: (error) => {
     if (error instanceof FetchError && error.status === 403) {
@@ -824,13 +831,13 @@ const stream = new ShapeStream({
         params: {
           table: 'items',
           where: 'user_id = $1',
-          params: [fallbackUserId]
-        }
+          params: [fallbackUserId],
+        },
       }
     }
 
     return {} // Retry other errors
-  }
+  },
 })
 ```
 
@@ -869,7 +876,7 @@ const stream = new ShapeStream({
 
     // For non-HTTP errors or exhausted 5xx retries, stop
     return // Stop
-  }
+  },
 })
 ```
 

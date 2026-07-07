@@ -40,10 +40,26 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
+      "browser": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.mjs"
+        },
+        "require": {
+          "types": "./dist/cjs/index.d.cts",
+          "default": "./dist/cjs/index.cjs"
+        },
+        "default": "./dist/index.mjs"
+      },
       "react-native": {
-        "types": "./dist/index.react-native.d.ts",
-        "import": "./dist/index.react-native.mjs",
-        "require": "./dist/cjs/index.react-native.cjs",
+        "import": {
+          "types": "./dist/index.react-native.d.ts",
+          "default": "./dist/index.react-native.mjs"
+        },
+        "require": {
+          "types": "./dist/cjs/index.react-native.d.cts",
+          "default": "./dist/cjs/index.react-native.cjs"
+        },
         "default": "./dist/index.react-native.mjs"
       },
       "import": {
@@ -54,6 +70,17 @@
         "types": "./dist/cjs/index.d.cts",
         "default": "./dist/cjs/index.cjs"
       }
+    },
+    "./react-native": {
+      "import": {
+        "types": "./dist/index.react-native.d.ts",
+        "default": "./dist/index.react-native.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/index.react-native.d.cts",
+        "default": "./dist/cjs/index.react-native.cjs"
+      },
+      "default": "./dist/index.react-native.mjs"
     }
   },
   "bin": {
@@ -64,13 +91,14 @@
     "src",
     "skills",
     "bin",
-    "!skills/_artifacts"
+    "!skills/_artifacts",
+    "!src/react-native-shim.d.ts"
   ],
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.legacy-esm.js",
-  "react-native": "./dist/index.react-native.mjs",
+  "react-native": "./dist/cjs/index.react-native.cjs",
   "types": "./dist/index.d.ts",
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.18.1"

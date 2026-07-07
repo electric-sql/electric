@@ -103,7 +103,7 @@ shape.subscribe(({ rows }) => {
 
 ### React Native / Expo app lifecycle
 
-Metro and Expo resolve the package's `react-native` export for native builds, so standard imports automatically wire React Native `AppState` into `ShapeStream`. If your bundler setup does not resolve the `react-native` export, pass `runtimeVisibility` explicitly. See the [TypeScript client docs](https://electric-sql.com/docs/sync/api/clients/typescript#react-native-and-expo-lifecycle-handling) for details.
+Metro and Expo resolve the package's `react-native` export for native builds, so standard imports automatically wire React Native `AppState` into `ShapeStream`. If your bundler setup does not resolve the root `react-native` condition, use the explicit `@electric-sql/client/react-native` entrypoint or pass `runtimeVisibility` explicitly. See the [TypeScript client docs](https://electric-sql.com/docs/sync/api/clients/typescript#react-native-and-expo-lifecycle-handling) for details.
 
 ### Error Handling
 
