@@ -36,6 +36,7 @@ defmodule Electric.Plug.ServeShapePlug do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Api
+  alias Electric.Telemetry.EmptyResponseSampler
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
   alias Plug.Conn
@@ -443,6 +444,7 @@ defmodule Electric.Plug.ServeShapePlug do
     bytes_sent = assigns[:streaming_bytes_sent] || 0
     is_live = get_live_mode(assigns)
     stack_id = get_in(conn.assigns, [:config, :stack_id])
+    is_empty = response_trace_attrs(conn)[:ot_is_empty_response] || false
 
     OpenTelemetry.execute(
       [:electric, :plug, :serve_shape],
@@ -458,7 +460,8 @@ defmodule Electric.Plug.ServeShapePlug do
         client_ip: conn.remote_ip,
         status: conn.status,
         stack_id: stack_id,
-        known_error: Api.Response.conn_has_known_error?(conn)
+        known_error: Api.Response.conn_has_known_error?(conn),
+        empty: is_empty
       }
     )
 
@@ -504,21 +507,56 @@ defmodule Electric.Plug.ServeShapePlug do
   # the parent-based sampler left no recording span, so `add_span_attributes` is a no-op
   # and nothing is stamped or exported.
   #
+  # Empty/up-to-date responses are additionally tail-dropped: when the drop is enabled
+  # they are stamped with `SampleRate = 0`, which the drop processor recognises as a
+  # sentinel to skip export (see Electric.Telemetry.EmptyResponseSampler).
+  #
   # Called both at span start (status not yet known: the rate hint is stamped as-is) and
   # at emit time, when the final attribute values overwrite the initial ones.
   defp add_span_attrs_from_conn(conn) do
     conn
     |> open_telemetry_attrs()
-    |> Map.merge(TraceContextPlug.sample_rate_attrs(conn, conn.status))
+    |> Map.merge(sample_rate_attrs(conn))
     |> OpenTelemetry.add_span_attributes()
 
     conn
   end
 
-  defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
+  defp sample_rate_attrs(conn) do
+    base_attrs = TraceContextPlug.sample_rate_attrs(conn, conn.status)
+    trace_attrs = response_trace_attrs(conn)
+
+    decision =
+      EmptyResponseSampler.sample_rate(
+        conn.status,
+        trace_attrs[:ot_is_empty_response] || false,
+        trace_attrs[:ot_is_sse_response] || false,
+        Electric.Config.get_env(:drop_empty_response_spans?)
+      )
+
+    case decision do
+      :unchanged -> base_attrs
+      sample_rate -> Map.put(base_attrs, TraceContextPlug.sample_rate_attr(), sample_rate)
+    end
+  end
+
+  # Resolves the request and response structs from the conn assigns as bare maps.
+  # The response may live directly on the conn or nested under the request
+  # (its emit-time home), depending on where in the pipeline this runs.
+  defp request_and_response(assigns) do
     request = Map.get(assigns, :request, %{}) |> bare_map()
-    params = Map.get(request, :params, %{}) |> bare_map()
     response = (Map.get(assigns, :response) || Map.get(request, :response) || %{}) |> bare_map()
+    {request, response}
+  end
+
+  defp response_trace_attrs(%Conn{assigns: assigns}) do
+    {_request, response} = request_and_response(assigns)
+    Map.get(response, :trace_attrs, %{})
+  end
+
+  defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
+    {request, response} = request_and_response(assigns)
+    params = Map.get(request, :params, %{}) |> bare_map()
     attrs = Map.get(response, :trace_attrs, %{})
     maybe_up_to_date = Map.get(response, :up_to_date, false)
 
