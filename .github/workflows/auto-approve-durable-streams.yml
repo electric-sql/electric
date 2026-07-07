@@ -24,6 +24,7 @@ jobs:
         run: |
           scopes=(
             "packages/durable-streams-rust/"
+            ".changeset/"
           )
 
           in_scope=true
