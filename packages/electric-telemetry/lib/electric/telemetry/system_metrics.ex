@@ -51,15 +51,10 @@ defmodule ElectricTelemetry.SystemMetrics do
   @doc """
   Boot-time platform/cgroup detection, computed once and cached in `:persistent_term`.
 
-  Returns a map of the form `%{os: {family, name}, cgroup_version: :v1 | :v2 | :none}`.
-
-  Cgroup version is detected by stat-ing the filesystem mounted at `/sys/fs/cgroup`:
-  a `cgroup2fs` filesystem indicates v2; `tmpfs`/`cgroup` indicates v1; anything else
-  (including non-Linux platforms or a missing mount) is reported as `:none`.
-
-  Later tasks (cgroup/host readers) reuse this detection.
+  Returns a map of the form `%{os: {family, name}, cgroup_version: :v2 | :none}`.
+  Cgroup v1 hosts report `:none` — the `cgroup.*` metrics are v2-only.
   """
-  @spec system_info() :: %{os: {atom(), atom()}, cgroup_version: :v1 | :v2 | :none}
+  @spec system_info() :: %{os: {atom(), atom()}, cgroup_version: :v2 | :none}
   def system_info do
     case :persistent_term.get(@system_info_key, :undefined) do
       :undefined ->
@@ -77,22 +72,9 @@ defmodule ElectricTelemetry.SystemMetrics do
     %{os: os, cgroup_version: detect_cgroup_version(os)}
   end
 
+  # The controllers list at the cgroup fs root is the canonical v2 marker.
   defp detect_cgroup_version({:unix, :linux}) do
-    # `stat -fc %T` prints the filesystem type of the mount backing the path.
-    case System.cmd("stat", ["-fc", "%T", "/sys/fs/cgroup"], stderr_to_stdout: true) do
-      {output, 0} ->
-        case String.trim(output) do
-          "cgroup2fs" -> :v2
-          "tmpfs" -> :v1
-          "cgroup" -> :v1
-          _ -> :none
-        end
-
-      _ ->
-        :none
-    end
-  rescue
-    _ -> :none
+    if File.exists?("/sys/fs/cgroup/cgroup.controllers"), do: :v2, else: :none
   end
 
   defp detect_cgroup_version(_non_linux), do: :none

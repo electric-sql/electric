@@ -1,29 +1,16 @@
 defmodule ElectricTelemetry.SystemMetrics.Cgroup do
   @moduledoc """
-  Reads cgroup (v1 and v2) accounting files and emits `cgroup.*` telemetry.
-
-  Electric Cloud runs on cgroup v2 (container at the root of its own cgroup
-  namespace), so v2 controllers are read directly from `/sys/fs/cgroup/*`. v1 is
-  the legacy/fallback layout (Fargate and other hosts) where controllers live
-  under per-controller subdirs (`/sys/fs/cgroup/memory/`, `/sys/fs/cgroup/cpu/`,
-  …).
+  Reads cgroup v2 accounting files from `/sys/fs/cgroup/*` and emits `cgroup.*`
+  telemetry.
 
   All reads are defensive: a missing file, a permission error, or unexpected
   content results in the corresponding metric being skipped, never a crash. The
   cgroup version is taken from `ElectricTelemetry.SystemMetrics.system_info/0`
-  (cached at boot) so we never stat the filesystem on the hot path. When the
-  version is `:none` (including all non-Linux platforms) the measurement is a
-  clean no-op.
+  (cached at boot) so we never stat the filesystem on the hot path. Anything
+  other than v2 (cgroup v1 hosts, non-Linux platforms) is a clean no-op.
 
-  Units:
-
-    * memory metrics are bytes
-    * cpu usage / throttled time are emitted in **microseconds**. v1 reports
-      these in nanoseconds (`cpuacct.usage`, `cpu.stat` `throttled_time`), so we
-      convert to microseconds for a unit consistent with v2's `usage_usec` /
-      `throttled_usec`.
-    * io metrics are bytes
-    * PSI `full avg10` is a stall percentage (float). PSI exists on v2 only.
+  Units: memory and io metrics are bytes, cpu usage / throttled time are
+  microseconds, PSI `full avg10` is a stall percentage (float).
   """
 
   alias ElectricTelemetry.SystemMetrics
@@ -45,35 +32,25 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
 
     * `:cgroup_root` — override the cgroup filesystem root (default
       `#{@default_root}`); used by tests to point at fixture trees.
-    * `:cgroup_version` — override the detected cgroup version (`:v1`/`:v2`/
-      `:none`); used by tests. Defaults to the cached
-      `SystemMetrics.system_info/0` value.
+    * `:cgroup_version` — override the detected cgroup version (`:v2`/`:none`);
+      used by tests. Defaults to the cached `SystemMetrics.system_info/0` value.
   """
   @spec measurement(map(), keyword()) :: :ok
   def measurement(_telemetry_opts, opts \\ []) do
     version =
       Keyword.get_lazy(opts, :cgroup_version, fn -> SystemMetrics.system_info().cgroup_version end)
 
-    root = Keyword.get(opts, :cgroup_root, @default_root)
-
-    case version do
-      :v2 -> read_v2(root)
-      :v1 -> read_v1(root)
-      :none -> :ok
+    if version == :v2 do
+      root = Keyword.get(opts, :cgroup_root, @default_root)
+      emit_memory(root)
+      emit_cpu(root)
+      emit_io(root)
     end
 
     :ok
   end
 
-  ## cgroup v2 -------------------------------------------------------------
-
-  defp read_v2(root) do
-    emit_v2_memory(root)
-    emit_v2_cpu(root)
-    emit_v2_io(root)
-  end
-
-  defp emit_v2_memory(root) do
+  defp emit_memory(root) do
     current = read_int_file(Path.join(root, "memory.current"))
     stat = read_stat_file(Path.join(root, "memory.stat"))
 
@@ -81,12 +58,14 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
     emit(:memory, :anon, Map.get(stat, "anon"))
     emit(:memory, :file, Map.get(stat, "file"))
     emit(:memory, :working_set, working_set(current, Map.get(stat, "inactive_file")))
-    emit(:memory, :max, real_limit(read_raw_file(Path.join(root, "memory.max"))))
+    # An unlimited memory.max is the literal "max", which parses to nil and is
+    # skipped (the host-RAM ceiling comes from the /proc reader).
+    emit(:memory, :max, read_int_file(Path.join(root, "memory.max")))
 
     emit_pressure(Path.join(root, "memory.pressure"), :memory)
   end
 
-  defp emit_v2_cpu(root) do
+  defp emit_cpu(root) do
     stat = read_stat_file(Path.join(root, "cpu.stat"))
 
     emit(:cpu, :usage_usec, Map.get(stat, "usage_usec"))
@@ -96,50 +75,11 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
     emit_pressure(Path.join(root, "cpu.pressure"), :cpu)
   end
 
-  defp emit_v2_io(root) do
+  defp emit_io(root) do
     io = parse_io_stat(read_raw_file(Path.join(root, "io.stat")))
 
     emit(:io, :rbytes, io.rbytes)
     emit(:io, :wbytes, io.wbytes)
-  end
-
-  ## cgroup v1 -------------------------------------------------------------
-
-  defp read_v1(root) do
-    emit_v1_memory(root)
-    emit_v1_cpu(root)
-    # NOTE: v1 blkio accounting (blkio.throttle.io_service_bytes) is awkward and
-    # not present on the hosts we care about (Electric Cloud is v2). IO metrics
-    # are emitted on v2 only; v1 deliberately skips them.
-  end
-
-  defp emit_v1_memory(root) do
-    current = read_int_file(Path.join(root, "memory/memory.usage_in_bytes"))
-    stat = read_stat_file(Path.join(root, "memory/memory.stat"))
-
-    emit(:memory, :current, current)
-    emit(:memory, :anon, Map.get(stat, "rss"))
-    emit(:memory, :file, Map.get(stat, "cache"))
-    emit(:memory, :working_set, working_set(current, Map.get(stat, "inactive_file")))
-
-    emit(
-      :memory,
-      :max,
-      real_limit(read_raw_file(Path.join(root, "memory/memory.limit_in_bytes")))
-    )
-
-    # v1 has no PSI; skip cgroup.memory.pressure.full.avg10.
-  end
-
-  defp emit_v1_cpu(root) do
-    usage_ns = read_int_file(Path.join(root, "cpuacct/cpuacct.usage"))
-    emit(:cpu, :usage_usec, ns_to_us(usage_ns))
-
-    stat = read_stat_file(Path.join(root, "cpu/cpu.stat"))
-    emit(:cpu, :nr_throttled, Map.get(stat, "nr_throttled"))
-    emit(:cpu, :throttled_usec, ns_to_us(Map.get(stat, "throttled_time")))
-
-    # v1 has no PSI; skip cgroup.cpu.pressure.full.avg10.
   end
 
   ## emitting --------------------------------------------------------------
@@ -171,23 +111,6 @@ defmodule ElectricTelemetry.SystemMetrics.Cgroup do
   defp working_set(nil, _inactive_file), do: nil
   defp working_set(_current, nil), do: nil
   defp working_set(current, inactive_file), do: max(current - inactive_file, 0)
-
-  # A memory limit is only meaningful when it's a real number. v2 unlimited is
-  # the literal string "max"; v1 unlimited is a huge sentinel (~9.2e18). In both
-  # cases skip the metric (the host-RAM ceiling comes from /proc readers).
-  @v1_unlimited_threshold 0x7000_0000_0000_0000
-  defp real_limit(nil), do: nil
-
-  defp real_limit(raw) do
-    case parse_int(raw) do
-      nil -> nil
-      value when value >= @v1_unlimited_threshold -> nil
-      value -> value
-    end
-  end
-
-  defp ns_to_us(nil), do: nil
-  defp ns_to_us(ns), do: div(ns, 1000)
 
   # Parse a flat `key value` stat file (memory.stat, cpu.stat) into a map of
   # binary key -> integer value. Lines that don't parse are dropped.
