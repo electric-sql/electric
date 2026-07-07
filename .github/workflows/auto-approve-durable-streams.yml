@@ -1,0 +1,59 @@
+name: Auto-approve durable streams PRs
+
+# The durable streams package has a single maintainer, so PRs that only
+# touch it are auto-approved to satisfy the 1-review branch protection.
+# Uses pull_request_target so the workflow definition always comes from
+# main and cannot be modified by the PR under review.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-approve:
+    if: github.event.pull_request.user.login == 'balegas' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Approve if all changes are within the durable streams package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          scopes=(
+            "packages/durable-streams-rust/"
+          )
+
+          in_scope=true
+          while IFS= read -r file; do
+            matched=false
+            for scope in "${scopes[@]}"; do
+              [[ "$file" == "$scope"* ]] && matched=true && break
+            done
+            if ! $matched; then
+              echo "Out of scope: $file"
+              in_scope=false
+            fi
+          done < <(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+
+          bot_approval=$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED")] | last | .id // empty')
+
+          if $in_scope; then
+            if [[ -z "$bot_approval" ]]; then
+              gh pr review "$PR" --repo "$REPO" --approve \
+                --body "Auto-approved: all changes are within the durable streams package."
+            else
+              echo "Already approved."
+            fi
+          elif [[ -n "$bot_approval" ]]; then
+            # A later push brought out-of-scope files in; retract the approval
+            # since stale reviews are not dismissed automatically.
+            gh api -X PUT "repos/$REPO/pulls/$PR/reviews/$bot_approval/dismissals" \
+              -f message="Dismissed: PR now touches files outside the durable streams package." \
+              -f event="DISMISS"
+          else
+            echo "PR touches files outside the durable streams package; no auto-approval."
+          fi

@@ -94,7 +94,7 @@ defmodule ElectricTelemetry.StackTelemetry do
       counter("electric.plug.serve_shape.requests.count",
         event_name: [:electric, :plug, :serve_shape],
         measurement: :count,
-        tags: [:status, :known_error, :live]
+        tags: [:status, :known_error, :live, :empty]
       ),
       distribution("electric.shape.response_size.bytes",
         unit: :byte,
