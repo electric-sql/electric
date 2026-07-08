@@ -382,6 +382,11 @@ pub struct Store {
     /// the `WalSet`, runs WAL recovery, and `set`s it here — all before serving.
     /// The hot-path read (`store.wal.get()`) is lock-free.
     pub wal: std::sync::OnceLock<Arc<crate::wal::walset::WalSet>>,
+    /// Streams with a pending non-durable sidecar flush (memory-mode appends,
+    /// TTL read touches), drained in batch by the periodic meta sweeper
+    /// (`sweep_meta_once`). The `meta_dirty` CAS in `mark_meta_dirty` keeps
+    /// each stream in here at most once per sweep cycle (#4691).
+    pub meta_sweep: StdMutex<Vec<Arc<StreamState>>>,
 }
 
 pub enum CreateResult {
@@ -421,6 +426,7 @@ impl Store {
             tier_config,
             blobstore,
             wal: std::sync::OnceLock::new(),
+            meta_sweep: StdMutex::new(Vec::new()),
         };
         store.recover(&streams_dir)?;
         Ok(store)
@@ -1147,22 +1153,53 @@ pub(crate) fn fsync_parent_dir(path: &std::path::Path) -> std::io::Result<()> {
     }
 }
 
-impl StreamState {
-    /// Schedule a debounced, non-durable meta flush (producer/access updates).
-    pub fn schedule_meta_flush(self: &Arc<Self>) {
-        if self
+impl Store {
+    /// Queue a non-durable meta sidecar flush (producer/access updates) for the
+    /// next periodic sweep (#4691). Replaces the per-stream 100 ms debounce
+    /// timer, which cost a tokio timer task + `spawn_blocking` + full sidecar
+    /// rewrite per stream per 100 ms — at high stream cardinality ~5x wal-mode
+    /// CPU for the same load. The lag bound moves from the 100 ms debounce to
+    /// the sweep cadence, exactly the trade wal mode made in #4675.
+    ///
+    /// The `meta_dirty` CAS dedupes: while a flush is pending the stream sits
+    /// in `meta_sweep` at most once. The wal-mode append path never calls this
+    /// — it stores `meta_dirty` directly and the shard checkpoint flushes the
+    /// sidecar (see `handle_append_inner`); if that path already set the flag,
+    /// the checkpoint owns the flush and the CAS failing here avoids a
+    /// duplicate write.
+    pub fn mark_meta_dirty(&self, st: &Arc<StreamState>) {
+        if st
             .meta_dirty
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
+            .is_ok()
         {
-            return; // flush already scheduled
+            self.meta_sweep.lock().unwrap().push(Arc::clone(st));
         }
-        let st = self.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            st.meta_dirty.store(false, Ordering::Release);
-            let _ = tokio::task::spawn_blocking(move || write_meta_sync(&st, false)).await;
-        });
+    }
+
+    /// Drain the pending sweep set and write each still-dirty stream's sidecar
+    /// (non-durable), returning how many were written. Blocking file I/O —
+    /// call from a blocking context. Errors are ignored exactly like the
+    /// debounced flush ignored them (the sidecar is non-durable by contract).
+    pub fn sweep_meta_once(&self) -> usize {
+        let drained: Vec<Arc<StreamState>> =
+            std::mem::take(&mut *self.meta_sweep.lock().unwrap());
+        let mut n = 0;
+        for st in drained {
+            // A hard-deleted stream's files are already unlinked — flushing
+            // would resurrect its sidecar. Same `Arc` identity check as
+            // delete's `remove_if`. (Soft-deleted streams stay in the map and
+            // must flush: the sidecar records the `soft_deleted` flag.)
+            let live = self
+                .streams
+                .get(&st.path)
+                .is_some_and(|cur| Arc::ptr_eq(cur.value(), &st));
+            if live && st.meta_dirty.swap(false, Ordering::AcqRel) {
+                let _ = write_meta_sync(&st, false);
+                n += 1;
+            }
+        }
+        n
     }
 }
 
@@ -2173,6 +2210,103 @@ mod tier_tests {
             .map(|rd| rd.count())
             .unwrap_or(0);
         assert_eq!(seg_files, 0, "seal staged chunk files despite deleted");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+// ---------------- batched meta sweep tests (#4691) ----------------
+
+#[cfg(test)]
+mod meta_sweep_tests {
+    use super::*;
+    use crate::tier::TierConfig;
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!(
+            "ds-meta-sweep-{tag}-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&p);
+        p
+    }
+
+    fn octet_cfg() -> StreamConfig {
+        StreamConfig {
+            content_type: "application/octet-stream".into(),
+            ttl_seconds: None,
+            expires_at: None,
+            expires_at_raw: None,
+            create_closed: false,
+            forked_from: None,
+            fork_offset_raw: None,
+            fork_sub_offset: None,
+        }
+    }
+
+    fn create(store: &Store, path: &str) -> Arc<StreamState> {
+        match store.create(path, octet_cfg(), None, 0).unwrap() {
+            CreateResult::Created(s) => s,
+            _ => panic!("create failed"),
+        }
+    }
+
+    fn disk_meta(st: &StreamState) -> Meta {
+        serde_json::from_slice(&std::fs::read(meta_path(&st.file_path)).unwrap()).unwrap()
+    }
+
+    /// Marking is idempotent while a flush is pending (one sweep entry per
+    /// stream per cycle), the sweep persists the pending state, and a clean
+    /// sweep is a no-op.
+    #[tokio::test]
+    async fn mark_dedupes_and_sweep_flushes() {
+        let dir = tmp_dir("flush");
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        let st = create(&store, "s");
+
+        st.shared
+            .write()
+            .unwrap()
+            .producers
+            .insert("p1".into(), ProducerState { epoch: 1, last_seq: 3 });
+        store.mark_meta_dirty(&st);
+        store.mark_meta_dirty(&st); // second mark while pending: deduped
+
+        assert!(
+            !disk_meta(&st).producers.contains_key("p1"),
+            "marking alone must not write the sidecar"
+        );
+        assert_eq!(store.sweep_meta_once(), 1, "one dirty stream, one flush");
+        let meta = disk_meta(&st);
+        let p = meta.producers.get("p1").expect("sweep persists the pending producer state");
+        assert_eq!((p.epoch, p.last_seq), (1, 3));
+        assert!(
+            !st.meta_dirty.load(Ordering::Acquire),
+            "sweep clears the dirty flag"
+        );
+        assert_eq!(store.sweep_meta_once(), 0, "nothing left to sweep");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A stream hard-deleted after being marked dirty must NOT get its sidecar
+    /// resurrected by a later sweep (the file unlinks already happened).
+    #[tokio::test]
+    async fn sweep_skips_hard_deleted_stream() {
+        let dir = tmp_dir("deleted");
+        let store = Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap();
+        let st = create(&store, "s");
+
+        store.mark_meta_dirty(&st);
+        store.delete_or_soft_delete_durable(&st).unwrap();
+        assert!(!meta_path(&st.file_path).exists(), "hard delete unlinked the sidecar");
+
+        assert_eq!(store.sweep_meta_once(), 0, "deleted stream is skipped");
+        assert!(
+            !meta_path(&st.file_path).exists(),
+            "sweep must not resurrect a deleted stream's sidecar"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

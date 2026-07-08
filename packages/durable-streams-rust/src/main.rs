@@ -296,6 +296,12 @@ fn main() {
         let store = Arc::new(
             Store::new_with_tier(data_dir.clone(), tier.clone()).expect("failed to init store"),
         );
+        // Batched meta-sidecar sweeper (#4691): flushes every stream queued by
+        // `Store::mark_meta_dirty` (memory-mode appends, TTL read touches) in
+        // one pass per tick, replacing the per-stream 100 ms debounce timer.
+        // Spawned in BOTH durability modes — wal mode still queues TTL read
+        // touches here (its append path flushes via the checkpoint instead).
+        spawn_meta_sweeper(Arc::clone(&store));
 
         // ---- WAL wiring (Wal mode only) ----
         //
@@ -438,6 +444,33 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
                 });
             }
             while wave.join_next().await.is_some() {}
+        }
+    });
+}
+
+/// How often the meta sweeper flushes dirty sidecars (#4691). The sidecar's
+/// producer/access state is a non-durable, lagging flush by contract; 1 s keeps
+/// the lag tighter than the wal checkpoint's 3 s cadence while still batching
+/// away the per-stream timer + per-append rewrite the 100 ms debounce cost.
+const META_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Spawn the store-level meta-sidecar sweeper: each tick drains the
+/// `mark_meta_dirty` queue and writes every still-dirty stream's sidecar in one
+/// `spawn_blocking` task (vs one timer task + one blocking task PER STREAM per
+/// 100 ms under the old debounce — the ~5x memory-mode CPU overhead of #4691).
+fn spawn_meta_sweeper(store: Arc<Store>) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(META_SWEEP_INTERVAL);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // Skip the immediate first tick — nothing can be dirty at boot.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            if store.meta_sweep.lock().unwrap().is_empty() {
+                continue;
+            }
+            let s = Arc::clone(&store);
+            let _ = tokio::task::spawn_blocking(move || s.sweep_meta_once()).await;
         }
     });
 }
