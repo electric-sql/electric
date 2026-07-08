@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.24
+
+### Patch Changes
+
+- 2ab02bb: Use the React Native package export to wire AppState lifecycle handling in Metro/Expo builds, replacing brittle runtime `require('react-native')` auto-detection while keeping `runtimeVisibility` as an explicit escape hatch.
+
 ## 1.5.23
 
 ### Patch Changes
