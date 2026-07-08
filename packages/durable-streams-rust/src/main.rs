@@ -3,6 +3,7 @@ mod blobstore;
 mod engine_raw;
 mod handlers;
 mod http1;
+mod srvstats;
 #[cfg(target_os = "linux")]
 mod sse_reactor;
 mod store;
@@ -137,6 +138,7 @@ fn main() {
     // append path). Dependency-free — the measurement vehicle for the contention
     // investigation, independent of the heavy `telemetry` OTLP feature.
     let mut wal_stats_secs: Option<u64> = None;
+    let mut server_stats_secs: Option<u64> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -238,6 +240,53 @@ fn main() {
                     }
                 }
             }
+            // Dev/benchmark toggles for the cardinality-cliff investigation.
+            // `--meta-sweep-disable` drops the memory-mode sidecar write (makes
+            // the sidecar permanently stale — bench-only); `--meta-sweep-stats`
+            // logs a META_SWEEP line per tick.
+            "--meta-sweep-disable" => store::set_meta_sweep_disable(true),
+            "--meta-sweep-stats" => store::set_meta_sweep_stats(true),
+            // Periodic SRV_STATS line (both modes): cpu_cores / inflight / service
+            // + appender-lock + durability wait — bottleneck analysis.
+            "--server-stats" => {
+                let n: u64 = parse_val(args.next(), "--server-stats");
+                if n == 0 {
+                    eprintln!("--server-stats must be ≥ 1 (seconds)");
+                    std::process::exit(2);
+                }
+                server_stats_secs = Some(n);
+            }
+            "--wal-meta-gate" => {
+                let v = val(args.next(), "--wal-meta-gate");
+                match v.as_str() {
+                    "on" => store::set_wal_meta_gate(true),
+                    "off" => store::set_wal_meta_gate(false),
+                    _ => {
+                        eprintln!("--wal-meta-gate must be on|off");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            "--mem-meta-gate" => {
+                let v = val(args.next(), "--mem-meta-gate");
+                match v.as_str() {
+                    "on" => store::set_mem_meta_gate(true),
+                    "off" => store::set_mem_meta_gate(false),
+                    _ => {
+                        eprintln!("--mem-meta-gate must be on|off");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            // Checkpoint fdatasync fan-out (H4). `1` = serial baseline.
+            "--wal-fsync-parallel" => {
+                let n: u64 = parse_val(args.next(), "--wal-fsync-parallel");
+                if n == 0 {
+                    eprintln!("--wal-fsync-parallel must be ≥ 1");
+                    std::process::exit(2);
+                }
+                wal::shard::set_fsync_fanout(n);
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -302,6 +351,11 @@ fn main() {
         // Spawned in BOTH durability modes — wal mode still queues TTL read
         // touches here (its append path flushes via the checkpoint instead).
         spawn_meta_sweeper(Arc::clone(&store));
+
+        // Server load telemetry (both modes) for bottleneck analysis.
+        if let Some(secs) = server_stats_secs {
+            srvstats::spawn(secs);
+        }
 
         // ---- WAL wiring (Wal mode only) ----
         //

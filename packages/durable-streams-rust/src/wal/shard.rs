@@ -379,6 +379,29 @@ pub struct Shard {
 /// recyclable.
 const CHECKPOINT_FILE: &str = "checkpoint";
 
+/// Concurrency for the checkpoint's per-stream `fdatasync` phase (cardinality-cliff
+/// H4). At high stream cardinality that phase dominates the checkpoint (~99% of its
+/// wall time), and a serial loop pays `latency × N_touched` while the storage
+/// device's queue depth (NVMe: many in flight) sits idle. Fanning the syncs across
+/// this many OS threads lets the device absorb them concurrently; all still
+/// complete before `persist_durable_tails`/recycle, preserving the
+/// durability-before-recycle ordering. `1` (the DEFAULT) = serial, i.e. a no-op
+/// change unless `--wal-fsync-parallel N` opts in.
+///
+/// Default is serial because a fixed high fan-out REGRESSES on a CPU-constrained
+/// server or storage that does not do concurrent fsync: measured on a 2-vCPU Linux
+/// container (Docker, virtiofs) fan-out=16 was −19% vs serial — the 16 sync threads
+/// per shard stole CPU from the runtime, slowing the committer until checkpoints
+/// fell behind. The win requires real NVMe (deep device queue) AND spare cores;
+/// validate there before raising the default.
+static FSYNC_FANOUT: AtomicU64 = AtomicU64::new(1);
+pub fn set_fsync_fanout(n: u64) {
+    FSYNC_FANOUT.store(n.max(1), Ordering::Relaxed);
+}
+fn fsync_fanout() -> usize {
+    FSYNC_FANOUT.load(Ordering::Relaxed) as usize
+}
+
 /// Name of the per-shard durable-tail map: `<shard_dir>/tails` (task 11b). A
 /// CUMULATIVE `stream_id durable_tail` line map (plain decimal text, one stream
 /// per line). At checkpoint, each touched stream's current logical `Shared.tail`
@@ -833,9 +856,38 @@ impl Shard {
             let n_touched = touched.len();
             let t_capture = t_start.elapsed();
 
-            // 2. fdatasync each touched per-stream file.
-            for (_, _, f) in &touched {
-                crate::store::barrier_fsync(f)?;
+            // 2. fdatasync each touched per-stream file. Fan out across a bounded
+            //    pool of OS threads (H4): the device's queue depth absorbs the
+            //    syncs concurrently instead of paying latency × N_touched serially
+            //    — the checkpoint's dominant cost at high cardinality. ALL syncs
+            //    complete here, before persist_durable_tails/recycle below, so the
+            //    durability-before-recycle ordering is unchanged. `fanout == 1`
+            //    (or a single file) keeps the plain serial loop.
+            let fanout = fsync_fanout().min(n_touched.max(1));
+            if fanout <= 1 {
+                for (_, _, f) in &touched {
+                    crate::store::barrier_fsync(f)?;
+                }
+            } else {
+                let next = AtomicU64::new(0);
+                let first_err: Mutex<Option<io::Error>> = Mutex::new(None);
+                std::thread::scope(|scope| {
+                    for _ in 0..fanout {
+                        scope.spawn(|| loop {
+                            let i = next.fetch_add(1, Ordering::Relaxed) as usize;
+                            let Some((_, _, f)) = touched.get(i) else { break };
+                            if let Err(e) = crate::store::barrier_fsync(f) {
+                                let mut slot = first_err.lock().unwrap();
+                                if slot.is_none() {
+                                    *slot = Some(e);
+                                }
+                            }
+                        });
+                    }
+                });
+                if let Some(e) = first_err.into_inner().unwrap() {
+                    return Err(e);
+                }
             }
             let t_fsync = t_start.elapsed();
 

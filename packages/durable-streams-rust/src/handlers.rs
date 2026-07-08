@@ -896,6 +896,9 @@ async fn handle_append(store: Arc<Store>, req: Req, path: String) -> Resp {
 
 async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp, AppendOutcome, bool) {
     use AppendOutcome::*;
+    // Load-telemetry probe: bumps the in-flight gauge and records service time on
+    // drop (covers every return path). No-op unless `--server-stats` is on.
+    let _probe = crate::srvstats::AppendProbe::start();
     let st = match store.get(&path) {
         Some(s) => s,
         None => return (text_response(404, "stream not found"), Conflict, false),
@@ -950,8 +953,10 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     // Serialize per stream: producer validation + write + state update under one
     // lock. Time the wait separately — lock contention is a key bottleneck.
     let lock_t0 = crate::telemetry::Timer::start();
+    let srv_lock_t0 = std::time::Instant::now();
     let mut ap = st.appender.lock().await;
     crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
+    crate::srvstats::record_applock_wait(srv_lock_t0.elapsed());
 
     // Closed checks (precedence: closed → seq regression → gap).
     {
@@ -1083,6 +1088,16 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
             Err(_) => ret!(text_response(500, "write failed"), Conflict),
         }
     }
+    // Does this append change state the memory-mode sidecar must persist? Captured
+    // BEFORE `seq_header` is consumed below. Producer/seq updates are idempotency
+    // state; a TTL stream's sliding `last_access` must survive restart (mirrors the
+    // read path, which marks dirty only for TTL streams). A plain append to a non-TTL stream changes
+    // only `durable_tail`/`last_access`. In BOTH modes the durable tail is carried
+    // elsewhere (memory: re-derived from the data-file length on restart; wal: the
+    // checkpoint's per-shard `tails` map), and `last_access` only gates TTL — so a
+    // plain non-TTL append needs no sidecar flush at all (cardinality-cliff #1).
+    let meta_persist_needed =
+        producer.is_some() || seq_header.is_some() || st.config.ttl_seconds.is_some();
     {
         let mut s = st.shared.write().unwrap();
         if let Some(p) = &producer {
@@ -1130,7 +1145,9 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
 
     // Wait for durability off the lock before exposing the bytes.
     if let Some(lsn) = staged_lsn {
+        let dur_t0 = std::time::Instant::now();
         wait_durable_lsn(&store, &st, lsn).await;
+        crate::srvstats::record_durwait(dur_t0.elapsed());
     }
 
     // Durable now (wal) / page-cache written (memory): expose the new bytes to
@@ -1165,12 +1182,43 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         // saturation) plus a timer task OFF the per-append path. Producer/access
         // updates are already documented as a non-durable, lagging flush; the lag
         // bound moves from the 100 ms debounce to the checkpoint cadence.
-        st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
-    } else {
+        //
+        // GATED (cardinality-cliff #1): only mark when the append changed state
+        // the sidecar must persist — producer/seq idempotency or a sliding TTL.
+        // A plain append still gets its fdatasync AND its `durable_tail` recorded
+        // in the checkpoint's per-shard `tails` map (register_dirty + the
+        // unconditional `persist_durable_tails`, independent of this flag) — and
+        // that map, not the sidecar, is the authoritative durable-tail proof
+        // recovery reconciles against (see wal/shard.rs step 3a, wal/recovery.rs).
+        // `last_access` only gates TTL. So a plain non-TTL append needs no sidecar
+        // rewrite here — dropping it removes the O(touched) `write_meta_sync` calls
+        // that dominate the checkpoint's meta phase at high stream cardinality.
+        // `wal_meta_gate()` (default on) can be turned off to restore always-mark
+        // for a same-binary A/B of the gate.
+        if meta_persist_needed || !crate::store::wal_meta_gate() {
+            st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
+        }
+    } else if meta_persist_needed {
         // No WAL record staged (memory durability): no checkpoint will flush
         // the sidecar — queue it for the store-level periodic sweeper. Same
         // batched treatment the wal branch above gets from the checkpoint: no
         // per-stream timer task, no per-append sidecar rewrite (#4691).
+        //
+        // GATED (cardinality-cliff fix): only queue when the append actually
+        // changed state the sidecar must persist — producer/seq idempotency or a
+        // sliding TTL (see `meta_persist_needed`). A plain append to a non-TTL
+        // stream changes only `durable_tail`/`last_access`, and memory-mode
+        // recovery reads NEITHER (the tail is re-derived from the data-file
+        // length in `Store::new_with_tier`; `last_access` only gates TTL expiry,
+        // which these streams don't have). Skipping the queue for that common
+        // case removes the per-append sidecar rewrite whose cost stops amortizing
+        // at high stream cardinality (CARDINALITY_CLIFF_CAUSES.md #1).
+        //
+        // `mem_meta_gate()` (default on) can be turned off to restore always-queue
+        // for a same-binary A/B of the fix.
+        store.mark_meta_dirty(&st);
+    } else if !crate::store::mem_meta_gate() {
+        // A/B baseline (gate off): old behavior — queue every memory-mode append.
         store.mark_meta_dirty(&st);
     }
     if !wire.is_empty() {
@@ -2294,6 +2342,50 @@ mod memory_mode_tests {
         assert!(
             meta.producers.contains_key("p1"),
             "sweep must persist the pending producer state"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Cardinality-cliff fix (#1): a PLAIN append (no producer/seq, non-TTL
+    /// stream) in memory mode must NOT queue a sidecar flush. The tail is
+    /// recovered from the data-file length and `last_access` only gates TTL, so
+    /// the per-append sidecar rewrite is pure overhead whose cost stops
+    /// amortizing at high stream cardinality. Contrast
+    /// `memory_append_defers_sidecar_to_store_sweep`, which uses a producer
+    /// append and therefore still marks dirty.
+    #[tokio::test]
+    async fn memory_plain_append_skips_sidecar_flush() {
+        let _guard = crate::handlers::test_support::DurabilityGuard::memory();
+        let dir = tmp("mem-plain-noflush");
+        let store =
+            Arc::new(Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap());
+
+        let resp = handle(Arc::clone(&store), put_req("m/p", "application/octet-stream")).await;
+        assert!((200..300).contains(&resp.status), "create: {}", resp.status);
+        // Drain anything the create queued so we measure only the append's effect.
+        let store2 = Arc::clone(&store);
+        let _ = tokio::task::spawn_blocking(move || store2.sweep_meta_once())
+            .await
+            .unwrap();
+
+        // Plain append: no producer headers, non-TTL stream.
+        let resp = handle(
+            Arc::clone(&store),
+            post_req("m/p", "application/octet-stream", b"payload"),
+        )
+        .await;
+        assert!((200..300).contains(&resp.status), "append: {}", resp.status);
+
+        let flushed = tokio::task::spawn_blocking({
+            let store = Arc::clone(&store);
+            move || store.sweep_meta_once()
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            flushed, 0,
+            "a plain non-TTL memory-mode append must not queue a sidecar flush"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

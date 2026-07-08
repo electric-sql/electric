@@ -290,6 +290,48 @@ pub fn tail_cache_bytes() -> usize {
     TAIL_CACHE_BYTES.load(Ordering::Relaxed)
 }
 
+/// Dev/benchmark toggle: when set, `sweep_meta_once` drains its queue and clears
+/// `meta_dirty` but SKIPS the actual sidecar `write_meta_sync`. Used to confirm
+/// the cardinality-cliff hypothesis #1 (per-stream sidecar flush cost) in memory
+/// mode — if the 1k→50k throughput curve flattens with this on, the sidecar
+/// write dominates. NOT for production: it makes the producer-dedup/tail sidecar
+/// permanently stale.
+static META_SWEEP_DISABLE: AtomicBool = AtomicBool::new(false);
+/// Dev/benchmark toggle: when set, emit a `META_SWEEP` line per tick with the
+/// number of sidecars written and the wall time spent.
+static META_SWEEP_STATS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_meta_sweep_disable(v: bool) {
+    META_SWEEP_DISABLE.store(v, Ordering::Relaxed);
+}
+pub fn set_meta_sweep_stats(v: bool) {
+    META_SWEEP_STATS.store(v, Ordering::Relaxed);
+}
+
+/// When true (default), a plain non-TTL wal-mode append does NOT mark its stream
+/// meta-dirty, so the checkpoint skips the redundant sidecar rewrite (the durable
+/// tail is carried by the per-shard `tails` map). Set false to restore the old
+/// always-mark behavior — used ONLY to A/B the gate on one binary, since laptop
+/// wal throughput is too noisy for a trustworthy cross-image comparison.
+static WAL_META_GATE: AtomicBool = AtomicBool::new(true);
+pub fn set_wal_meta_gate(v: bool) {
+    WAL_META_GATE.store(v, Ordering::Relaxed);
+}
+pub fn wal_meta_gate() -> bool {
+    WAL_META_GATE.load(Ordering::Relaxed)
+}
+
+/// Memory-mode counterpart of [`wal_meta_gate`]: when true (default), a plain
+/// non-TTL memory-mode append does not queue a sidecar sweep. Set false to restore
+/// the old always-queue behavior — used only to A/B the #1 fix on one binary.
+static MEM_META_GATE: AtomicBool = AtomicBool::new(true);
+pub fn set_mem_meta_gate(v: bool) {
+    MEM_META_GATE.store(v, Ordering::Relaxed);
+}
+pub fn mem_meta_gate() -> bool {
+    MEM_META_GATE.load(Ordering::Relaxed)
+}
+
 impl StreamState {
     /// Record the just-appended wire chunk as the resident tail. `start` is the
     /// logical offset where `bytes` begins. Chunks larger than the tail-cache cap
@@ -1184,6 +1226,10 @@ impl Store {
     pub fn sweep_meta_once(&self) -> usize {
         let drained: Vec<Arc<StreamState>> =
             std::mem::take(&mut *self.meta_sweep.lock().unwrap());
+        let queued = drained.len();
+        let skip_write = META_SWEEP_DISABLE.load(Ordering::Relaxed);
+        let stats = META_SWEEP_STATS.load(Ordering::Relaxed);
+        let start = if stats { Some(std::time::Instant::now()) } else { None };
         let mut n = 0;
         for st in drained {
             // A hard-deleted stream's files are already unlinked — flushing
@@ -1195,9 +1241,19 @@ impl Store {
                 .get(&st.path)
                 .is_some_and(|cur| Arc::ptr_eq(cur.value(), &st));
             if live && st.meta_dirty.swap(false, Ordering::AcqRel) {
-                let _ = write_meta_sync(&st, false);
+                // `skip_write` (dev/bench) drains + clears the dirty flag but
+                // omits the sidecar write, to isolate the write's cost.
+                if !skip_write {
+                    let _ = write_meta_sync(&st, false);
+                }
                 n += 1;
             }
+        }
+        if let Some(start) = start {
+            let us = start.elapsed().as_micros();
+            eprintln!(
+                "META_SWEEP queued={queued} wrote={n} skip_write={skip_write} elapsed_us={us}"
+            );
         }
         n
     }
