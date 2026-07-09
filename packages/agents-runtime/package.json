@@ -108,7 +108,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@durable-streams/client": "^0.2.6",
+    "@durable-streams/client": "https://pkg.pr.new/@durable-streams/client@293",
     "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-mcp": "workspace:*",
     "@mariozechner/pi-agent-core": "^0.70.2",
