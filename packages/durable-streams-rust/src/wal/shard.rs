@@ -33,7 +33,7 @@ use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use tokio::sync::oneshot;
@@ -400,6 +400,27 @@ pub fn set_fsync_fanout(n: u64) {
 }
 fn fsync_fanout() -> usize {
     FSYNC_FANOUT.load(Ordering::Relaxed) as usize
+}
+
+/// Checkpoint durability strategy (cardinality-cliff #1). The default per-stream
+/// `fdatasync` loop (above) issues ONE device durability barrier per *touched*
+/// stream — `O(N_touched)` syscalls, measured at ~1.4 s of `fsync` per shard at
+/// 200k streams. Those barriers share the device's fixed `fdatasync`/s budget with
+/// the commit path, so the checkpoint storm steals throughput from acks (the cliff)
+/// AND caps wal throughput regardless of shard count (a shared-device sweep showed
+/// s1≈s24). When this is on, step 2 instead issues a SINGLE `syncfs()` on the data
+/// filesystem — one barrier that flushes every touched stream file (and everything
+/// else dirty on the fs) at once, collapsing the per-stream `O(N_touched)` cost to
+/// `O(1)` syscalls. The durability-before-recycle ordering is unchanged: the
+/// `syncfs` completes before `persist_durable_tails`/recycle. Linux-only (there is
+/// no `syncfs` on macOS); on other targets it falls back to the per-stream loop.
+/// Default off — opt in with `--wal-checkpoint-syncfs on`.
+static CHECKPOINT_SYNCFS: AtomicBool = AtomicBool::new(false);
+pub fn set_checkpoint_syncfs(on: bool) {
+    CHECKPOINT_SYNCFS.store(on, Ordering::Relaxed);
+}
+fn checkpoint_syncfs() -> bool {
+    CHECKPOINT_SYNCFS.load(Ordering::Relaxed)
 }
 
 /// Name of the per-shard durable-tail map: `<shard_dir>/tails` (task 11b). A
@@ -864,7 +885,15 @@ impl Shard {
             //    durability-before-recycle ordering is unchanged. `fanout == 1`
             //    (or a single file) keeps the plain serial loop.
             let fanout = fsync_fanout().min(n_touched.max(1));
-            if fanout <= 1 {
+            if checkpoint_syncfs() && cfg!(target_os = "linux") && n_touched > 0 {
+                // #1: ONE filesystem-wide barrier for ALL touched files, replacing
+                // the O(N_touched) per-stream fdatasync loop. `syncfs` on any fd of
+                // the data fs (we pass the first touched stream file) flushes every
+                // dirty page on it — all touched files become durable at once. Still
+                // strictly before persist_durable_tails/recycle, so the
+                // durability-before-recycle ordering is unchanged.
+                crate::store::syncfs_barrier(&touched[0].2)?;
+            } else if fanout <= 1 {
                 for (_, _, f) in &touched {
                     crate::store::barrier_fsync(f)?;
                 }

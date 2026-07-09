@@ -952,6 +952,53 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Cardinality-cliff #1: with `--wal-checkpoint-syncfs on`, the checkpoint makes
+/// touched per-stream files durable via ONE `syncfs()` barrier instead of the
+/// per-stream `fdatasync` loop. This must preserve the durability-before-recycle
+/// guarantee: after a checkpoint recycles the WAL, acked records (both those below
+/// the checkpoint floor, made durable by `syncfs`, and those appended after) must
+/// still recover byte-identically. On Linux this exercises the real `syncfs` path;
+/// on other targets the code falls back to the per-stream loop (still correct).
+#[tokio::test]
+async fn e2e_checkpoint_syncfs_recovers_acked_records() {
+    let _guard = DurabilityGuard::wal();
+    crate::wal::shard::set_checkpoint_syncfs(true);
+    const SEG: u64 = 4096;
+    let dir = tmp("syncfs-ckpt");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "s", OCTET).await;
+
+    let mut expected = Vec::new();
+    // Enough records + small segments to force at least one roll, so the checkpoint
+    // actually recycles a fully-below-floor segment (relying on the syncfs'd file).
+    for i in 0..400usize {
+        let rec = format!("syncfs-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+    // Force the checkpoint → syncfs barrier → recycle.
+    h.walset.shards()[0].checkpoint().await.unwrap();
+    // More acked appends after the checkpoint (live segment).
+    for i in 400..500usize {
+        let rec = format!("syncfs-{i:04}|").into_bytes();
+        append_acked(&h.store, "s", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "s");
+    assert_eq!(
+        got, expected,
+        "syncfs-checkpoint acked records recover byte-identical (durability-before-recycle held)"
+    );
+    h2.crash();
+    crate::wal::shard::set_checkpoint_syncfs(false);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ===========================================================================
 // (7c) WAL-QUIET stream: torn unacked tail truncated via the sidecar proof
 // ===========================================================================

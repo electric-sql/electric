@@ -287,6 +287,19 @@ fn main() {
                 }
                 wal::shard::set_fsync_fanout(n);
             }
+            // Checkpoint durability via ONE syncfs() barrier instead of the
+            // O(N_touched) per-stream fdatasync loop (cardinality-cliff #1). Linux-only.
+            "--wal-checkpoint-syncfs" => {
+                let v = val(args.next(), "--wal-checkpoint-syncfs");
+                match v.as_str() {
+                    "on" => wal::shard::set_checkpoint_syncfs(true),
+                    "off" => wal::shard::set_checkpoint_syncfs(false),
+                    _ => {
+                        eprintln!("--wal-checkpoint-syncfs must be on|off");
+                        std::process::exit(2);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);

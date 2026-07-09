@@ -161,6 +161,31 @@ pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     }
 }
 
+/// A single filesystem-wide durability barrier (Linux `syncfs`). Flushes ALL dirty
+/// data+metadata on the filesystem that `file` lives on — used by the checkpoint's
+/// `--wal-checkpoint-syncfs` path to make every touched per-stream file durable with
+/// ONE syscall instead of `O(N_touched)` `fdatasync`s (cardinality-cliff #1). `file`
+/// can be any open fd on the target fs (the checkpoint passes a touched stream file).
+/// Linux-only; the caller gates on `cfg!(target_os = "linux")`, so the non-Linux stub
+/// (which errors) is never reached in practice — it exists only so the crate compiles
+/// on macOS.
+#[cfg(target_os = "linux")]
+pub(crate) fn syncfs_barrier(file: &File) -> std::io::Result<()> {
+    // SAFETY: `fd` is a valid open descriptor for the lifetime of `file`.
+    if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn syncfs_barrier(_file: &File) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "syncfs is Linux-only",
+    ))
+}
+
 pub struct StreamState {
     pub id: u64,
     pub path: String,
