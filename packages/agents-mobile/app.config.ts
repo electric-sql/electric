@@ -20,6 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       slug: `agents-mobile`,
       owner: `electric-ax`,
       scheme: `electric-agents`,
+      description: `Mobile client for Electric Agents — connect to your agents servers and chat with running agents.`,
       version: packageJson.version,
       runtimeVersion: packageJson.version,
       orientation: `portrait`,
@@ -29,6 +30,21 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       plugins: [
         `expo-router`,
         `expo-web-browser`,
+        // Branded launch screen so cold start shows the logo on the
+        // app's dark background instead of a blank white flash.
+        [
+          `expo-splash-screen`,
+          {
+            backgroundColor: `#101217`,
+            image: `./assets/splash-icon.png`,
+            imageWidth: 200,
+            resizeMode: `contain`,
+            dark: {
+              backgroundColor: `#101217`,
+              image: `./assets/splash-icon.png`,
+            },
+          },
+        ],
         // The chat WebView (Expo DOM / streamdown) ships regex lookbehind,
         // which JavaScriptCore only parses on iOS 16.4+. Below that the whole
         // DOM bundle fails to parse and the chat renders blank.
@@ -45,8 +61,11 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         [
           `expo-image-picker`,
           {
-            photosPermission: `Allow Electric Agents to attach photos to messages.`,
-            cameraPermission: `Allow Electric Agents to take a photo to attach to a message.`,
+            photosPermission: `Electric Agents accesses your photo library so you can attach an existing photo to a chat message.`,
+            cameraPermission: `Electric Agents uses your camera so you can take a photo to attach to a chat message.`,
+            // The app never records audio; `false` drops the RECORD_AUDIO
+            // (Android) + NSMicrophoneUsageDescription (iOS) the plugin adds.
+            microphonePermission: false,
           },
         ],
       ],
@@ -59,14 +78,72 @@ export default ({ config }: ConfigContext): ExpoConfig =>
           ITSAppUsesNonExemptEncryption: false,
         },
         supportsTablet: true,
+        // Apple rejects uploads (ITMS-91053) that call "required reason"
+        // APIs without declaring them, and doesn't reliably read
+        // statically-linked pods' own manifests — so declare app-level.
+        // UserDefaults + file timestamp come from AsyncStorage / RN core;
+        // system boot time + disk space from Sentry.
+        privacyManifests: {
+          NSPrivacyTracking: false,
+          NSPrivacyTrackingDomains: [],
+          NSPrivacyCollectedDataTypes: [
+            {
+              NSPrivacyCollectedDataType: `NSPrivacyCollectedDataTypeCrashData`,
+              NSPrivacyCollectedDataTypeLinked: false,
+              NSPrivacyCollectedDataTypeTracking: false,
+              NSPrivacyCollectedDataTypePurposes: [
+                `NSPrivacyCollectedDataTypePurposeAppFunctionality`,
+              ],
+            },
+            {
+              NSPrivacyCollectedDataType: `NSPrivacyCollectedDataTypePerformanceData`,
+              NSPrivacyCollectedDataTypeLinked: false,
+              NSPrivacyCollectedDataTypeTracking: false,
+              NSPrivacyCollectedDataTypePurposes: [
+                `NSPrivacyCollectedDataTypePurposeAppFunctionality`,
+              ],
+            },
+          ],
+          NSPrivacyAccessedAPITypes: [
+            {
+              NSPrivacyAccessedAPIType: `NSPrivacyAccessedAPICategoryUserDefaults`,
+              NSPrivacyAccessedAPITypeReasons: [`CA92.1`],
+            },
+            {
+              NSPrivacyAccessedAPIType: `NSPrivacyAccessedAPICategoryFileTimestamp`,
+              NSPrivacyAccessedAPITypeReasons: [`C617.1`],
+            },
+            {
+              NSPrivacyAccessedAPIType: `NSPrivacyAccessedAPICategorySystemBootTime`,
+              NSPrivacyAccessedAPITypeReasons: [`35F9.1`],
+            },
+            {
+              NSPrivacyAccessedAPIType: `NSPrivacyAccessedAPICategoryDiskSpace`,
+              NSPrivacyAccessedAPITypeReasons: [`E174.1`],
+            },
+          ],
+        },
       },
       android: {
         ...config.android,
         package: applicationId,
         versionCode,
         edgeToEdgeEnabled: true,
+        // expo-image-picker declares these, but the app uses the system
+        // photo picker (content URIs) and never records audio, so block
+        // them to keep the AAB permission list clean. WRITE_EXTERNAL_STORAGE
+        // is deliberately left in place: image-picker's pre-Android-10
+        // (API < 29) camera path hard-requires it, so blocking it breaks
+        // "take a photo" on Android 7–9.
+        blockedPermissions: [
+          `android.permission.RECORD_AUDIO`,
+          `android.permission.READ_EXTERNAL_STORAGE`,
+        ],
         adaptiveIcon: {
           foregroundImage: `./assets/adaptive-icon.png`,
+          // Android 13+ themed (monochrome) icons — white silhouette
+          // the launcher tints to match the user's wallpaper.
+          monochromeImage: `./assets/adaptive-icon-monochrome.png`,
           backgroundColor: `#101217`,
         },
       },

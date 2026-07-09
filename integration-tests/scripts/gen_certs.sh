@@ -22,9 +22,18 @@ openssl ecparam -out "$SUPPORT_DIR/server.key" -name prime256v1 -genkey
 echo
 echo ">>> Generating server certificate"
 
+# A Subject Alternative Name is required for hostname verification: since
+# OTP 26 Erlang's :ssl no longer falls back to the certificate's CN, so a
+# server certificate without a matching SAN fails with
+# {hostname_check_failed, missing_subject_altnames}.
+cat > "$TMP_DIR/server.ext" <<'EXT'
+subjectAltName = DNS:localhost, IP:127.0.0.1
+EXT
+
 # Generate the server certificate
 openssl req -new -sha256 -subj "/C=XX/CN=localhost" -key "$SUPPORT_DIR/server.key" -out "$TMP_DIR/server.csr"
 openssl x509 -req -in "$TMP_DIR/server.csr" -CA "$SUPPORT_DIR/root.crt" -CAkey "$TMP_DIR/root.key" \
+    -extfile "$TMP_DIR/server.ext" \
     -out "$SUPPORT_DIR/server.crt" -days 365 -sha256
 
 rm -r "$TMP_DIR"

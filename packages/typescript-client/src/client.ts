@@ -27,6 +27,7 @@ import {
   MissingShapeUrlError,
   InvalidSignalError,
   MissingShapeHandleError,
+  InvalidShapeOptionsError,
   ReservedParamError,
   MissingHeadersError,
   StaleCacheError,
@@ -34,6 +35,7 @@ import {
 import {
   BackoffDefaults,
   BackoffOptions,
+  consumeResponseBody,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
@@ -57,6 +59,7 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
   SYSTEM_WAKE,
+  LIVE_REQUEST_TIMEOUT,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
@@ -85,6 +88,7 @@ import {
   ShapeStreamState,
 } from './shape-stream-state'
 import { PauseLock } from './pause-lock'
+import { getDefaultRuntimeVisibilityAdapterFactory } from './runtime-visibility'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -247,6 +251,52 @@ type ShapeStreamErrorHandler = (
 /**
  * Options for constructing a ShapeStream.
  */
+export type RuntimeVisibilityState = `visible` | `hidden`
+
+export type RuntimeVisibilityAdapter = {
+  getCurrentState?: () => RuntimeVisibilityState | undefined
+  subscribe: (callback: (state: RuntimeVisibilityState) => void) => () => void
+}
+
+type ReactNativeAppStateStatus = `active` | `background` | `inactive` | null
+
+type ReactNativeAppStateLike = {
+  currentState: ReactNativeAppStateStatus
+  addEventListener: (
+    type: `change`,
+    listener: (state: ReactNativeAppStateStatus) => void
+  ) => { remove: () => void }
+}
+
+const reactNativeAppStateToVisibility = (
+  state: ReactNativeAppStateStatus
+): RuntimeVisibilityState | undefined => {
+  if (state === null) return undefined
+  return state === `active` ? `visible` : `hidden`
+}
+
+export function createReactNativeRuntimeVisibilityAdapter(
+  AppState: ReactNativeAppStateLike
+): RuntimeVisibilityAdapter {
+  return {
+    getCurrentState: () =>
+      reactNativeAppStateToVisibility(AppState.currentState),
+    subscribe: (callback) => {
+      const subscription = AppState.addEventListener(`change`, (state) => {
+        const visibilityState = reactNativeAppStateToVisibility(state)
+        if (visibilityState) callback(visibilityState)
+      })
+      return () => subscription.remove()
+    },
+  }
+}
+
+function getDefaultRuntimeVisibilityAdapter():
+  | RuntimeVisibilityAdapter
+  | undefined {
+  return getDefaultRuntimeVisibilityAdapterFactory()?.()
+}
+
 export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is served. This can either be the Electric server
@@ -316,7 +366,29 @@ export interface ShapeStreamOptions<T = never> {
 
   signal?: AbortSignal
   fetchClient?: typeof fetch
+
+  /**
+   * Runtime lifecycle adapter for environments without `document.visibilitychange`,
+   * such as React Native. Hidden state pauses the stream and aborts in-flight
+   * requests; visible state resumes with a non-live catch-up request.
+   */
+  runtimeVisibility?: RuntimeVisibilityAdapter
   backoffOptions?: BackoffOptions
+
+  /**
+   * Maximum time in milliseconds to wait for a live long-poll request or
+   * refresh catch-up request before aborting it and reconnecting. This guards
+   * against runtimes (notably some React Native fetch implementations) where an
+   * in-flight fetch can hang indefinitely across app lifecycle or network
+   * transitions.
+   *
+   * The default (45s) is intentionally longer than Electric's server-side
+   * long-poll timeout (20s), so firing the watchdog indicates a request that
+   * failed to settle rather than a normal long-poll waiting for data.
+   *
+   * Must be a positive finite number. Set to `false` to disable the watchdog.
+   */
+  liveRequestTimeoutMs?: number | false
   parser?: Parser<T>
 
   /**
@@ -603,7 +675,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #mode: LogMode
   #onError?: ShapeStreamErrorHandler
   #requestAbortController?: AbortController
+  #restartAbortControllers = new WeakSet<AbortController>()
   #refreshCount = 0
+  #refreshCatchUpWatchdogActive = false
   #snapshotCounter = 0
 
   get #isRefreshing(): boolean {
@@ -627,6 +701,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
+  #liveRequestTimeoutMs: number | false
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
@@ -707,6 +782,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
+    // Default exceeds Electric's 20s server long-poll timeout, so this only
+    // fires when the runtime request appears wedged rather than normally held.
+    this.#liveRequestTimeoutMs = this.options.liveRequestTimeoutMs ?? 45_000
 
     const baseFetchClient =
       options.fetchClient ??
@@ -970,10 +1048,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       })
     } catch (e) {
       const abortReason = requestAbortController.signal.reason
+      const isMarkedRestartAbort = this.#restartAbortControllers.delete(
+        requestAbortController
+      )
       const isRestartAbort =
         requestAbortController.signal.aborted &&
-        (abortReason === FORCE_DISCONNECT_AND_REFRESH ||
-          abortReason === SYSTEM_WAKE)
+        (isMarkedRestartAbort ||
+          abortReason === FORCE_DISCONNECT_AND_REFRESH ||
+          abortReason === SYSTEM_WAKE ||
+          abortReason === LIVE_REQUEST_TIMEOUT)
 
       if (
         (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
@@ -1470,6 +1553,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = transition.state
 
     if (hasUpToDateMessage) {
+      this.#refreshCatchUpWatchdogActive = false
       if (transition.suppressBatch) {
         return
       }
@@ -1541,16 +1625,58 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShapeLongPoll(opts)
   }
 
+  async #withRequestTimeout<T>(
+    promise: Promise<T>,
+    requestAbortController: AbortController,
+    fetchUrl: URL
+  ): Promise<T> {
+    const timeoutMs = this.#liveRequestTimeoutMs
+    const isLiveRequest = fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`
+    const isRefreshCatchUpRequest =
+      this.#isRefreshing || this.#refreshCatchUpWatchdogActive
+
+    if (timeoutMs === false || (!isLiveRequest && !isRefreshCatchUpRequest)) {
+      return promise
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        if (!requestAbortController.signal.aborted) {
+          this.#restartAbortControllers.add(requestAbortController)
+          requestAbortController.abort(LIVE_REQUEST_TIMEOUT)
+        }
+        reject(new FetchBackoffAbortError())
+      }, timeoutMs)
+    })
+
+    try {
+      return await Promise.race([promise, timeoutPromise])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
+  }
+
   async #requestShapeLongPoll(opts: {
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    const response = await this.#fetchClient(fetchUrl.toString(), {
-      signal: requestAbortController.signal,
-      headers,
-    })
+    const fetchUrlString = fetchUrl.toString()
+    const rawResponse = await this.#withRequestTimeout(
+      this.#sseFetchClient(fetchUrlString, {
+        signal: requestAbortController.signal,
+        headers,
+      }),
+      requestAbortController,
+      fetchUrl
+    )
+    const response = await consumeResponseBody(
+      rawResponse,
+      fetchUrlString,
+      requestAbortController.signal
+    )
 
     this.#connected = true
     const shouldProcessBody = await this.#onInitialResponse(response)
@@ -1755,11 +1881,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#tickPromiseResolver = resolve
       this.#tickPromiseRejecter = reject
     })
-    this.#tickPromise.finally(() => {
-      this.#tickPromise = undefined
-      this.#tickPromiseResolver = undefined
-      this.#tickPromiseRejecter = undefined
-    })
+    this.#tickPromise
+      .finally(() => {
+        this.#tickPromise = undefined
+        this.#tickPromiseResolver = undefined
+        this.#tickPromiseRejecter = undefined
+      })
+      .catch(() => {
+        // The original tick promise is returned to callers; this chained promise
+        // is only for cleanup, so consume rejections to avoid unhandled errors.
+      })
     return this.#tickPromise
   }
 
@@ -1771,14 +1902,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   async forceDisconnectAndRefresh(): Promise<void> {
     this.#refreshCount++
+    this.#refreshCatchUpWatchdogActive = true
     try {
+      const requestAbortController = this.#requestAbortController
       if (
         this.#syncState.isUpToDate &&
-        !this.#requestAbortController?.signal.aborted
+        requestAbortController &&
+        !requestAbortController.signal.aborted
       ) {
         // If we are "up to date", any current request will be a "live" request
-        // and needs to be aborted
-        this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
+        // and needs to be aborted. Track restart intent ourselves instead of
+        // relying only on AbortSignal.reason, which is missing in some React
+        // Native runtimes.
+        this.#restartAbortControllers.add(requestAbortController)
+        requestAbortController.abort(FORCE_DISCONNECT_AND_REFRESH)
       }
       await this.#nextTick()
     } finally {
@@ -1838,16 +1975,40 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
   }
 
+  #setVisibilityPaused(isHidden: boolean) {
+    if (isHidden) {
+      this.#pauseLock.acquire(`visibility`)
+    } else if (this.#pauseLock.isHeldBy(`visibility`)) {
+      this.#pauseLock.release(`visibility`)
+    }
+  }
+
   #subscribeToVisibilityChanges() {
+    const runtimeVisibility =
+      this.options.runtimeVisibility ?? getDefaultRuntimeVisibilityAdapter()
+
+    if (runtimeVisibility) {
+      this.#setVisibilityPaused(
+        runtimeVisibility.getCurrentState?.() === `hidden`
+      )
+
+      const unsubscribe = runtimeVisibility.subscribe((state) => {
+        this.#setVisibilityPaused(state === `hidden`)
+      })
+
+      this.#unsubscribeFromVisibilityChanges = () => {
+        unsubscribe()
+        this.#unsubscribeFromVisibilityChanges = undefined
+      }
+      return
+    }
+
     if (this.#hasBrowserVisibilityAPI()) {
       const visibilityHandler = () => {
-        if (document.hidden) {
-          this.#pauseLock.acquire(`visibility`)
-        } else {
-          this.#pauseLock.release(`visibility`)
-        }
+        this.#setVisibilityPaused(document.hidden)
       }
 
+      visibilityHandler()
       document.addEventListener(`visibilitychange`, visibilityHandler)
 
       // Store cleanup function to remove the event listener
@@ -1870,6 +2031,34 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * detection, in-flight HTTP requests (long-poll or SSE) may hang until
    * the OS TCP timeout.
    */
+  #forceDisconnectAndRefreshFromWake() {
+    const requestAbortController = this.#requestAbortController
+    if (
+      this.#pauseLock.isPaused ||
+      !requestAbortController ||
+      requestAbortController.signal.aborted ||
+      this.options.signal?.aborted
+    ) {
+      return
+    }
+
+    this.#refreshCount++
+    this.#refreshCatchUpWatchdogActive = true
+    // Track restart intent ourselves instead of relying only on
+    // AbortSignal.reason, which is missing in some React Native runtimes.
+    this.#restartAbortControllers.add(requestAbortController)
+    requestAbortController.abort(SYSTEM_WAKE)
+
+    this.#nextTick()
+      .catch(() => {
+        // Teardown or user abort can reject the tick promise. Wake recovery runs
+        // from a timer callback, so avoid surfacing that as an unhandled rejection.
+      })
+      .finally(() => {
+        this.#refreshCount--
+      })
+  }
+
   #subscribeToWakeDetection() {
     if (this.#hasBrowserVisibilityAPI()) return
     if (this.#unsubscribeFromWakeDetection) return
@@ -1885,18 +2074,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       lastTickTime = now
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
-        if (!this.#pauseLock.isPaused && this.#requestAbortController) {
-          this.#refreshCount++
-          this.#requestAbortController.abort(SYSTEM_WAKE)
-          // Wake handler is synchronous (setInterval callback) so we can't
-          // use try/finally + await like forceDisconnectAndRefresh. Instead,
-          // decrement via queueMicrotask — safe because the abort triggers
-          // #requestShape to re-run, which reads #isRefreshing synchronously
-          // before the microtask fires.
-          queueMicrotask(() => {
-            this.#refreshCount--
-          })
-        }
+        this.#forceDisconnectAndRefreshFromWake()
       }
     }, INTERVAL_MS)
 
@@ -2291,6 +2469,17 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new InvalidSignalError()
+  }
+
+  if (
+    options.liveRequestTimeoutMs !== undefined &&
+    options.liveRequestTimeoutMs !== false &&
+    (!Number.isFinite(options.liveRequestTimeoutMs) ||
+      options.liveRequestTimeoutMs <= 0)
+  ) {
+    throw new InvalidShapeOptionsError(
+      `Invalid shape options: liveRequestTimeoutMs must be a positive finite number or false`
+    )
   }
 
   if (

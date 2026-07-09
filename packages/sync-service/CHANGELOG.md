@@ -1,5 +1,59 @@
 # @core/sync-service
 
+## 1.7.7
+
+### Patch Changes
+
+- c259e7b: Tail-drop the OpenTelemetry spans of empty/up-to-date shape-GET responses at export time to cut trace volume. Disabled by default; set `ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true` to enable the drop. Error (5xx) and SSE responses are never dropped.
+
+## 1.7.6
+
+### Patch Changes
+
+- c2ae8bd: Fix shapes processing duplicate operations after a server restart.
+- b8be884: Reduce memory retained by live shape requests while they wait for changes.
+
+  Remove a dead SystemMonitor timer branch that fails warnings-as-errors on Elixir 1.20.
+
+- 841b51a: Upgrade Erlang to 29.0.2, Elixir to 1.20.2 and fix new compilation warnings (unused requires, bitstring pin operators, built-in type conflict, dead code).
+
+## 1.7.5
+
+### Patch Changes
+
+- 86bb70f: Fix a race condition in the PublicationManager relation tracker restart test that caused intermittent failures.
+- f245417: Test-only: make the StackSupervisor telemetry test synchronous to avoid serve_shape counter contamination from concurrently running tests. No runtime changes.
+
+## 1.7.4
+
+### Patch Changes
+
+- e6c3767: Emit `shape_snapshot.execute_for_shape` and `shape_snapshot.query_fn` spans for `move_in_query` operations. Previously these spans were silently dropped because the spawned move-in task had no parent span context, and `with_child_span` skips emission when no parent exists. A `shape_snapshot.move_in_task` root span is now opened inside the task (mirroring `shape_snapshot.create_snapshot_task` for initial snapshots) so the existing child spans are emitted with `shape.query_reason="move_in_query"`.
+- 44eafb6: Fix subquery shapes diverging from Postgres after a server restart. Shapes
+  whose where clause contains a subquery (e.g. `id IN (SELECT ... WHERE active)`)
+  could return stale results or a `409 must-refetch` once the stack restarted and
+  restored from disk. Two causes are addressed: the dependency materializer now
+  replays the full persisted history (snapshot + main log) on startup instead of
+  just the first chunk, and dependent (outer) subquery consumers are eagerly
+  restarted during restore so their materializer subscription is re-established
+  before live events flow.
+- 121dbe6: Reduce the memory footprint of the subquery filter index. The per-value ETS
+  rows that back subquery routing and exact membership repeated several boxed
+  terms in their keys — the shape handle, `make_ref/0` condition references, the
+  canonical `["$sublink", "<dep>"]` subquery ref, and the `{condition_id, field}`
+  node id. Each of those is now a compact integer id, leaving only the actual
+  typed value boxed. This cuts the cost per seeded subquery membership value by
+  ~51% (e.g. ~568 MiB → ~275 MiB for 1,000,000 seeded values) with no change to
+  routing behaviour.
+- cf476c1: Reset replication metadata caches when shapes are purged on a new or temporary
+  replication slot. Previously, when Electric purged all shapes after the
+  replication slot was (re)created — e.g. a temporary slot recreated on restart
+  with `CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true` — the persisted relation
+  tracking (`tracked_relations`) and the inspector cache (`ets_inspector_state`)
+  survived and were read back on startup, even though WAL continuity had been
+  lost. These caches are now reset as part of the same purge, so no stale
+  pre-restart metadata is reused.
+
 ## 1.7.3
 
 ### Patch Changes

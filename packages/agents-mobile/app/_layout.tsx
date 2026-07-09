@@ -1,12 +1,13 @@
 import { Redirect, Stack, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import {
   SafeAreaProvider,
   initialWindowMetrics,
 } from 'react-native-safe-area-context'
 import { AgentsProvider } from '../src/lib/AgentsProvider'
+import { PrimaryButton } from '../src/components/PrimaryButton'
 import {
   ThemeProvider,
   useColorSchemeMode,
@@ -18,6 +19,7 @@ import {
 } from '../src/lib/MobileAppState'
 import { CloudAuthProvider } from '../src/lib/CloudAuthContext'
 import { isCallbackUrl } from '../src/lib/cloudAuth'
+import { fontSize, lineHeight, spacing } from '../src/lib/theme'
 import { Sentry, initSentry } from '../src/lib/sentry'
 
 // Initialize early so startup crashes are captured (no-op in dev).
@@ -28,14 +30,45 @@ function RootLayout(): React.ReactElement {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
-          <MobileAppStateProvider>
-            <CloudAuthProvider>
-              <RootNavigator />
-            </CloudAuthProvider>
-          </MobileAppStateProvider>
+          {/* Inside ThemeProvider so the themed fallback turns an uncaught
+              render error into a recoverable screen, not a blank crash. */}
+          <Sentry.ErrorBoundary
+            fallback={({ resetError }) => (
+              <RootErrorFallback onRetry={resetError} />
+            )}
+          >
+            <MobileAppStateProvider>
+              <CloudAuthProvider>
+                <RootNavigator />
+              </CloudAuthProvider>
+            </MobileAppStateProvider>
+          </Sentry.ErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  )
+}
+
+function RootErrorFallback({
+  onRetry,
+}: {
+  onRetry: () => void
+}): React.ReactElement {
+  const tokens = useTokens()
+  return (
+    <View style={[styles.fallback, { backgroundColor: tokens.bg }]}>
+      <StatusBar style="light" />
+      <Text style={[styles.fallbackTitle, { color: tokens.text1 }]}>
+        Something went wrong
+      </Text>
+      <Text style={[styles.fallbackBody, { color: tokens.text2 }]}>
+        The app hit an unexpected error. You can try again — if it keeps
+        happening, reopen the app.
+      </Text>
+      <View style={styles.fallbackAction}>
+        <PrimaryButton title="Try again" onPress={onRetry} />
+      </View>
+    </View>
   )
 }
 
@@ -114,5 +147,27 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: `center`,
     justifyContent: `center`,
+  },
+  fallback: {
+    flex: 1,
+    alignItems: `center`,
+    justifyContent: `center`,
+    paddingHorizontal: spacing.xl,
+    gap: spacing.md,
+  },
+  fallbackTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: `600`,
+    lineHeight: lineHeight.xl,
+    textAlign: `center`,
+  },
+  fallbackBody: {
+    fontSize: fontSize.sm,
+    lineHeight: lineHeight.sm,
+    textAlign: `center`,
+  },
+  fallbackAction: {
+    alignSelf: `stretch`,
+    marginTop: spacing.sm,
   },
 })

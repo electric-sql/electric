@@ -36,6 +36,14 @@ defmodule Electric.Telemetry.OpenTelemetry.Config do
         Electric.Telemetry.OpenTelemetry.ResourceDetector
       ],
       resource: otel_resource,
-      processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+      processors:
+        [
+          # Must run before the exporting processors so that a span it drops is never
+          # queued for export.
+          {Electric.Telemetry.OpenTelemetry.EmptyResponseDropProcessor, %{}},
+          otel_batch_processor,
+          otel_simple_processor
+        ]
+        |> Enum.reject(&is_nil/1)
   end
 end

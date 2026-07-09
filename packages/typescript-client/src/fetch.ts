@@ -77,6 +77,29 @@ export function parseRetryAfterHeader(retryAfter: string | undefined): number {
   return 0
 }
 
+async function abortableSleep(
+  waitMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  if (waitMs <= 0) return
+  if (signal?.aborted) throw new FetchBackoffAbortError()
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const done = (err?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener(`abort`, onAbort)
+      err ? reject(err) : resolve()
+    }
+    const onAbort = () => done(new FetchBackoffAbortError())
+    const timer = setTimeout(() => done(), waitMs)
+    signal?.addEventListener(`abort`, onAbort, { once: true })
+    if (signal?.aborted) onAbort()
+  })
+}
+
 export function createFetchWithBackoff(
   fetchClient: typeof fetch,
   backoffOptions: BackoffOptions = BackoffDefaults
@@ -155,8 +178,9 @@ export function createFetchWithBackoff(
             )
           }
 
-          // Wait for the calculated duration
-          await new Promise((resolve) => setTimeout(resolve, waitMs))
+          // Wait for the calculated duration, but let stream-level aborts
+          // interrupt the backoff immediately (e.g. system wake reconnects).
+          await abortableSleep(waitMs, options?.signal ?? undefined)
 
           // Increase the delay for the next attempt (capped at maxDelay)
           delay = Math.min(delay * multiplier, maxDelay)
@@ -168,36 +192,48 @@ export function createFetchWithBackoff(
 
 const NO_BODY_STATUS_CODES = [201, 204, 205]
 
+export async function consumeResponseBody(
+  res: Response,
+  url: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  try {
+    if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
+      return res
+    }
+
+    const text = await res.text()
+    return new Response(text, res)
+  } catch (err) {
+    if (signal?.aborted) {
+      throw new FetchBackoffAbortError()
+    }
+
+    throw new FetchError(
+      res.status,
+      undefined,
+      undefined,
+      Object.fromEntries([...res.headers.entries()]),
+      url,
+      err instanceof Error
+        ? err.message
+        : typeof err === `string`
+          ? err
+          : `failed to read body`
+    )
+  }
+}
+
 // Ensure body can actually be read in its entirety
 export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const res = await fetchClient(...args)
-    try {
-      if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
-        return res
-      }
-
-      const text = await res.text()
-      return new Response(text, res)
-    } catch (err) {
-      if (args[1]?.signal?.aborted) {
-        throw new FetchBackoffAbortError()
-      }
-
-      throw new FetchError(
-        res.status,
-        undefined,
-        undefined,
-        Object.fromEntries([...res.headers.entries()]),
-        url.toString(),
-        err instanceof Error
-          ? err.message
-          : typeof err === `string`
-            ? err
-            : `failed to read body`
-      )
-    }
+    return consumeResponseBody(
+      res,
+      url.toString(),
+      args[1]?.signal ?? undefined
+    )
   }
 }
 

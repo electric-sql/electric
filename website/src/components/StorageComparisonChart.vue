@@ -16,6 +16,10 @@ export default {
       type: String,
       required: true,
     },
+    subtitle: {
+      type: String,
+      default: '',
+    },
     data: {
       type: Array,
       required: true,
@@ -37,6 +41,31 @@ export default {
       type: String,
       default: '',
     },
+    yScaleType: {
+      type: String,
+      default: 'linear',
+      validator: (v) => ['linear', 'logarithmic'].includes(v),
+    },
+    // Optional secondary (right-hand) Y axis. Datasets opt in with yAxisID: 'y2'.
+    y2AxisTitle: {
+      type: String,
+      default: '',
+    },
+    y2AxisSuffix: {
+      type: String,
+      default: '',
+    },
+    y2ScaleType: {
+      type: String,
+      default: 'linear',
+      validator: (v) => ['linear', 'logarithmic'].includes(v),
+    },
+    // Fill legend/tooltip swatches with the line colour (solid) instead of
+    // leaving them hollow/transparent.
+    solidMarkers: {
+      type: Boolean,
+      default: false,
+    },
     // Desired number of columns to render side-by-side responsively
     columns: {
       type: Number,
@@ -45,7 +74,7 @@ export default {
     // Fixed height for the chart container. Number -> px, or any CSS size string.
     height: {
       type: [Number, String],
-      default: 320,
+      default: 400,
     },
   },
   setup(props) {
@@ -104,7 +133,13 @@ export default {
         data: dataset.data,
         borderColor:
           dataset.color || defaultColors[index % defaultColors.length],
-        backgroundColor: 'transparent',
+        // Translucent fill colour for range bands; with solidMarkers the
+        // legend/tooltip swatch fills with the line colour; transparent otherwise.
+        backgroundColor:
+          dataset.fillColor ||
+          (props.solidMarkers
+            ? dataset.color || defaultColors[index % defaultColors.length]
+            : 'transparent'),
         borderWidth: 2,
         // Force CubDB lines to be solid regardless of dashed flag
         borderDash:
@@ -114,9 +149,14 @@ export default {
               ? [5, 5]
               : undefined,
         pointStyle: false,
-        fill: false,
+        // `fill` can target another dataset (e.g. '+1') to shade a band.
+        fill: dataset.fill ?? false,
+        // Datasets may render against the secondary axis via yAxisID: 'y2'.
+        yAxisID: dataset.yAxisID || 'y',
         order: index + 1,
       }))
+
+      const hasY2 = props.data.some((d) => d.yAxisID === 'y2')
 
       const chartData = {
         labels: props.labels,
@@ -145,7 +185,11 @@ export default {
                   return `${props.xAxisTitle}: ${context[0].label}`
                 },
                 label: (context) => {
-                  return `${context.dataset.label}: ${context.raw}${props.yAxisSuffix}`
+                  const suffix =
+                    context.dataset.yAxisID === 'y2'
+                      ? props.y2AxisSuffix
+                      : props.yAxisSuffix
+                  return `${context.dataset.label}: ${context.raw}${suffix}`
                 },
               },
             },
@@ -173,9 +217,9 @@ export default {
               },
             },
             y: {
-              type: 'linear',
+              type: props.yScaleType,
               position: 'left',
-              min: 0,
+              min: props.yScaleType === 'logarithmic' ? undefined : 0,
               title: {
                 display: true,
                 text: props.yAxisTitle,
@@ -187,6 +231,27 @@ export default {
                 color: getComputedStyleValue('--vp-c-divider'),
               },
             },
+            ...(hasY2
+              ? {
+                  y2: {
+                    type: props.y2ScaleType,
+                    position: 'right',
+                    min: props.y2ScaleType === 'logarithmic' ? undefined : 0,
+                    title: {
+                      display: true,
+                      text: props.y2AxisTitle,
+                    },
+                    ticks: {
+                      callback: (value) => `${value}${props.y2AxisSuffix}`,
+                    },
+                    // Keep the right axis gridlines off the chart area to
+                    // avoid doubling the left axis grid.
+                    grid: {
+                      drawOnChartArea: false,
+                    },
+                  },
+                }
+              : {}),
           },
         },
       })
@@ -225,7 +290,10 @@ export default {
 <template>
   <div class="StorageComparisonGraph" ref="wrapperEl" :style="wrapperStyle">
     <h3>{{ title }}</h3>
-    <canvas ref="chartCanvas"></canvas>
+    <p v-if="subtitle" class="chart-subtitle">{{ subtitle }}</p>
+    <div class="chart-canvas">
+      <canvas ref="chartCanvas"></canvas>
+    </div>
   </div>
 </template>
 
@@ -233,8 +301,16 @@ export default {
 .StorageComparisonGraph {
   width: 100%;
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
+  margin-bottom: 2.5rem;
+}
+
+.StorageComparisonGraph .chart-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @media (max-width: 860px) {
@@ -245,9 +321,16 @@ export default {
 
 .StorageComparisonGraph h3 {
   text-align: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
   color: var(--vp-c-text-1);
   font-size: 1.05rem;
   font-weight: 600;
+}
+
+.StorageComparisonGraph .chart-subtitle {
+  text-align: center;
+  margin: 0 0 0.5rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.85rem;
 }
 </style>

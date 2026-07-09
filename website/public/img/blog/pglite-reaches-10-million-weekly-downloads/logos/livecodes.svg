@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="LiveCodes icon">
+  <defs>
+    <linearGradient id="lci-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1825"/>
+      <stop offset="100%" stop-color="#080d16"/>
+    </linearGradient>
+    <pattern id="lci-dots" x="0" y="0" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r=".75" fill="rgba(255,255,255,.04)"/>
+    </pattern>
+    <filter id="lci-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feFlood flood-color="#00c8ff" flood-opacity=".32" result="c"/>
+      <feComposite in="c" in2="b" operator="in" result="cb"/>
+      <feMerge><feMergeNode in="cb"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="lci-dot-glow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feFlood flood-color="#ff4d4d" flood-opacity=".7" result="c"/>
+      <feComposite in="c" in2="b" operator="in" result="cb"/>
+      <feMerge><feMergeNode in="cb"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="80" fill="url(#lci-bg)"/>
+  <rect width="512" height="512" rx="80" fill="url(#lci-dots)"/>
+  <g filter="url(#lci-glow)" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="146,176 86,256 146,336" stroke="#00c8ff" stroke-width="44"/>
+    <line x1="310" y1="160" x2="202" y2="352" stroke="#00e5c8" stroke-width="44"/>
+    <polyline points="366,176 426,256 366,336" stroke="#00c8ff" stroke-width="44"/>
+  </g>
+  <circle cx="395" cy="100" r="26" fill="#ff4d4d" filter="url(#lci-dot-glow)"/>
+</svg>

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Linking from 'expo-linking'
-import { Redirect, useLocalSearchParams } from 'expo-router'
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import {
   cloudAuth,
   isCallbackUrl,
   type CloudAuthState,
 } from '../../src/lib/cloudAuth'
+import { PrimaryButton } from '../../src/components/PrimaryButton'
 import { useMobileAppState } from '../../src/lib/MobileAppState'
 import { useTokens } from '../../src/lib/ThemeProvider'
 import { fontSize, lineHeight, spacing } from '../../src/lib/theme'
@@ -50,6 +51,7 @@ type RouteStatus =
 
 export default function OAuthCallbackRoute(): React.ReactElement {
   const params = useLocalSearchParams()
+  const router = useRouter()
   const tokens = useTokens()
   const styles = useMemo(() => createStyles(tokens), [tokens])
   const { serverUrl, onboardingDismissed } = useMobileAppState()
@@ -62,6 +64,17 @@ export default function OAuthCallbackRoute(): React.ReactElement {
   const [status, setStatus] = useState<RouteStatus>(() =>
     deriveStatus(cloudAuth.getState())
   )
+
+  // Escape hatch: a cold start onto `/oauth/callback` with no pending
+  // request (or a redirect that never arrives) would otherwise spin on
+  // "Finishing sign-in…" forever. After a grace period, surface a way
+  // back to the sign-in screen.
+  const [tookTooLong, setTookTooLong] = useState(false)
+  useEffect(() => {
+    if (status.kind !== `working`) return
+    const timer = setTimeout(() => setTookTooLong(true), 10_000)
+    return () => clearTimeout(timer)
+  }, [status.kind])
 
   useEffect(() => {
     // Sync once on mount in case the state changed between the
@@ -137,6 +150,18 @@ export default function OAuthCallbackRoute(): React.ReactElement {
     <View style={styles.root}>
       <ActivityIndicator color={tokens.accent11} />
       <Text style={styles.text}>Finishing sign-in…</Text>
+      {tookTooLong ? (
+        <View style={styles.escape}>
+          <Text style={styles.subtext}>
+            This is taking longer than expected.
+          </Text>
+          <PrimaryButton
+            title="Back to sign-in"
+            variant="soft"
+            onPress={() => router.replace(`/onboarding`)}
+          />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -189,6 +214,18 @@ function createStyles(tokens: Tokens) {
       color: tokens.text2,
       fontSize: fontSize.base,
       lineHeight: lineHeight.base,
+      textAlign: `center`,
+    },
+    escape: {
+      alignSelf: `stretch`,
+      alignItems: `center`,
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+    },
+    subtext: {
+      color: tokens.text3,
+      fontSize: fontSize.sm,
+      lineHeight: lineHeight.sm,
       textAlign: `center`,
     },
   })

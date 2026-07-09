@@ -5,10 +5,12 @@ export default defineConfig((options) => {
   const commonOptions: Partial<Options> = {
     entry: {
       index: `src/index.ts`,
+      'index.react-native': `src/react-native.ts`,
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,
     noExternal: [`@microsoft/fetch-event-source`],
+    external: [`react-native`],
     ...options,
   }
 

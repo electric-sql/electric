@@ -152,7 +152,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 200
+      refute_receive {:alter_publication, _, _}, 200
     end
 
     test "accepts multiple relations", ctx do
@@ -188,7 +188,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 200
+      refute_receive {:alter_publication, _, _}, 200
     end
 
     test "keeps the table in the publication when shapes with different where clauses are added and removed",
@@ -422,7 +422,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 300
+      refute_receive {:alter_publication, _, _}, 300
     end
 
     @tag update_debounce_timeout: 50
@@ -650,7 +650,29 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       # Stop the RelationTracker - supervisor will restart it
       relation_tracker_name = PublicationManager.RelationTracker.name(ctx.stack_id)
+      old_pid = GenServer.whereis(relation_tracker_name)
+      ref = Process.monitor(old_pid)
       GenServer.stop(relation_tracker_name)
+      assert_receive {:DOWN, ^ref, :process, ^old_pid, _}, 1_000
+
+      # Wait for the supervisor to restart and re-register the RelationTracker
+      # before issuing calls to it. Otherwise the via-Registry lookup made by
+      # remove_shape/2 below can race with re-registration and fail with
+      # :no_process.
+      new_pid = wait_for_restart(relation_tracker_name, old_pid)
+      assert new_pid != old_pid
+
+      # Wait for the supervisor to restart and re-register the RelationTracker,
+      # then for it to finish restoring filters from ShapeStatus.
+      #
+      # The assert_pub_tables below is NOT a sufficient barrier on its own: the
+      # relation is already in the publication and is not removed during the
+      # restart, so the assertion passes immediately - potentially before the
+      # restarted process has re-registered. Calling remove_shape in that window
+      # races with a "no process" exit, which is the flakiness this guards
+      # against.
+      assert wait_until(fn -> is_pid(GenServer.whereis(relation_tracker_name)) end, 2_000)
+      :ok = PublicationManager.wait_for_restore(ctx.stack_id, timeout: 2_000)
 
       # After restart, the publication manager should repopulate from ShapeStatus.
       # The publication should still have the relation.
@@ -700,6 +722,28 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   defp fetch_pub_tables(ctx), do: fetch_publication_tables(ctx.pool, ctx.publication_name)
+
+  # Polls the process registry until `name` resolves to a live pid other than
+  # `old_pid`, i.e. until the supervisor has restarted and re-registered it.
+  defp wait_for_restart(
+         name,
+         old_pid,
+         timeout \\ 2_000,
+         start_time \\ :erlang.monotonic_time(:millisecond)
+       ) do
+    case GenServer.whereis(name) do
+      pid when is_pid(pid) and pid != old_pid ->
+        pid
+
+      _ ->
+        if :erlang.monotonic_time(:millisecond) - start_time < timeout do
+          Process.sleep(10)
+          wait_for_restart(name, old_pid, timeout, start_time)
+        else
+          flunk("#{inspect(name)} was not restarted within #{timeout}ms")
+        end
+    end
+  end
 
   defp notify_alter_queries(notify_pid \\ self()) do
     Repatch.patch(Postgrex, :query, [mode: :shared], fn conn, sql, params ->

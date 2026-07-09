@@ -1,0 +1,83 @@
+<svg width="680" height="536" viewBox="0 0 680 536" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title>Durable Streams server — WAL mode architecture with server process and OS boundaries</title>
+  <desc>A server process boundary contains the HTTP engine, a Writer, a Reader, and a sharded WAL. The Writer stages appends to the WAL and writes bytes into the operating system layer, and publishes the new tail on a watch channel that wakes the Reader's live subscribers. The operating system boundary contains the page cache over the per-stream log files; writes land in the page cache, fsync persists them to the files, and reads are served from the page cache. Log files seal segments to cold storage, which serves cold reads.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- Boundaries -->
+  <rect x="44" y="14" width="520" height="238" fill="none" stroke="#75fbfd" stroke-width="1.5"/>
+  <text x="60" y="32" text-anchor="start" font-size="13" font-weight="500" fill="#ffffff">durable streams server</text>
+
+  <rect x="44" y="274" width="520" height="156" fill="none" stroke="#75fbfd" stroke-width="1.5"/>
+  <text x="60" y="294" text-anchor="start" font-size="13" font-weight="500" fill="#ffffff">operating system</text>
+
+  <!-- Connectors -->
+  <line x1="155" y1="88" x2="155" y2="106" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="453" y1="88" x2="453" y2="106" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <line x1="155" y1="158" x2="155" y2="180" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="170" y="172" text-anchor="start" font-size="12" fill="#ffffff">stage + ack</text>
+
+  <line x1="250" y1="123" x2="356" y2="123" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="304" y="114" text-anchor="middle" font-size="12" fill="#ffffff">watch · wake</text>
+
+  <path d="M250 148 L271 148 L271 322 L338 322" fill="none" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="281" y="300" text-anchor="start" font-size="12" fill="#ffffff">write_all</text>
+
+  <line x1="453" y1="158" x2="453" y2="304" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="460" y="264" text-anchor="start" font-size="12" fill="#ffffff">read · sendfile</text>
+
+  <line x1="444" y1="350" x2="444" y2="360" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="454" y="358" text-anchor="start" font-size="12" fill="#ffffff">fsync</text>
+
+  <line x1="304" y1="406" x2="304" y2="454" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="316" y="446" text-anchor="start" font-size="12" fill="#ffffff">seal + upload</text>
+
+  <path d="M564 480 L590 480 L590 127 L550 127" fill="none" stroke="#ffffff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="596" y="300" text-anchor="start" font-size="12" fill="#ffffff">cold read</text>
+
+  <!-- Nodes -->
+  <g>
+    <rect x="60" y="44" width="488" height="44" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="304" y="66" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">HTTP engine</text>
+  </g>
+
+  <g>
+    <rect x="60" y="108" width="190" height="50" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="155" y="128" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">Writer</text>
+    <text x="155" y="144" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">append path</text>
+  </g>
+
+  <g>
+    <rect x="358" y="108" width="190" height="50" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="453" y="128" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">Reader</text>
+    <text x="453" y="144" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">catch-up · live (SSE)</text>
+  </g>
+
+  <g>
+    <rect x="60" y="184" width="190" height="50" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="155" y="204" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">WAL · sharded</text>
+    <text x="155" y="220" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">on-disk file</text>
+  </g>
+
+  <g>
+    <rect x="340" y="306" width="208" height="42" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="444" y="322" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">page cache</text>
+    <text x="444" y="337" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">in RAM</text>
+  </g>
+
+  <g>
+    <rect x="60" y="362" width="488" height="42" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="304" y="378" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">log files (hot storage)</text>
+    <text x="304" y="393" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">per-stream files, on disk</text>
+  </g>
+
+  <g>
+    <rect x="44" y="456" width="520" height="50" fill="none" stroke="#75fbfd" stroke-width="2"/>
+    <text x="304" y="476" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#ffffff">cold storage</text>
+    <text x="304" y="492" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#aab2c0">sealed segments</text>
+  </g>
+</svg>

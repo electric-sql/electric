@@ -1,0 +1,1020 @@
+{
+  "host": "darwin",
+  "samples": 12,
+  "results": [
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "tail",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "wal offload=tail tailcache=default",
+      "url": "http://127.0.0.1:4620/latency-bench-0",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 2.937,
+            "p50": 2.808,
+            "min": 1.713,
+            "max": 3.749
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.218,
+            "p50": 3.158,
+            "min": 1.963,
+            "max": 3.992
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 3.472,
+            "p50": 3.013,
+            "min": 1.828,
+            "max": 6.157
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.724,
+            "p50": 3.28,
+            "min": 2.037,
+            "max": 6.463
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 4.997,
+            "p50": 5.441,
+            "min": 2.597,
+            "max": 6.831
+          },
+          "read": {
+            "n": 12,
+            "mean": 5.315,
+            "p50": 5.745,
+            "min": 2.844,
+            "max": 7.124
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 4.067,
+            "p50": 4.373,
+            "min": 1.87,
+            "max": 5.86
+          },
+          "read": {
+            "n": 12,
+            "mean": 4.409,
+            "p50": 4.743,
+            "min": 2.157,
+            "max": 6.238
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "tail",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "wal offload=tail tailcache=0",
+      "url": "http://127.0.0.1:4621/latency-bench-1",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 3.176,
+            "p50": 3.657,
+            "min": 1.476,
+            "max": 4.443
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.5,
+            "p50": 3.954,
+            "min": 1.666,
+            "max": 4.923
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 3.191,
+            "p50": 3.505,
+            "min": 1.532,
+            "max": 3.887
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.474,
+            "p50": 3.744,
+            "min": 1.804,
+            "max": 4.241
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 3.243,
+            "p50": 3.732,
+            "min": 2.23,
+            "max": 4.116
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.537,
+            "p50": 3.988,
+            "min": 2.528,
+            "max": 4.503
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 3.309,
+            "p50": 3.674,
+            "min": 2.092,
+            "max": 4.046
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.622,
+            "p50": 3.991,
+            "min": 2.358,
+            "max": 4.311
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "inline",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "wal offload=inline tailcache=default",
+      "url": "http://127.0.0.1:4622/latency-bench-2",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 2.42,
+            "p50": 2.066,
+            "min": 1.436,
+            "max": 3.704
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.64,
+            "p50": 2.291,
+            "min": 1.667,
+            "max": 4.003
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 2.64,
+            "p50": 2.807,
+            "min": 1.451,
+            "max": 3.73
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.906,
+            "p50": 3.064,
+            "min": 1.653,
+            "max": 4.166
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 3.639,
+            "p50": 3.752,
+            "min": 2.734,
+            "max": 3.879
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.874,
+            "p50": 3.957,
+            "min": 2.903,
+            "max": 4.288
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 2.702,
+            "p50": 2.712,
+            "min": 1.585,
+            "max": 3.773
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.987,
+            "p50": 3.108,
+            "min": 1.815,
+            "max": 4.079
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "inline",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "wal offload=inline tailcache=0",
+      "url": "http://127.0.0.1:4623/latency-bench-3",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 2.811,
+            "p50": 2.829,
+            "min": 1.455,
+            "max": 3.654
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.041,
+            "p50": 3.118,
+            "min": 1.634,
+            "max": 3.815
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 2.494,
+            "p50": 2.834,
+            "min": 1.358,
+            "max": 3.624
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.713,
+            "p50": 3.058,
+            "min": 1.532,
+            "max": 3.871
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 2.554,
+            "p50": 2.753,
+            "min": 1.818,
+            "max": 2.888
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.75,
+            "p50": 2.968,
+            "min": 2.02,
+            "max": 3.088
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 3.015,
+            "p50": 3.192,
+            "min": 1.567,
+            "max": 3.794
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.275,
+            "p50": 3.399,
+            "min": 1.826,
+            "max": 4.136
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "always",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "wal offload=always tailcache=default",
+      "url": "http://127.0.0.1:4624/latency-bench-4",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 2.699,
+            "p50": 2.417,
+            "min": 1.22,
+            "max": 4.534
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.281,
+            "p50": 3.319,
+            "min": 1.419,
+            "max": 5.014
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 1.988,
+            "p50": 1.83,
+            "min": 1.111,
+            "max": 3.113
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.097,
+            "p50": 1.925,
+            "min": 1.223,
+            "max": 3.262
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 3.226,
+            "p50": 2.92,
+            "min": 2.785,
+            "max": 3.793
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.412,
+            "p50": 3.233,
+            "min": 2.933,
+            "max": 3.95
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 2.971,
+            "p50": 3.32,
+            "min": 1.487,
+            "max": 3.823
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.252,
+            "p50": 3.553,
+            "min": 1.69,
+            "max": 4.187
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "always",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "wal offload=always tailcache=0",
+      "url": "http://127.0.0.1:4625/latency-bench-5",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 2.574,
+            "p50": 2.863,
+            "min": 1.448,
+            "max": 3.75
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.73,
+            "p50": 3.022,
+            "min": 1.634,
+            "max": 3.897
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 2.817,
+            "p50": 3.031,
+            "min": 1.454,
+            "max": 3.946
+          },
+          "read": {
+            "n": 12,
+            "mean": 2.953,
+            "p50": 3.167,
+            "min": 1.634,
+            "max": 4.037
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 3.027,
+            "p50": 2.892,
+            "min": 2.47,
+            "max": 3.896
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.164,
+            "p50": 3.066,
+            "min": 2.588,
+            "max": 4.042
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 3.076,
+            "p50": 3.243,
+            "min": 1.961,
+            "max": 4.125
+          },
+          "read": {
+            "n": 12,
+            "mean": 3.267,
+            "p50": 3.453,
+            "min": 2.217,
+            "max": 4.301
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "tail",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "memory offload=tail tailcache=default",
+      "url": "http://127.0.0.1:4626/latency-bench-6",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.269,
+            "p50": 0.271,
+            "min": 0.213,
+            "max": 0.373
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.408,
+            "p50": 0.41,
+            "min": 0.336,
+            "max": 0.497
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.257,
+            "p50": 0.217,
+            "min": 0.188,
+            "max": 0.563
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.389,
+            "p50": 0.323,
+            "min": 0.288,
+            "max": 0.889
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.26,
+            "p50": 0.244,
+            "min": 0.203,
+            "max": 0.408
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.42,
+            "p50": 0.41,
+            "min": 0.31,
+            "max": 0.652
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.47,
+            "p50": 0.332,
+            "min": 0.247,
+            "max": 1.679
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.676,
+            "p50": 0.559,
+            "min": 0.38,
+            "max": 1.932
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "tail",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "memory offload=tail tailcache=0",
+      "url": "http://127.0.0.1:4627/latency-bench-7",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.291,
+            "p50": 0.266,
+            "min": 0.216,
+            "max": 0.464
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.481,
+            "p50": 0.404,
+            "min": 0.318,
+            "max": 1.179
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.192,
+            "p50": 0.195,
+            "min": 0.161,
+            "max": 0.226
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.31,
+            "p50": 0.31,
+            "min": 0.253,
+            "max": 0.397
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.225,
+            "p50": 0.233,
+            "min": 0.186,
+            "max": 0.278
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.352,
+            "p50": 0.351,
+            "min": 0.288,
+            "max": 0.46
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.413,
+            "p50": 0.264,
+            "min": 0.21,
+            "max": 1.587
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.599,
+            "p50": 0.44,
+            "min": 0.354,
+            "max": 1.822
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "inline",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "memory offload=inline tailcache=default",
+      "url": "http://127.0.0.1:4628/latency-bench-8",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.375,
+            "p50": 0.387,
+            "min": 0.26,
+            "max": 0.471
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.606,
+            "p50": 0.619,
+            "min": 0.488,
+            "max": 0.808
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.251,
+            "p50": 0.244,
+            "min": 0.222,
+            "max": 0.291
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.41,
+            "p50": 0.385,
+            "min": 0.334,
+            "max": 0.707
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.284,
+            "p50": 0.271,
+            "min": 0.208,
+            "max": 0.421
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.438,
+            "p50": 0.403,
+            "min": 0.326,
+            "max": 0.582
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.467,
+            "p50": 0.376,
+            "min": 0.246,
+            "max": 1.692
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.68,
+            "p50": 0.601,
+            "min": 0.406,
+            "max": 1.943
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "inline",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "memory offload=inline tailcache=0",
+      "url": "http://127.0.0.1:4629/latency-bench-9",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.348,
+            "p50": 0.311,
+            "min": 0.25,
+            "max": 0.523
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.527,
+            "p50": 0.442,
+            "min": 0.363,
+            "max": 0.964
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.237,
+            "p50": 0.239,
+            "min": 0.179,
+            "max": 0.287
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.366,
+            "p50": 0.369,
+            "min": 0.29,
+            "max": 0.511
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.205,
+            "p50": 0.198,
+            "min": 0.176,
+            "max": 0.257
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.319,
+            "p50": 0.307,
+            "min": 0.269,
+            "max": 0.434
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.27,
+            "p50": 0.264,
+            "min": 0.212,
+            "max": 0.328
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.423,
+            "p50": 0.423,
+            "min": 0.354,
+            "max": 0.524
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "always",
+        "tailCache": "default",
+        "fastFsync": false
+      },
+      "name": "memory offload=always tailcache=default",
+      "url": "http://127.0.0.1:4630/latency-bench-10",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.305,
+            "p50": 0.264,
+            "min": 0.223,
+            "max": 0.517
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.46,
+            "p50": 0.426,
+            "min": 0.336,
+            "max": 0.805
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.231,
+            "p50": 0.224,
+            "min": 0.204,
+            "max": 0.297
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.369,
+            "p50": 0.362,
+            "min": 0.31,
+            "max": 0.554
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.236,
+            "p50": 0.24,
+            "min": 0.208,
+            "max": 0.271
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.363,
+            "p50": 0.368,
+            "min": 0.327,
+            "max": 0.399
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.295,
+            "p50": 0.292,
+            "min": 0.241,
+            "max": 0.36
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.487,
+            "p50": 0.488,
+            "min": 0.413,
+            "max": 0.559
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "memory",
+        "offload": "always",
+        "tailCache": "0",
+        "fastFsync": false
+      },
+      "name": "memory offload=always tailcache=0",
+      "url": "http://127.0.0.1:4631/latency-bench-11",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.186,
+            "p50": 0.165,
+            "min": 0.129,
+            "max": 0.456
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.277,
+            "p50": 0.252,
+            "min": 0.213,
+            "max": 0.587
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.181,
+            "p50": 0.168,
+            "min": 0.146,
+            "max": 0.3
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.291,
+            "p50": 0.267,
+            "min": 0.219,
+            "max": 0.533
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.197,
+            "p50": 0.188,
+            "min": 0.159,
+            "max": 0.274
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.309,
+            "p50": 0.297,
+            "min": 0.249,
+            "max": 0.441
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.215,
+            "p50": 0.206,
+            "min": 0.151,
+            "max": 0.381
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.351,
+            "p50": 0.341,
+            "min": 0.243,
+            "max": 0.582
+          }
+        }
+      }
+    },
+    {
+      "combo": {
+        "durability": "wal",
+        "offload": "tail",
+        "tailCache": "default",
+        "fastFsync": true
+      },
+      "name": "wal+fastfsync offload=tail tailcache=default",
+      "url": "http://127.0.0.1:4632/latency-bench-12",
+      "live": "long-poll",
+      "samples": 12,
+      "bySize": {
+        "1024": {
+          "write": {
+            "n": 12,
+            "mean": 0.318,
+            "p50": 0.31,
+            "min": 0.233,
+            "max": 0.46
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.452,
+            "p50": 0.438,
+            "min": 0.321,
+            "max": 0.634
+          }
+        },
+        "4096": {
+          "write": {
+            "n": 12,
+            "mean": 0.274,
+            "p50": 0.234,
+            "min": 0.207,
+            "max": 0.417
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.4,
+            "p50": 0.362,
+            "min": 0.304,
+            "max": 0.617
+          }
+        },
+        "16384": {
+          "write": {
+            "n": 12,
+            "mean": 0.311,
+            "p50": 0.288,
+            "min": 0.241,
+            "max": 0.454
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.445,
+            "p50": 0.448,
+            "min": 0.344,
+            "max": 0.618
+          }
+        },
+        "65536": {
+          "write": {
+            "n": 12,
+            "mean": 0.357,
+            "p50": 0.349,
+            "min": 0.281,
+            "max": 0.569
+          },
+          "read": {
+            "n": 12,
+            "mean": 0.523,
+            "p50": 0.491,
+            "min": 0.422,
+            "max": 0.739
+          }
+        }
+      }
+    }
+  ]
+}

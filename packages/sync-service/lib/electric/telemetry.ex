@@ -23,7 +23,9 @@ defmodule Electric.Telemetry do
     modules = List.wrap(dependencies) |> Enum.map(&Macro.expand(&1, env))
     telemetry_code_available? = Enum.all?(modules, &Code.ensure_loaded?/1)
 
-    if Electric.telemetry_enabled?() && telemetry_code_available? do
+    # apply/3 hides the compile-time-constant return value of telemetry_enabled?/0
+    # from the type checker, which would otherwise flag this branch as dead code.
+    if apply(Electric, :telemetry_enabled?, []) and telemetry_code_available? do
       if @log_level do
         Logger.log(
           @log_level,

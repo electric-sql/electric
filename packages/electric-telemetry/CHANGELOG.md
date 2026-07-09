@@ -1,5 +1,28 @@
 # @core/electric-telemetry
 
+## 0.3.3
+
+### Patch Changes
+
+- c259e7b: Tail-drop the OpenTelemetry spans of empty/up-to-date shape-GET responses at export time to cut trace volume. Disabled by default; set `ELECTRIC_DROP_EMPTY_RESPONSE_SPANS=true` to enable the drop. Error (5xx) and SSE responses are never dropped.
+
+## 0.3.2
+
+### Patch Changes
+
+- 1b611ca: Reduce SystemMonitor heap growth by avoiding full process dictionary, memory, and binary metadata when classifying monitor events, and periodically garbage collect the monitor process.
+- b8be884: Reduce memory retained by live shape requests while they wait for changes.
+
+  Remove a dead SystemMonitor timer branch that fails warnings-as-errors on Elixir 1.20.
+
+- 841b51a: Upgrade Erlang to 29.0.2, Elixir to 1.20.2 and fix new compilation warnings (unused requires, bitstring pin operators, built-in type conflict, dead code).
+
+## 0.3.1
+
+### Patch Changes
+
+- 044a8d5: Fix `process_type` parsing for request processes that have a request id that is not the standard 20 bytes.
+
 ## 0.3.0
 
 ### Minor Changes

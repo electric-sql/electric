@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant W as Writer
+  participant F as Stream file<br/>(page cache)
+  participant R as Reader
+  participant S as Socket
+
+  W->>F: append
+  F-->>R: wake readers
+
+  R->>F: GET ?offset
+  Note over F: read from cache
+  F->>S: sendfile (zero-copy)

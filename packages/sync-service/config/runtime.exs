@@ -226,6 +226,7 @@ config :electric,
       env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
   consumer_partitions: env!("ELECTRIC_CONSUMER_PARTITIONS", :integer, nil),
   max_concurrent_requests: max_concurrent_requests,
+  long_poll_timeout: env!("ELECTRIC_LONG_POLL_TIMEOUT", :integer, nil),
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
@@ -235,6 +236,7 @@ config :electric,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
+  drop_empty_response_spans?: env!("ELECTRIC_DROP_EMPTY_RESPONSE_SPANS", :boolean, nil),
   telemetry_top_process_limit:
     env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", &Electric.Config.parse_top_process_limit!/1, nil) ||
       env!(

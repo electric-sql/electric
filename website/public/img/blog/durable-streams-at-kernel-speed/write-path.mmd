@@ -1,0 +1,13 @@
+sequenceDiagram
+  participant W as Writer
+  participant L as Sharded WAL<br/>on-disk file
+  participant F as Stream file<br/>(page cache)
+  participant R as Live readers
+
+  par append
+    W->>L: stage record
+  and
+    W->>F: write once into page cache
+  end
+  F-->>R: publish tail, wake readers
+  L-->>W: 2xx (only after durable)

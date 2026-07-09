@@ -1,5 +1,20 @@
 # @electric-ax/agents-mobile
 
+## 0.6.4
+
+### Patch Changes
+
+- b66ebf7: Polish the mobile app for App Store / Play review: declare the iOS privacy manifest for required-reason APIs (AsyncStorage + Sentry), drop the unused microphone permission and block legacy Android storage permissions, add a splash screen, ship an opaque iOS icon and a monochrome Android adaptive-icon layer, add `expo-system-ui` so `userInterfaceStyle` applies on Android, wrap the app in a recoverable error boundary, add a timeout escape hatch to the OAuth callback, and keep auth diagnostics out of production logs.
+
+## 0.6.3
+
+### Patch Changes
+
+- Updated dependencies [886c423]
+- Updated dependencies [7139c53]
+  - @electric-ax/agents-runtime@0.6.3
+  - @electric-ax/agents-server-ui@0.6.3
+
 ## 0.6.2
 
 ### Patch Changes

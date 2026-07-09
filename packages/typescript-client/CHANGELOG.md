@@ -1,5 +1,25 @@
 # @electric-sql/client
 
+## 1.5.24
+
+### Patch Changes
+
+- 2ab02bb: Use the React Native package export to wire AppState lifecycle handling in Metro/Expo builds, replacing brittle runtime `require('react-native')` auto-detection while keeping `runtimeVisibility` as an explicit escape hatch.
+
+## 1.5.23
+
+### Patch Changes
+
+- f0b086f: Add a request watchdog so ShapeStream can recover when mobile fetch implementations hang across app lifecycle or network transitions. Live long-poll requests and refresh catch-up requests now time out after `liveRequestTimeoutMs` (default 45s, or `false` to disable), abort with an internal `live-request-timeout` reason, and restart the request loop even if the platform fetch promise never settles.
+
+  Also make retry backoff abort-aware at sleep entry, keep wake-triggered refreshes in non-live catch-up mode until the next request-loop tick completes, and auto-detect React Native AppState when available so mobile apps pause Electric requests while backgrounded and resume catch-up after foregrounding. A runtime visibility adapter hook remains available for other non-browser runtimes.
+
+## 1.5.22
+
+### Patch Changes
+
+- 4f604bb: Fix ShapeStream wake reconnects in runtimes that do not preserve `AbortSignal.reason`, such as some React Native fetch/AbortController implementations.
+
 ## 1.5.21
 
 ### Patch Changes

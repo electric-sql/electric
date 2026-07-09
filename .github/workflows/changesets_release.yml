@@ -25,6 +25,7 @@ jobs:
       desktop_release_tag: ${{ steps.desktop_release.outputs.tag }}
       mobile_release_version: ${{ steps.mobile_release.outputs.version }}
       mobile_release_tag: ${{ steps.mobile_release.outputs.tag }}
+      server_rust_needs_release: ${{ steps.server_rust_release.outputs.needs_release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,6 +87,24 @@ jobs:
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "tag=@electric-ax/agents-mobile@$VERSION" >> "$GITHUB_OUTPUT"
           fi
+      - name: Detect a server-rust release (private anchor → idempotent crates.io check)
+        id: server_rust_release
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # @electric-ax/durable-streams-server-rust is `private: true` (changesets
+          # bumps it but never publishes it), so it is not in publishedPackages.
+          # The npm packages are disabled, so the crate is what actually publishes —
+          # check crates.io (the published artifact) for idempotency. Publish only if
+          # this version is not already on crates.io: idempotent across re-runs (and
+          # across unrelated releases that leave the server-rust version unchanged),
+          # and correct on the first run. The crate version is synced to this anchor
+          # at publish time by sync-cargo-version.mjs.
+          VERSION="$(node -p "require('./packages/durable-streams-rust/package.json').version")"
+          if curl -sf -H 'User-Agent: electric-sql-release-ci' "https://crates.io/api/v1/crates/durable-streams/$VERSION" >/dev/null 2>&1; then
+            echo "needs_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_release=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -111,6 +130,25 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
+
+  publish-server-rust:
+    needs: changesets
+    # Publishes the `durable-streams` crate (crates.io); the npm packages are
+    # disabled inside server_rust_publish.yml. crates.io Trusted Publishing is
+    # configured for the crate.
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
+    uses: ./.github/workflows/server_rust_publish.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ github.sha }}
+
+  publish-server-rust-to-dockerhub:
+    needs: [changesets, publish-server-rust]
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
+    uses: ./.github/workflows/server_rust_dockerhub_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ github.sha }}
 
   update-cloud-agents-server:
     name: Update Agents Server version used by Cloud

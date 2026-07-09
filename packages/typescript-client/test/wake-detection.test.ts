@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ShapeStream } from '../src'
+import { createReactNativeRuntimeVisibilityAdapter, ShapeStream } from '../src'
 import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`Wake detection`, () => {
@@ -113,6 +113,732 @@ describe(`Wake detection`, () => {
     expect(fetchSignals[0]?.aborted).toBe(true)
     expect(fetchSignals[0]?.reason).toBe(`system-wake`)
     expect(fetchCallCount).toBeGreaterThan(initialFetchCount)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should restart after system wake even when AbortSignal.reason is not preserved`, async () => {
+    vi.useFakeTimers()
+
+    const originalAbort = AbortController.prototype.abort
+    vi.spyOn(AbortController.prototype, `abort`).mockImplementation(function (
+      this: AbortController
+    ) {
+      // Simulate React Native AbortController implementations that drop the
+      // abort reason instead of preserving abort(`system-wake`).
+      return originalAbort.call(this)
+    })
+
+    const fetchSignals: AbortSignal[] = []
+    let fetchCallCount = 0
+
+    const fetchWrapper = (
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      const signal = args[1]?.signal
+      if (signal) fetchSignals.push(signal)
+      fetchCallCount++
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    const initialFetchCount = fetchCallCount
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(fetchSignals[0]?.aborted).toBe(true)
+    expect(fetchSignals[0]?.reason).not.toBe(`system-wake`)
+    expect(fetchCallCount).toBeGreaterThan(initialFetchCount)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should reject invalid live request timeout values`, () => {
+    for (const liveRequestTimeoutMs of [0, -1, Number.NaN, Infinity]) {
+      expect(
+        () =>
+          new ShapeStream({
+            url: shapeUrl,
+            params: { table: `foo` },
+            liveRequestTimeoutMs,
+          })
+      ).toThrow(
+        `Invalid shape options: liveRequestTimeoutMs must be a positive finite number or false`
+      )
+    }
+
+    expect(
+      () =>
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          liveRequestTimeoutMs: false,
+        })
+    ).not.toThrow()
+  })
+
+  it(`should restart after a live request timeout even when fetch ignores abort`, async () => {
+    vi.useFakeTimers()
+
+    let fetchCallCount = 0
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      fetchCallCount++
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      const isLive = input.toString().includes(`live=true`)
+      if (!isLive) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      // Simulate React Native fetch getting wedged across app lifecycle:
+      // it never resolves/rejects, and aborting the signal does not settle it.
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 100,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchCallCount).toBe(2)
+
+    await vi.advanceTimersByTimeAsync(101)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`live-request-timeout`)
+    expect(fetchCallCount).toBeGreaterThan(2)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should use the React Native export to install AppState visibility`, async () => {
+    vi.useFakeTimers()
+
+    type AppStateStatus = `active` | `background` | `inactive` | null
+    let appStateListener: ((state: AppStateStatus) => void) | undefined
+    const appState = {
+      currentState: `active` as AppStateStatus,
+      addEventListener: vi.fn(
+        (_type: `change`, nextListener: (state: AppStateStatus) => void) => {
+          appStateListener = nextListener
+          return { remove: vi.fn() }
+        }
+      ),
+    }
+
+    vi.resetModules()
+    vi.doMock(`react-native`, () => ({ AppState: appState }))
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    try {
+      const { ShapeStream: ReactNativeShapeStream } = await import(
+        `../src/react-native`
+      )
+      const stream = new ReactNativeShapeStream({
+        url: shapeUrl,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+      const unsub = stream.subscribe(() => {})
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(fetchUrls).toHaveLength(2)
+      expect(fetchUrls[1]).toContain(`live=true`)
+
+      appStateListener?.(`background`)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetchSignals[1]?.aborted).toBe(true)
+      expect(fetchUrls).toHaveLength(2)
+
+      appStateListener?.(`active`)
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(fetchUrls).toHaveLength(4)
+      expect(fetchUrls[2]).not.toContain(`live=true`)
+      expect(fetchUrls[3]).toContain(`live=true`)
+
+      unsub()
+      aborter.abort()
+    } finally {
+      vi.doUnmock(`react-native`)
+      vi.resetModules()
+    }
+  })
+
+  it(`should adapt React Native AppState to runtime visibility`, () => {
+    type AppStateStatus = `active` | `background` | `inactive` | null
+    let listener: ((state: AppStateStatus) => void) | undefined
+    const remove = vi.fn()
+    const appState = {
+      currentState: `active` as AppStateStatus,
+      addEventListener: vi.fn(
+        (_type: `change`, nextListener: (state: AppStateStatus) => void) => {
+          listener = nextListener
+          return { remove }
+        }
+      ),
+    }
+    const adapter = createReactNativeRuntimeVisibilityAdapter(appState)
+    const visibilityHandler = vi.fn()
+
+    expect(adapter.getCurrentState?.()).toBe(`visible`)
+
+    const unsubscribe = adapter.subscribe(visibilityHandler)
+    expect(appState.addEventListener).toHaveBeenCalledWith(
+      `change`,
+      expect.any(Function)
+    )
+
+    listener?.(`inactive`)
+    listener?.(`background`)
+    listener?.(`active`)
+    listener?.(null)
+
+    expect(visibilityHandler.mock.calls).toEqual([
+      [`hidden`],
+      [`hidden`],
+      [`visible`],
+    ])
+
+    unsubscribe()
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
+  it(`should pause requests while custom runtime visibility is hidden and resume with non-live catch-up`, async () => {
+    vi.useFakeTimers()
+
+    type VisibilityState = `visible` | `hidden`
+    let visibilityState: VisibilityState = `visible`
+    let visibilityHandler: ((state: VisibilityState) => void) | undefined
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      runtimeVisibility: {
+        getCurrentState: () => visibilityState,
+        subscribe: (handler) => {
+          visibilityHandler = handler
+          return () => {
+            visibilityHandler = undefined
+          }
+        },
+      },
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    visibilityState = `hidden`
+    visibilityHandler?.(`hidden`)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchUrls).toHaveLength(2)
+
+    visibilityState = `visible`
+    visibilityHandler?.(`visible`)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchUrls).toHaveLength(4)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+    expect(fetchUrls[3]).toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should not timeout a slow but successful wake catch-up body`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const upToDateResponse = () =>
+      new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+        status: 200,
+        headers: new Headers({
+          'electric-handle': `h1`,
+          'electric-offset': `0_0`,
+          'electric-schema': `{}`,
+          'electric-up-to-date': ``,
+        }),
+      })
+
+    const slowUpToDateResponse = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            setTimeout(() => {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify([{ headers: { control: `up-to-date` } }])
+                )
+              )
+              controller.close()
+            }, 10_000)
+          },
+        }),
+        {
+          status: 200,
+          headers: new Headers({
+            'electric-handle': `h1`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-up-to-date': ``,
+          }),
+        }
+      )
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) return Promise.resolve(upToDateResponse())
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      return Promise.resolve(slowUpToDateResponse())
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls).toHaveLength(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[2]?.aborted).toBe(false)
+    expect(fetchUrls).toHaveLength(3)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchUrls.length).toBeGreaterThan(3)
+    expect(fetchUrls[3]).toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should watchdog the request after a wake catch-up chunk`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      if (fetchUrls.length === 3) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                offset: `1_0`,
+                key: `item-1`,
+                value: { id: 1 },
+                headers: {
+                  operation: `insert`,
+                  lsn: `1`,
+                  op_position: 0,
+                  txids: [`1`],
+                },
+              },
+            ]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `1_0`,
+                'electric-schema': `{"id":"int4"}`,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls.length).toBeGreaterThanOrEqual(4)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+    expect(fetchUrls[3]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(
+      fetchSignals.some((signal) => signal.reason === `live-request-timeout`)
+    ).toBe(true)
+    expect(fetchUrls.length).toBeGreaterThan(4)
+    expect(fetchUrls[4]).toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should restart a hung wake catch-up request`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (fetchUrls.length === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      if (url.includes(`live=true`)) {
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`aborted`)),
+            {
+              once: true,
+            }
+          )
+        })
+      }
+
+      // Simulate a foreground catch-up request that reaches native networking but
+      // never resolves or rejects. This was observed in the customer PR build:
+      // wake recovery sent non-live requests, then polling stopped at those URLs.
+      return new Promise<Response>(() => {})
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      liveRequestTimeoutMs: 5_000,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchSignals[1]?.reason).toBe(`system-wake`)
+    expect(fetchUrls).toHaveLength(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
+
+    await vi.advanceTimersByTimeAsync(5_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[2]?.aborted).toBe(true)
+    expect(fetchSignals[2]?.reason).toBe(`live-request-timeout`)
+    expect(fetchUrls.length).toBeGreaterThan(3)
+    expect(fetchUrls[3]).not.toContain(`live=true`)
+
+    unsub()
+    aborter.abort()
+  })
+
+  it(`should issue a non-live refresh after system wake even when URL construction yields`, async () => {
+    vi.useFakeTimers()
+
+    const fetchUrls: string[] = []
+    const fetchSignals: AbortSignal[] = []
+
+    const fetchWrapper = (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = input.toString()
+      fetchUrls.push(url)
+      const signal = init?.signal
+      if (signal) fetchSignals.push(signal)
+
+      if (!url.includes(`live=true`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: new Headers({
+                'electric-handle': `h1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-up-to-date': ``,
+              }),
+            }
+          )
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(`abort`, () => reject(new Error(`aborted`)), {
+          once: true,
+        })
+      })
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      headers: {
+        authorization: async () => {
+          await Promise.resolve()
+          return `Bearer token`
+        },
+      },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+    const unsub = stream.subscribe(() => {})
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(fetchUrls).toHaveLength(2)
+    expect(fetchUrls[1]).toContain(`live=true`)
+
+    const currentTime = Date.now()
+    vi.setSystemTime(currentTime + 10_000)
+
+    await vi.advanceTimersByTimeAsync(2_001)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(fetchSignals[1]?.aborted).toBe(true)
+    expect(fetchUrls.length).toBeGreaterThanOrEqual(3)
+    expect(fetchUrls[2]).not.toContain(`live=true`)
 
     unsub()
     aborter.abort()

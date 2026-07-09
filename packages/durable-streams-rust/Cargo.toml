@@ -1,0 +1,80 @@
+[package]
+name = "durable-streams"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance Durable Streams server (Rust)"
+license = "Apache-2.0"
+# CI builds on stable; this documents the supported minimum.
+rust-version = "1.75"
+repository = "https://github.com/durable-streams/durable-streams"
+homepage = "https://electric-sql.com/primitives/durable-streams"
+readme = "README.md"
+
+# The crate is named `durable-streams` (the bare crate name `durable-streams-server`
+# is taken on crates.io), but the produced binary keeps its historical name so the
+# conformance harness, release workflow, and docs are unaffected.
+[[bin]]
+name = "durable-streams-server"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+dashmap = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+httparse = "1"
+libc = "0.2"
+percent-encoding = "2"
+
+# CRC32C (hardware-accelerated where available) for WAL record header framing.
+# Header-only checksum — see the durable-wal-v2 design spec §4 (B-light framing).
+crc32c = "0.6"
+
+# Structured logging / tracing facade. Always compiled (it is light), but with
+# `release_max_level_info` so trace/debug records are stripped from release
+# builds at compile time — zero runtime cost when telemetry is off.
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# OpenTelemetry — opt-in via the `telemetry` feature, OFF BY DEFAULT. None of
+# these are pulled in (or compiled) for a default build, so the server keeps a
+# zero-dependency, zero-overhead telemetry path unless explicitly enabled.
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry_sdk = { version = "0.32", optional = true }
+opentelemetry-otlp = { version = "0.32", optional = true, features = ["grpc-tonic"] }
+opentelemetry-semantic-conventions = { version = "0.32", optional = true }
+tracing-opentelemetry = { version = "0.33", optional = true }
+
+# Hot/cold tiering S3-compatible object store — opt-in via the `tier` feature,
+# OFF BY DEFAULT. `object_store` (and its reqwest/aws transport) is only pulled
+# in and compiled when `--features tier` is requested, so a default build keeps
+# its existing dependency set and is byte-for-byte unchanged. The manifest /
+# sealing / reclaim logic is plain Rust and always compiled (but inactive unless
+# `--tier` is passed); only the S3 BlobStore adapter is behind this feature.
+object_store = { version = "0.11", optional = true, features = ["aws"] }
+
+[features]
+default = []
+# Enable OTLP span + metric export over gRPC (tonic). Endpoint/protocol/timeout
+# and sampling are configured entirely via the standard OTEL_* env vars.
+telemetry = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:tracing-opentelemetry",
+]
+# S3-compatible cold-storage tier (--tier s3). Pulls in `object_store` with its
+# AWS/S3 transport, which works against any S3-compatible endpoint (AWS, R2,
+# Fly/Tigris, MinIO, Backblaze B2) via path-style + custom endpoint config.
+tier = ["dep:object_store"]
+[profile.release]
+lto = true
+codegen-units = 1
+# Unwind (the default), not abort: a panic in one connection task is caught by
+# the runtime and drops only that connection, instead of aborting the whole
+# process and killing every other in-flight request. For a network-facing
+# server the per-connection isolation is worth more than abort's small
+# binary-size / codegen win.
+

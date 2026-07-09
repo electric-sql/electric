@@ -19,6 +19,8 @@ defmodule ElectricTelemetry.SystemMonitor do
   @vm_monitor_long_gc [:vm, :monitor, :long_gc]
   @vm_monitor_long_schedule [:vm, :monitor, :long_schedule]
   @vm_monitor_long_message_queue [:vm, :monitor, :long_message_queue]
+  @garbage_collect_interval :timer.hours(1)
+  @garbage_collect_message :periodic_garbage_collect
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts.intervals_and_thresholds, name: __MODULE__)
@@ -32,7 +34,13 @@ defmodule ElectricTelemetry.SystemMonitor do
         {opts.long_message_queue_disable_threshold, opts.long_message_queue_enable_threshold}
     )
 
-    {:ok, %{long_message_queue_pids: MapSet.new(), long_message_queue_timer: nil}}
+    state = %{
+      long_message_queue_pids: MapSet.new(),
+      long_message_queue_timer: nil,
+      garbage_collect_timer: nil
+    }
+
+    {:ok, schedule_garbage_collect(state)}
   end
 
   def handle_info({:monitor, gc_pid, :long_gc, info}, state) do
@@ -128,6 +136,12 @@ defmodule ElectricTelemetry.SystemMonitor do
     end
   end
 
+  def handle_info(@garbage_collect_message, state) do
+    :erlang.garbage_collect()
+
+    {:noreply, %{state | garbage_collect_timer: nil} |> schedule_garbage_collect()}
+  end
+
   defp log_long_message_queue_event(pid, type) do
     with {:message_queue_len, queue_len} <- Process.info(pid, :message_queue_len) do
       :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
@@ -148,4 +162,12 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   defp maybe_start_long_message_queue_timer(state), do: state
+
+  defp schedule_garbage_collect(%{garbage_collect_timer: nil} = state) do
+    %{
+      state
+      | garbage_collect_timer:
+          Process.send_after(self(), @garbage_collect_message, @garbage_collect_interval)
+    }
+  end
 end
