@@ -33,7 +33,7 @@ use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use tokio::sync::oneshot;
@@ -379,26 +379,14 @@ pub struct Shard {
 /// recyclable.
 const CHECKPOINT_FILE: &str = "checkpoint";
 
-// (Removed: FSYNC_FANOUT / --wal-fsync-parallel. Parallelizing the per-stream
-// fdatasync loop regressed in every controlled test — f8 −11% on NVMe, f16 −19%
-// on a CPU-constrained container — because it steals device budget/CPU from the
-// commit path. The syncfs barrier (default on Linux, below) replaces the loop
-// wholesale; the serial per-file loop remains only as the non-Linux fallback.)
-
-/// Checkpoint durability strategy: on Linux, step 2 issues ONE `syncfs()` per
-/// stream lane — a filesystem-wide barrier that flushes every touched stream
-/// file at once, `O(lanes)` syscalls instead of `O(N_touched)` per-stream
-/// `fdatasync` (the cardinality cliff: the per-file loop measured ~1.4 s of
-/// fsync per shard at 200k streams and stole the commit path's device budget).
-/// Non-Linux has no `syncfs` and uses the serial per-file loop. The
-/// durability-before-recycle ordering is identical in both modes: the barrier
-/// completes before `persist_durable_tails`/recycle.
-
-/// Checkpoint cadence knobs (cardinality-cliff follow-up). The checkpoint's only
-/// job is bounding retained-WAL size (= crash-replay time): acks never gate on it
-/// (`shard.rs` "disk-bounded safety valve") and reads never touch the WAL, so
-/// firing it less often is free except for disk space and replay budget. Two
-/// triggers, whichever comes first per shard:
+/// Checkpoint cadence knobs. The checkpoint's only job is bounding retained-WAL
+/// size (= crash-replay time): acks never gate on it (the disk-bounded safety
+/// valve) and reads never touch the WAL, so firing it less often is free except
+/// for disk space and replay budget. (Durability strategy is not a knob: on
+/// Linux, checkpoint step 2 issues one `syncfs` per stream lane; elsewhere it
+/// runs the serial per-file `fdatasync` loop. Ordering is identical: the barrier
+/// completes before `persist_durable_tails`/recycle.) Two triggers, whichever
+/// comes first per shard:
 ///   * time: `--wal-checkpoint-interval-ms` (default 3000 — the historical 3 s
 ///     wave cadence, now per-shard).
 ///   * size: `--wal-checkpoint-wal-bytes` (default 0 = disabled) — checkpoint a

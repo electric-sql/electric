@@ -1008,6 +1008,17 @@ async fn e2e_stream_lanes_recover_acked_records() {
         );
     }
     h2.crash();
+    // Layout-mismatch guard: reopening this 3-lane dir with a different lane
+    // count must be REFUSED (persisted `.lanes` marker) — a silent mismatch
+    // would make every existing stream invisible.
+    crate::store::set_stream_lanes(2);
+    let err = Store::new_with_tier(dir.clone(), TierConfig::default())
+        .err()
+        .expect("opening a 3-lane layout with --stream-lanes 2 must fail");
+    assert!(
+        err.to_string().contains("stream-lanes"),
+        "mismatch error should name the knob: {err}"
+    );
     crate::store::set_stream_lanes(1);
     let _ = std::fs::remove_dir_all(&dir);
 }

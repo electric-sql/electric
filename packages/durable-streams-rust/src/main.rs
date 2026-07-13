@@ -496,6 +496,11 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
         let mut last_done: Vec<std::time::Instant> = vec![std::time::Instant::now(); n];
         let mut in_flight: Vec<bool> = vec![false; n];
         let mut wave: tokio::task::JoinSet<usize> = tokio::task::JoinSet::new();
+        // task-id → shard index, so a PANICKED checkpoint task (JoinError carries
+        // no payload) still clears its shard's in-flight guard — otherwise one
+        // panic would silence that shard's checkpoints forever (unbounded WAL).
+        let mut task_shard: std::collections::HashMap<tokio::task::Id, usize> =
+            std::collections::HashMap::new();
         let mut ticker = tokio::time::interval(CHECKPOINT_POLL.min(interval));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the immediate first tick — there is nothing to checkpoint at boot.
@@ -504,7 +509,15 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
             ticker.tick().await;
             // Reap finished checkpoints (non-blocking) and restart their clocks.
             while let Some(done) = wave.try_join_next() {
-                if let Ok(i) = done {
+                let i = match &done {
+                    Ok(i) => Some(*i),
+                    Err(e) => {
+                        eprintln!("WAL checkpoint task failed: {e}");
+                        task_shard.get(&e.id()).copied()
+                    }
+                };
+                if let Some(i) = i {
+                    task_shard.retain(|_, v| *v != i);
                     in_flight[i] = false;
                     last_done[i] = std::time::Instant::now();
                 }
@@ -520,12 +533,13 @@ fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
                 }
                 in_flight[i] = true;
                 let shard = Arc::clone(shard);
-                wave.spawn(async move {
+                let handle = wave.spawn(async move {
                     if let Err(e) = shard.checkpoint().await {
                         eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
                     }
                     i
                 });
+                task_shard.insert(handle.id(), i);
             }
         }
     });

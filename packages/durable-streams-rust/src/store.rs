@@ -398,7 +398,6 @@ pub fn tail_cache_bytes() -> usize {
     TAIL_CACHE_BYTES.load(Ordering::Relaxed)
 }
 
-
 impl StreamState {
     /// Record the just-appended wire chunk as the resident tail. `start` is the
     /// logical offset where `bytes` begins. Chunks larger than the tail-cache cap
@@ -514,6 +513,50 @@ impl Store {
     ) -> std::io::Result<Self> {
         let streams_dir = data_dir.join("streams");
         std::fs::create_dir_all(&streams_dir)?;
+        // Persist + validate the stream-lane count (mirrors the WAL shard count's
+        // persisted-N contract): opening a laned layout with a different
+        // `--stream-lanes` would make every existing stream silently invisible
+        // (recovery walks the wrong dirs). Refuse loudly instead.
+        {
+            let marker = streams_dir.join(".lanes");
+            match std::fs::read_to_string(&marker) {
+                Ok(txt) => {
+                    let on_disk: usize = txt.trim().parse().map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("corrupt stream-lane marker {}", marker.display()),
+                        )
+                    })?;
+                    if on_disk != stream_lanes() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!(
+                                "--stream-lanes {} does not match this data dir's on-disk layout                                  ({} lanes, recorded in {}). The lane count is a layout choice                                  and must match across restarts.",
+                                stream_lanes(),
+                                on_disk,
+                                marker.display()
+                            ),
+                        ));
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // Legacy pre-marker dirs are all lanes == 1: refuse enabling
+                    // lanes over an existing flat layout (its files would vanish).
+                    if stream_lanes() > 1
+                        && std::fs::read_dir(&streams_dir)?
+                            .flatten()
+                            .any(|e| e.path().is_file())
+                    {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "--stream-lanes > 1 over an existing flat streams/ layout;                              this data dir was created with 1 lane",
+                        ));
+                    }
+                    std::fs::write(&marker, format!("{}\n", stream_lanes()))?;
+                }
+                Err(e) => return Err(e),
+            }
+        }
         // Create every stream-lane dir and register their dir fds for the
         // checkpoint's per-lane syncfs barrier (see `syncfs_stream_lanes`).
         {
@@ -575,6 +618,10 @@ impl Store {
         }
         for p in entries {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == ".lanes" {
+                // stream-lane layout marker, not stream data
+                continue;
+            }
             if name.ends_with(".meta.tmp") {
                 let _ = std::fs::remove_file(&p);
             } else if name.ends_with(".compact.tmp") {
