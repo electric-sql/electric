@@ -7,8 +7,8 @@
  * - Delegating ID management and event writing to OutboundBridge
  */
 
-import { Agent } from '@mariozechner/pi-agent-core'
-import { getModel, streamSimple } from '@mariozechner/pi-ai'
+import { Agent } from '@earendil-works/pi-agent-core'
+import { getModel, streamSimple } from '@earendil-works/pi-ai/compat'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
 import { runtimeLog } from './log'
@@ -25,13 +25,13 @@ import type {
   AgentMessage,
   AgentTool,
   StreamFn,
-} from '@mariozechner/pi-agent-core'
+} from '@earendil-works/pi-agent-core'
 import type {
   KnownProvider,
   Model,
-  Provider,
+  ProviderId,
   SimpleStreamOptions,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
 import type { LLMContentBlock, LLMMessage, LLMMessageContent } from './types'
 
 /**
@@ -68,7 +68,7 @@ function parseReasoningSummary(text: string): {
 export interface PiAdapterOptions {
   systemPrompt: string
   model: string | Model<any>
-  provider?: Provider
+  provider?: ProviderId
   tools: Array<AgentTool>
   streamFn?: StreamFn
   getApiKey?: (
@@ -120,7 +120,7 @@ type PiAgentAdapterFactory = (config: PiAgentAdapterConfig) => PiAgentHandle
 
 export function resolvePiModel(opts: {
   model: string | Model<any>
-  provider?: Provider
+  provider?: ProviderId
 }): Model<any> {
   if (typeof opts.model !== `string`) {
     return opts.model
@@ -169,15 +169,23 @@ function toAgentContent(content: LLMMessageContent): Array<unknown> {
   return content.map(toAgentContentBlock)
 }
 
+type AssistantAgentMessage = Extract<AgentMessage, { role: `assistant` }>
+
+function isAssistantAgentMessage(
+  message: AgentMessage | undefined
+): message is AssistantAgentMessage {
+  return message?.role === `assistant`
+}
+
 export function toAgentHistory(
   messages: Array<LLMMessage>
 ): Array<AgentMessage> {
   const history: Array<AgentMessage> = []
   const toolNamesById = new Map<string, string>()
 
-  const lastAssistant = (): AgentMessage | undefined => {
+  const lastAssistant = (): AssistantAgentMessage | undefined => {
     const last = history[history.length - 1]
-    return last?.role === `assistant` ? last : undefined
+    return isAssistantAgentMessage(last) ? last : undefined
   }
 
   for (const message of messages) {

@@ -4,18 +4,18 @@ import {
   resolvePiModel,
   toAgentHistory,
 } from '../src/pi-adapter'
-import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
+import { createAssistantMessageEventStream } from '@earendil-works/pi-ai/compat'
 import { Type } from '@sinclair/typebox'
 import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type {
   AssistantMessage,
   Model,
   ToolResultMessage,
   UserMessage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
 
 interface PiAgentAdapterConfig {
   entityUrl: string
@@ -710,7 +710,7 @@ describe(`createPiAgentAdapter`, () => {
       content: [],
       api: `openai-codex-responses`,
       provider: `openai-codex`,
-      model: `gpt-5.4`,
+      model: `gpt-5.6-terra`,
       usage,
       stopReason: `stop`,
       timestamp: Date.now(),
@@ -732,7 +732,7 @@ describe(`createPiAgentAdapter`, () => {
     const factory = createPiAgentAdapter({
       systemPrompt: `Test system prompt`,
       provider: `openai-codex`,
-      model: `gpt-5.4`,
+      model: `gpt-5.6-terra`,
       tools: [],
       streamFn: () => {
         const stream = createAssistantMessageEventStream()

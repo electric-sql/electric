@@ -1,4 +1,5 @@
 import type {
+  AgentTool,
   EntityRegistry,
   HandlerContext,
   SharedStateHandle,
@@ -7,7 +8,6 @@ import { db } from '@electric-ax/agents-runtime'
 import { queryOnce } from '@durable-streams/state/db'
 import { Type } from '@sinclair/typebox'
 import { exec, execFile } from 'node:child_process'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
 import { swarmSharedSchema, type WikiEntry, type Xref } from './schema.js'
 import { explorerSpawnArgs } from './explorer.js'
 import { SURVEY_WORKER_ENTITY_TYPE } from './survey-worker.js'

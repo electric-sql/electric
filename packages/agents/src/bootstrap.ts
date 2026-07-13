@@ -33,7 +33,7 @@ import type {
   ProcessWakeConfig,
   RuntimeHandler,
 } from '@electric-ax/agents-runtime'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SkillsRegistry } from '@electric-ax/agents-runtime'
 
