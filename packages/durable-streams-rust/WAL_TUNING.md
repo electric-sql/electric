@@ -20,6 +20,12 @@ is flat from 10k → 100k streams (−5%) at ~26–32× the pre-fix baseline.
 | **all of the above stacked** (suite `wal-stacked-1m`) | **383k** |
 | reference: memory durability (no fsync anywhere) | 512k |
 
+At extreme cardinality the stacked config on ONE data lane hits a second wall —
+checkpoint writeback (~40× metadata amplification of small appends) saturates
+the single data device (`syncfs` = 60–74 s at 1M streams): 244k @500k, 56–68k
+@1M. `--stream-lanes 3` (suite `wal-streamlanes-1m`, 3 data lanes + 3 WAL
+lanes) breaks it: **374k @100k, 285k @500k, 212k @1M** (`syncfs` 5.7–11 s).
+
 The residual ~1.6× gap to memory mode is WAL machinery (staging + double-write),
 not fsync — future work: io_uring segment writer (`wal/segment.rs` seam),
 batched mark-written.
@@ -46,28 +52,35 @@ barrier). Then:
   raw-block node pools the default emptyDir sits on the boot PD — this single
   mistake mismeasures (and misdeploys) WAL mode by 5–26×.
 
-Example (6-device box): device 0 → data root, devices 1–5 → 5 WAL shards:
+Split the box between data lanes and WAL lanes **by cardinality**:
 
-```
---data-dir /data/wal/0 --wal-shards 5
-```
+- ≤ ~100k streams: 1 data lane is enough — e.g. device 0 → data root,
+  devices 1–5 → 5 WAL shards: `--data-dir /data/wal/0 --wal-shards 5`
+- ≥ ~500k streams: checkpoint writeback dominates; give data more lanes — e.g.
+  device 0 → data root (stream lane 0), devices 1–2 → stream lanes 1–2
+  (mounted at `<data-dir>/streams/1`, `/2`), devices 3–5 → 3 WAL shards:
+  `--data-dir /data/wal/0 --wal-shards 3 --stream-lanes 3`
+  (`--stream-lanes` is a LAYOUT choice like the shard count: it must match the
+  on-disk layout across restarts.)
 
 ### 2. Server flags
 
 ```
---wal-checkpoint-syncfs on            # one syncfs barrier per checkpoint instead of
-                                      # O(N-touched) per-stream fdatasync (PR #4697)
 --wal-checkpoint-wal-bytes 1073741824 # checkpoint a shard when ITS retained WAL
                                       # exceeds 1 GiB (PR #4704) — checkpoint cost ≈ 0,
                                       # crash-replay bounded to ≤1 GiB/shard (<1 s NVMe)
 --wal-checkpoint-interval-ms 60000    # fallback timer so an idle shard still recycles
 --wal-shards <number of WAL devices>  # shards = fsync lanes; on a SINGLE shared
                                       # device keep 2–4 (more only fragments batches)
+--stream-lanes <number of data devices> # hash stream files across per-device dirs
+                                      # (PR #4705); layout choice, default 1
 --worker-threads <vCPUs>
 ```
 
-Leave `--wal-fsync-parallel` at its default (1): fanout parallelizes the
-per-stream fsync loop that syncfs replaces, and measured as a regression.
+The syncfs checkpoint barrier (PR #4697) is **default-on for Linux** — one
+`syncfs` per stream lane instead of O(N-touched) per-stream `fdatasync`;
+`--wal-checkpoint-syncfs off` is the escape hatch. `--wal-fsync-parallel` is
+removed (regressed in every controlled test; accepted as a warning no-op).
 
 ### 3. CPU binding (+21–24%)
 
@@ -93,13 +106,15 @@ no longer fsync-bound, it scales with cores again — don't starve it.
 
 ## Caveats / follow-ups
 
-- Validated to 100k streams, 256 B payloads, single node. The stacked config
-  measured 383k @100k, 244k @500k, and **56k @1M** — a NEW, different wall
-  appears near 1M streams (candidates: one open fd per live stream vs the
-  container nofile ceiling, an ext4 directory with 1M files, stream-map/tails
-  working set, page-cache pressure from 1M dirty files). Profiling pass pending;
-  see `CARDINALITY_1M.md` for the older analysis. Below ~500k streams the
-  configuration above is cliff-free.
+- The 1M-stream writeback wall is diagnosed and broken (`--stream-lanes`, PR
+  #4705: 68k → 212k @1M). The residual slope (374k @100k → 212k @1M on 3 data
+  lanes) is per-file writeback amplification against total data-lane
+  capacity — add data lanes, or see #4695 (log-structured store) for the
+  structural end-state.
+- fd ceiling: the server holds one fd per live stream — 1,005,724 fds at 1M
+  streams = 96% of the default 1,048,576 limit. Not the throughput wall, but a
+  hard scale ceiling just above 1M: raise LimitNOFILE, or see #4706 (lazy fd
+  management).
 - `--wal-checkpoint-syncfs` and the size trigger are opt-in; flipping defaults
   (syncfs on for Linux) is a candidate after soak.
 - Larger retained WAL = longer replay: 1 GiB/shard ≈ sub-second on local NVMe,

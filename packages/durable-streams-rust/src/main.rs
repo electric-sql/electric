@@ -278,17 +278,16 @@ fn main() {
                     }
                 }
             }
-            // Checkpoint fdatasync fan-out (H4). `1` = serial baseline.
+            // Removed knob: parallel per-file checkpoint fsync regressed in every
+            // controlled test; superseded by the (default-on) syncfs barrier.
+            // Accepted-and-ignored so old deploy scripts don't crash the server.
             "--wal-fsync-parallel" => {
-                let n: u64 = parse_val(args.next(), "--wal-fsync-parallel");
-                if n == 0 {
-                    eprintln!("--wal-fsync-parallel must be ≥ 1");
-                    std::process::exit(2);
-                }
-                wal::shard::set_fsync_fanout(n);
+                let _ = val(args.next(), "--wal-fsync-parallel");
+                eprintln!("warning: --wal-fsync-parallel is removed (no-op); the syncfs checkpoint barrier supersedes it");
             }
-            // Checkpoint durability via ONE syncfs() barrier instead of the
-            // O(N_touched) per-stream fdatasync loop (cardinality-cliff #1). Linux-only.
+            // Checkpoint durability via per-lane syncfs() barriers instead of the
+            // O(N_touched) per-stream fdatasync loop (cardinality-cliff #1).
+            // DEFAULT ON for Linux; `off` = escape hatch. No-op elsewhere.
             "--wal-checkpoint-syncfs" => {
                 let v = val(args.next(), "--wal-checkpoint-syncfs");
                 match v.as_str() {

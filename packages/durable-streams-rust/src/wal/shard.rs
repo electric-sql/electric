@@ -379,43 +379,29 @@ pub struct Shard {
 /// recyclable.
 const CHECKPOINT_FILE: &str = "checkpoint";
 
-/// Concurrency for the checkpoint's per-stream `fdatasync` phase (cardinality-cliff
-/// H4). At high stream cardinality that phase dominates the checkpoint (~99% of its
-/// wall time), and a serial loop pays `latency × N_touched` while the storage
-/// device's queue depth (NVMe: many in flight) sits idle. Fanning the syncs across
-/// this many OS threads lets the device absorb them concurrently; all still
-/// complete before `persist_durable_tails`/recycle, preserving the
-/// durability-before-recycle ordering. `1` (the DEFAULT) = serial, i.e. a no-op
-/// change unless `--wal-fsync-parallel N` opts in.
-///
-/// Default is serial because a fixed high fan-out REGRESSES on a CPU-constrained
-/// server or storage that does not do concurrent fsync: measured on a 2-vCPU Linux
-/// container (Docker, virtiofs) fan-out=16 was −19% vs serial — the 16 sync threads
-/// per shard stole CPU from the runtime, slowing the committer until checkpoints
-/// fell behind. The win requires real NVMe (deep device queue) AND spare cores;
-/// validate there before raising the default.
-static FSYNC_FANOUT: AtomicU64 = AtomicU64::new(1);
-pub fn set_fsync_fanout(n: u64) {
-    FSYNC_FANOUT.store(n.max(1), Ordering::Relaxed);
-}
-fn fsync_fanout() -> usize {
-    FSYNC_FANOUT.load(Ordering::Relaxed) as usize
-}
+// (Removed: FSYNC_FANOUT / --wal-fsync-parallel. Parallelizing the per-stream
+// fdatasync loop regressed in every controlled test — f8 −11% on NVMe, f16 −19%
+// on a CPU-constrained container — because it steals device budget/CPU from the
+// commit path. The syncfs barrier (default on Linux, below) replaces the loop
+// wholesale; the serial per-file loop remains only as the non-Linux fallback.)
 
-/// Checkpoint durability strategy (cardinality-cliff #1). The default per-stream
+/// Checkpoint durability strategy (cardinality-cliff #1). The per-stream
 /// `fdatasync` loop (above) issues ONE device durability barrier per *touched*
 /// stream — `O(N_touched)` syscalls, measured at ~1.4 s of `fsync` per shard at
 /// 200k streams. Those barriers share the device's fixed `fdatasync`/s budget with
 /// the commit path, so the checkpoint storm steals throughput from acks (the cliff)
 /// AND caps wal throughput regardless of shard count (a shared-device sweep showed
-/// s1≈s24). When this is on, step 2 instead issues a SINGLE `syncfs()` on the data
-/// filesystem — one barrier that flushes every touched stream file (and everything
-/// else dirty on the fs) at once, collapsing the per-stream `O(N_touched)` cost to
-/// `O(1)` syscalls. The durability-before-recycle ordering is unchanged: the
-/// `syncfs` completes before `persist_durable_tails`/recycle. Linux-only (there is
-/// no `syncfs` on macOS); on other targets it falls back to the per-stream loop.
-/// Default off — opt in with `--wal-checkpoint-syncfs on`.
-static CHECKPOINT_SYNCFS: AtomicBool = AtomicBool::new(false);
+/// s1≈s24). When this is on, step 2 instead issues ONE `syncfs()` per stream lane —
+/// a filesystem-wide barrier that flushes every touched stream file (and everything
+/// else dirty on that fs) at once, collapsing the per-stream `O(N_touched)` cost to
+/// `O(lanes)` syscalls. The durability-before-recycle ordering is unchanged: the
+/// `syncfs` completes before `persist_durable_tails`/recycle.
+///
+/// **Default ON for Linux** (validated: +51% at the 100k-stream cliff, at worst
+/// neutral below it — wal-syncfs/splitlane campaigns 2026-07); `--wal-checkpoint-
+/// syncfs off` is the escape hatch. Non-Linux has no `syncfs` and always uses the
+/// per-stream loop regardless of this flag.
+static CHECKPOINT_SYNCFS: AtomicBool = AtomicBool::new(cfg!(target_os = "linux"));
 pub fn set_checkpoint_syncfs(on: bool) {
     CHECKPOINT_SYNCFS.store(on, Ordering::Relaxed);
 }
@@ -904,48 +890,22 @@ impl Shard {
             let n_touched = touched.len();
             let t_capture = t_start.elapsed();
 
-            // 2. fdatasync each touched per-stream file. Fan out across a bounded
-            //    pool of OS threads (H4): the device's queue depth absorbs the
-            //    syncs concurrently instead of paying latency × N_touched serially
-            //    — the checkpoint's dominant cost at high cardinality. ALL syncs
-            //    complete here, before persist_durable_tails/recycle below, so the
-            //    durability-before-recycle ordering is unchanged. `fanout == 1`
-            //    (or a single file) keeps the plain serial loop.
-            let fanout = fsync_fanout().min(n_touched.max(1));
+            // 2. Make every touched per-stream file durable, strictly BEFORE
+            //    persist_durable_tails/recycle (the durability-before-recycle
+            //    ordering). Two modes:
+            //    * syncfs (Linux default): one filesystem-wide barrier per stream
+            //      lane — O(lanes) syscalls instead of O(N_touched) fdatasyncs
+            //      (the cardinality cliff). Lanes are independent devices in the
+            //      intended layout, so the barriers run in parallel.
+            //    * per-file fdatasync loop: the non-Linux (or --wal-checkpoint-
+            //      syncfs off) fallback. Serial on purpose: parallel fan-out
+            //      regressed in every controlled test (it steals device budget
+            //      from the commit path).
             if checkpoint_syncfs() && cfg!(target_os = "linux") && n_touched > 0 {
-                // #1: ONE filesystem-wide barrier for ALL touched files, replacing
-                // the O(N_touched) per-stream fdatasync loop. `syncfs` on any fd of
-                // the data fs (we pass the first touched stream file) flushes every
-                // dirty page on it — all touched files become durable at once. Still
-                // strictly before persist_durable_tails/recycle, so the
-                // durability-before-recycle ordering is unchanged.
-                // One syncfs per stream lane (touched files may span lanes on
-                // multi-device layouts); falls back to touched[0]'s fs when no
-                // lane registry exists (shard-only unit tests).
                 crate::store::syncfs_stream_lanes(&touched[0].2)?;
-            } else if fanout <= 1 {
+            } else {
                 for (_, _, f) in &touched {
                     crate::store::barrier_fsync(f)?;
-                }
-            } else {
-                let next = AtomicU64::new(0);
-                let first_err: Mutex<Option<io::Error>> = Mutex::new(None);
-                std::thread::scope(|scope| {
-                    for _ in 0..fanout {
-                        scope.spawn(|| loop {
-                            let i = next.fetch_add(1, Ordering::Relaxed) as usize;
-                            let Some((_, _, f)) = touched.get(i) else { break };
-                            if let Err(e) = crate::store::barrier_fsync(f) {
-                                let mut slot = first_err.lock().unwrap();
-                                if slot.is_none() {
-                                    *slot = Some(e);
-                                }
-                            }
-                        });
-                    }
-                });
-                if let Some(e) = first_err.into_inner().unwrap() {
-                    return Err(e);
                 }
             }
             let t_fsync = t_start.elapsed();
