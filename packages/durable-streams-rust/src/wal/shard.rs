@@ -919,7 +919,10 @@ impl Shard {
                 // dirty page on it — all touched files become durable at once. Still
                 // strictly before persist_durable_tails/recycle, so the
                 // durability-before-recycle ordering is unchanged.
-                crate::store::syncfs_barrier(&touched[0].2)?;
+                // One syncfs per stream lane (touched files may span lanes on
+                // multi-device layouts); falls back to touched[0]'s fs when no
+                // lane registry exists (shard-only unit tests).
+                crate::store::syncfs_stream_lanes(&touched[0].2)?;
             } else if fanout <= 1 {
                 for (_, _, f) in &touched {
                     crate::store::barrier_fsync(f)?;

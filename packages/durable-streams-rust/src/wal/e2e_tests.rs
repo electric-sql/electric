@@ -952,6 +952,68 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `--stream-lanes N`: stream data files hash across `streams/<0..N>/` subdirs
+/// (one per device in the intended deployment — the ~1M-stream writeback-wall
+/// fix). Crash recovery must find every file in its lane dir, and the
+/// checkpoint's per-lane syncfs must preserve durability-before-recycle exactly
+/// as the single-lane layout does. Guarded by DurabilityGuard (serialized) since
+/// stream-lanes is process-global state; reset to 1 before releasing the guard.
+#[tokio::test]
+async fn e2e_stream_lanes_recover_acked_records() {
+    let _guard = DurabilityGuard::wal();
+    crate::store::set_stream_lanes(3);
+    crate::wal::shard::set_checkpoint_syncfs(true);
+    const SEG: u64 = 4096;
+    let dir = tmp("stream-lanes");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    // Enough streams that the FNV lane hash populates more than one lane.
+    let names: Vec<String> = (0..12).map(|i| format!("lane-s{i}")).collect();
+    for n in &names {
+        create_stream(&h.store, n, OCTET).await;
+    }
+    let mut expected: std::collections::HashMap<String, Vec<u8>> = Default::default();
+    for round in 0..40usize {
+        for n in &names {
+            let rec = format!("{n}-r{round:03}|").into_bytes();
+            append_acked(&h.store, n, OCTET, &rec).await;
+            expected.entry(n.clone()).or_default().extend_from_slice(&rec);
+        }
+    }
+    // Checkpoint (per-lane syncfs + recycle), then more acked appends on top.
+    h.walset.shards()[0].checkpoint().await.unwrap();
+    for n in &names {
+        let rec = format!("{n}-post|").into_bytes();
+        append_acked(&h.store, n, OCTET, &rec).await;
+        expected.entry(n.clone()).or_default().extend_from_slice(&rec);
+    }
+
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    // Layout sanity: files actually spread across lane subdirs.
+    let lanes_used = (0..3)
+        .filter(|l| {
+            std::fs::read_dir(dir.join("streams").join(l.to_string()))
+                .map(|d| d.flatten().next().is_some())
+                .unwrap_or(false)
+        })
+        .count();
+    assert!(lanes_used >= 2, "expected streams spread over lanes, got {lanes_used}");
+    for n in &names {
+        let got = stream_file_bytes(&h2.store, n);
+        assert_eq!(
+            &got,
+            expected.get(n).unwrap(),
+            "stream {n} recovers byte-identical across lanes"
+        );
+    }
+    h2.crash();
+    crate::wal::shard::set_checkpoint_syncfs(false);
+    crate::store::set_stream_lanes(1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Cardinality-cliff #1: with `--wal-checkpoint-syncfs on`, the checkpoint makes
 /// touched per-stream files durable via ONE `syncfs()` barrier instead of the
 /// per-stream `fdatasync` loop. This must preserve the durability-before-recycle

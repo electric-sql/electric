@@ -311,6 +311,20 @@ fn main() {
                     }
                 }
             }
+            // Stream data lanes: hash stream files across streams/<0..N>/ subdirs,
+            // one per (intended) device, so checkpoint writeback spreads over N
+            // devices with N parallel syncfs barriers (the ~1M-stream wall fix).
+            // A LAYOUT choice: must match the on-disk layout across restarts.
+            "--stream-lanes" => {
+                let v = val(args.next(), "--stream-lanes");
+                match v.parse::<usize>() {
+                    Ok(n) if n >= 1 => store::set_stream_lanes(n),
+                    _ => {
+                        eprintln!("--stream-lanes must be a positive integer");
+                        std::process::exit(2);
+                    }
+                }
+            }
             // Checkpoint size trigger: checkpoint a shard as soon as its retained
             // WAL exceeds this many bytes (0 = disabled). An explicit replay-time
             // budget that also self-staggers shards by their own write rates.
