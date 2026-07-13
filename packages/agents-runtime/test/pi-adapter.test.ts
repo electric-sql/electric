@@ -10,6 +10,7 @@ import type { OutboundIdSeed } from '../src/outbound-bridge'
 import type { LLMMessage } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { AgentTool } from '@earendil-works/pi-agent-core'
+import { estimateContextTokens } from '@earendil-works/pi-agent-core'
 import type {
   AssistantMessage,
   Model,
@@ -958,6 +959,41 @@ describe(`toAgentHistory`, () => {
     expect(msg?.role).toBe(`assistant`)
     const content = msg?.content as Array<{ type: string; text: string }>
     expect(content[0]?.text).toBe(`Hello world`)
+    expect(msg?.usage).toEqual({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    })
+    expect(() => estimateContextTokens(history)).not.toThrow()
+  })
+
+  it(`uses the active model metadata for reconstructed assistant messages`, () => {
+    const model = resolvePiModel({
+      provider: `openai-codex`,
+      model: `gpt-5.6-terra`,
+    })
+
+    const history = toAgentHistory(
+      [{ role: `assistant`, content: `Prior response` }],
+      model
+    )
+    const assistant = history[0] as AssistantMessage
+
+    expect(assistant).toMatchObject({
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      stopReason: `stop`,
+    })
   })
 
   it(`includes custom event turns from the context pipeline as user messages`, () => {

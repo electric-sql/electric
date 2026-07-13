@@ -171,6 +171,37 @@ function toAgentContent(content: LLMMessageContent): Array<unknown> {
 
 type AssistantAgentMessage = Extract<AgentMessage, { role: `assistant` }>
 
+type HistoryModel = Pick<Model<any>, `api` | `provider` | `id`>
+
+function createHistoryAssistantMessage(
+  content: Array<unknown>,
+  model?: HistoryModel
+): AssistantAgentMessage {
+  return {
+    role: `assistant`,
+    content,
+    api: model?.api ?? `unknown`,
+    provider: model?.provider ?? `unknown`,
+    model: model?.id ?? `unknown`,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    },
+    stopReason: `stop`,
+    timestamp: Date.now(),
+  } as AssistantAgentMessage
+}
+
 function isAssistantAgentMessage(
   message: AgentMessage | undefined
 ): message is AssistantAgentMessage {
@@ -178,7 +209,8 @@ function isAssistantAgentMessage(
 }
 
 export function toAgentHistory(
-  messages: Array<LLMMessage>
+  messages: Array<LLMMessage>,
+  model?: HistoryModel
 ): Array<AgentMessage> {
   const history: Array<AgentMessage> = []
   const toolNamesById = new Map<string, string>()
@@ -220,11 +252,7 @@ export function toAgentHistory(
             prevContent.push(...content)
           }
         } else {
-          history.push({
-            role: `assistant`,
-            content,
-            timestamp: Date.now(),
-          } as AgentMessage)
+          history.push(createHistoryAssistantMessage(content, model))
         }
         break
       }
@@ -242,11 +270,7 @@ export function toAgentHistory(
         if (prev) {
           ;(prev.content as Array<unknown>).push(block)
         } else {
-          history.push({
-            role: `assistant`,
-            content: [block],
-            timestamp: Date.now(),
-          } as AgentMessage)
+          history.push(createHistoryAssistantMessage([block], model))
         }
         break
       }
@@ -280,8 +304,6 @@ export function createPiAgentAdapter(
       config.writeEvent,
       opts.onStepEnd ? { onStepEnd: opts.onStepEnd } : undefined
     )
-    const history = toAgentHistory(config.messages)
-
     let running = false
     let disposed = false
     let stepStartTime = 0
@@ -294,6 +316,7 @@ export function createPiAgentAdapter(
       model: opts.model,
       ...(opts.provider && { provider: opts.provider }),
     })
+    const history = toAgentHistory(config.messages, model)
     const modelTimeoutMs = opts.modelTimeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS
     const modelMaxRetries = opts.modelMaxRetries ?? DEFAULT_MODEL_MAX_RETRIES
 
