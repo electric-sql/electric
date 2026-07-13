@@ -82,3 +82,40 @@ The Electric app will startup along with the rest of your Elixir app.
 Beyond the required database connection configuration there are a lot of other
 optional configuration parameters. See the [`Electric` docs for more
 information](https://hexdocs.pm/electric/Electric.html).
+
+## Internal live-request multiplexing
+
+Electric exposes an authenticated WebSocket upgrade at
+`GET /v1/shape/multiplex` for trusted proxies that need to park many silent
+live waits without retaining one HTTP request process per wait. This endpoint
+uses the `electric.shape-multiplex.v1` WebSocket subprotocol. It is only
+available on the active Electric instance; read-only instances reject the
+upgrade.
+
+The client sends JSON text frames to add or remove logical waits:
+
+```json
+{"type":"watch","id":"request-1","handle":"...","offset":"12_0","cursor":"123"}
+{"type":"unwatch","id":"request-1"}
+```
+
+`cursor` is the raw value of the previous `electric-cursor` header, or `null`
+when there is no previous value. Electric may acknowledge an armed wait with
+`{"type":"ready","id":"request-1"}`. It then sends one terminal frame:
+
+```json
+{"type":"wake","id":"request-1","reason":"changes"}
+{"type":"wake","id":"request-1","reason":"rotation"}
+{"type":"no_change","id":"request-1","response":{"status":200,"headers":{},"body":[]}}
+{"type":"error","id":"request-1","code":"...","message":"...","retryable":true}
+```
+
+Wake frames deliberately carry no shape rows. The proxy must issue the normal
+shape HTTP request after a wake. A `no_change` frame contains the lowercase
+HTTP response headers and JSON body that the proxy should return to the
+unchanged shape client. The server uses its configured long-poll timeout and
+removes every wait after a terminal frame.
+
+Embedded deployments can call `Electric.Plug.ShapeMultiplexPlug` directly. An
+optional `:availability_guard` zero-arity function can enforce tenant ownership;
+it must return `:ok` while the socket is valid and is rechecked periodically.

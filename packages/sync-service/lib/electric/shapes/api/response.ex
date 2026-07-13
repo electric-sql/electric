@@ -229,6 +229,16 @@ defmodule Electric.Shapes.Api.Response do
     |> put_sse_headers(response)
   end
 
+  @doc false
+  @spec client_headers(t(), map()) :: %{binary() => binary()}
+  def client_headers(%__MODULE__{} = response, query_params \\ %{}) do
+    %Plug.Conn{method: "GET", query_params: query_params}
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> put_resp_headers(response)
+    |> Map.fetch!(:resp_headers)
+    |> Map.new()
+  end
+
   defp put_shape_handle_header(conn, %__MODULE__{handle: nil}) do
     conn
   end

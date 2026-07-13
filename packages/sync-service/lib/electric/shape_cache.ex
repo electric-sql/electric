@@ -585,7 +585,8 @@ defmodule Electric.ShapeCache do
 
   @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
           {:ok, LogOffset.t()} | :error
-  defp fetch_latest_offset(stack_id, shape_handle, opts \\ []) do
+  @doc false
+  def fetch_latest_offset(stack_id, shape_handle, opts \\ []) do
     storage =
       Storage.for_shape(shape_handle, Storage.for_stack(stack_id, read_only?: opts[:read_only?]))
 
