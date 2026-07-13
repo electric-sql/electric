@@ -16,7 +16,8 @@ is flat from 10k → 100k streams (−5%) at ~26–32× the pre-fix baseline.
 | + stream files on local NVMe (not the boot disk) | 46k |
 | + split-lane layout (WAL shards on their own NVMe devices) | 272k |
 | + size-triggered checkpoint (PR #4704, `--wal-checkpoint-wal-bytes 1GiB`) | 303k |
-| + exclusive pinned cores (Guaranteed QoS + static CPU manager) | 328k (measured separately; stacking projects ~360k) |
+| + exclusive pinned cores (Guaranteed QoS + static CPU manager) | 328k |
+| **all of the above stacked** (suite `wal-stacked-1m`) | **383k** |
 | reference: memory durability (no fsync anywhere) | 512k |
 
 The residual ~1.6× gap to memory mode is WAL machinery (staging + double-write),
@@ -92,12 +93,13 @@ no longer fsync-bound, it scales with cores again — don't starve it.
 
 ## Caveats / follow-ups
 
-- Validated to 100k streams, 256 B payloads, single node. 1M-stream behavior of
-  this exact config is unmeasured (see `CARDINALITY_1M.md` for the older
-  analysis); the mechanisms that caused the cliff are cardinality-independent
-  now, but confirm before relying on it.
-- The stacked best config (size trigger + pinned cores together) is projected
-  ~360k @100k, measured only separately — one confirmation run pending.
+- Validated to 100k streams, 256 B payloads, single node. The stacked config
+  measured 383k @100k, 244k @500k, and **56k @1M** — a NEW, different wall
+  appears near 1M streams (candidates: one open fd per live stream vs the
+  container nofile ceiling, an ext4 directory with 1M files, stream-map/tails
+  working set, page-cache pressure from 1M dirty files). Profiling pass pending;
+  see `CARDINALITY_1M.md` for the older analysis. Below ~500k streams the
+  configuration above is cliff-free.
 - `--wal-checkpoint-syncfs` and the size trigger are opt-in; flipping defaults
   (syncfs on for Linux) is a candidate after soak.
 - Larger retained WAL = longer replay: 1 GiB/shard ≈ sub-second on local NVMe,
