@@ -423,6 +423,33 @@ fn checkpoint_syncfs() -> bool {
     CHECKPOINT_SYNCFS.load(Ordering::Relaxed)
 }
 
+/// Checkpoint cadence knobs (cardinality-cliff follow-up). The checkpoint's only
+/// job is bounding retained-WAL size (= crash-replay time): acks never gate on it
+/// (`shard.rs` "disk-bounded safety valve") and reads never touch the WAL, so
+/// firing it less often is free except for disk space and replay budget. Two
+/// triggers, whichever comes first per shard:
+///   * time: `--wal-checkpoint-interval-ms` (default 3000 — the historical 3 s
+///     wave cadence, now per-shard).
+///   * size: `--wal-checkpoint-wal-bytes` (default 0 = disabled) — checkpoint a
+///     shard as soon as its retained WAL exceeds this many bytes. This turns the
+///     hardcoded timer into an explicit replay-time budget (e.g. 1 GiB ≈ <1 s of
+///     replay on NVMe) and lets shards self-stagger by their own write rates
+///     instead of storming together on a shared tick.
+static CHECKPOINT_INTERVAL_MS: AtomicU64 = AtomicU64::new(3_000);
+pub fn set_checkpoint_interval_ms(ms: u64) {
+    CHECKPOINT_INTERVAL_MS.store(ms.max(1), Ordering::Relaxed);
+}
+pub fn checkpoint_interval_ms() -> u64 {
+    CHECKPOINT_INTERVAL_MS.load(Ordering::Relaxed)
+}
+static CHECKPOINT_WAL_BYTES: AtomicU64 = AtomicU64::new(0);
+pub fn set_checkpoint_wal_bytes(bytes: u64) {
+    CHECKPOINT_WAL_BYTES.store(bytes, Ordering::Relaxed);
+}
+pub fn checkpoint_wal_bytes() -> u64 {
+    CHECKPOINT_WAL_BYTES.load(Ordering::Relaxed)
+}
+
 /// Name of the per-shard durable-tail map: `<shard_dir>/tails` (task 11b). A
 /// CUMULATIVE `stream_id durable_tail` line map (plain decimal text, one stream
 /// per line). At checkpoint, each touched stream's current logical `Shared.tail`

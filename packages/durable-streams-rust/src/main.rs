@@ -300,6 +300,30 @@ fn main() {
                     }
                 }
             }
+            // Checkpoint time trigger: per-shard cadence in ms (default 3000).
+            "--wal-checkpoint-interval-ms" => {
+                let v = val(args.next(), "--wal-checkpoint-interval-ms");
+                match v.parse::<u64>() {
+                    Ok(ms) if ms >= 1 => wal::shard::set_checkpoint_interval_ms(ms),
+                    _ => {
+                        eprintln!("--wal-checkpoint-interval-ms must be a positive integer (milliseconds)");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            // Checkpoint size trigger: checkpoint a shard as soon as its retained
+            // WAL exceeds this many bytes (0 = disabled). An explicit replay-time
+            // budget that also self-staggers shards by their own write rates.
+            "--wal-checkpoint-wal-bytes" => {
+                let v = val(args.next(), "--wal-checkpoint-wal-bytes");
+                match v.parse::<u64>() {
+                    Ok(bytes) => wal::shard::set_checkpoint_wal_bytes(bytes),
+                    _ => {
+                        eprintln!("--wal-checkpoint-wal-bytes must be a non-negative integer (bytes)");
+                        std::process::exit(2);
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -474,43 +498,68 @@ fn main() {
     });
 }
 
-/// How often the checkpoint ticker drives each shard's `checkpoint` (spec §7).
-/// A sane v1 constant: frequent enough that the WAL doesn't grow unbounded on a
-/// busy server, infrequent enough that the batched per-stream `fdatasync`s stay
-/// amortized. Checkpoint is non-blocking w.r.t. acks, so this is purely the
-/// WAL-recycle / per-stream-durability cadence (tunable is follow-up #9).
-const CHECKPOINT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
+/// How often the checkpoint ticker POLLS its triggers. The actual checkpoint
+/// cadence is per-shard and knob-driven (see `wal::shard::checkpoint_interval_ms`
+/// / `checkpoint_wal_bytes`); this is just the trigger-evaluation resolution.
+/// 250 ms keeps the size trigger responsive (a shard writing 1 GB/s overshoots a
+/// 1 GiB budget by ≤ 250 MB) at negligible poll cost (two atomic loads/shard).
+const CHECKPOINT_POLL: std::time::Duration = std::time::Duration::from_millis(250);
 
-/// Spawn the per-shard checkpoint ticker (spec §7). One `tokio::time::interval`
-/// driver that, each tick, runs every shard's `checkpoint` (each: batched
-/// `fdatasync` of its touched per-stream files → persist `checkpoint_lsn` →
-/// recycle WAL segments below it). A checkpoint error is logged, not fatal — a
-/// failed/lagging checkpoint only delays WAL recycling (the disk-bounded safety
-/// valve, spec §7), never blocks appends.
+/// Spawn the per-shard checkpoint driver (spec §7). Each poll tick, a shard is
+/// checkpointed iff (a) its retained WAL exceeds `--wal-checkpoint-wal-bytes`
+/// (size trigger, 0 = off), or (b) `--wal-checkpoint-interval-ms` has elapsed
+/// since ITS last checkpoint (time trigger, default 3000 = the historical 3 s
+/// cadence). Due shards checkpoint CONCURRENTLY (each is one spawn_blocking:
+/// capture + fsync/syncfs of touched stream files → persist tails/checkpoint_lsn
+/// → recycle); a serial walk would queue every shard's fsync behind one
+/// device's. Because each shard's clock restarts when IT finishes, shards drift
+/// apart naturally instead of storming in a synchronized wave — and with the
+/// size trigger they self-schedule by their own write rates. A checkpoint error
+/// is logged, not fatal — a failed/lagging checkpoint only delays WAL recycling
+/// (the disk-bounded safety valve, spec §7), never blocks appends. A shard that
+/// is still checkpointing is never re-fired (the in-flight set guards it), so a
+/// checkpoint that takes longer than the interval degrades to back-to-back
+/// checkpoints for that shard only.
 fn spawn_checkpoint_ticker(walset: Arc<wal::walset::WalSet>) {
     tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(CHECKPOINT_INTERVAL);
-        // Skip the immediate first tick — there is nothing to checkpoint at boot.
+        let interval =
+            std::time::Duration::from_millis(wal::shard::checkpoint_interval_ms());
+        let wal_bytes = wal::shard::checkpoint_wal_bytes();
+        let n = walset.shards().len();
+        let mut last_done: Vec<std::time::Instant> = vec![std::time::Instant::now(); n];
+        let mut in_flight: Vec<bool> = vec![false; n];
+        let mut wave: tokio::task::JoinSet<usize> = tokio::task::JoinSet::new();
+        let mut ticker = tokio::time::interval(CHECKPOINT_POLL.min(interval));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // Skip the immediate first tick — there is nothing to checkpoint at boot.
         ticker.tick().await;
         loop {
             ticker.tick().await;
-            // All shards checkpoint CONCURRENTLY. Each checkpoint is one
-            // spawn_blocking task (capture + per-stream fdatasyncs + tails/ckpt
-            // persist + recycle), so a serial walk makes every per-stream fsync
-            // across the whole server queue behind a single shard's — at high
-            // stream cardinality that serialization is what stretches the
-            // checkpoint wave (and on real disks wastes the device's parallelism).
-            let mut wave = tokio::task::JoinSet::new();
-            for shard in walset.shards() {
+            // Reap finished checkpoints (non-blocking) and restart their clocks.
+            while let Some(done) = wave.try_join_next() {
+                if let Ok(i) = done {
+                    in_flight[i] = false;
+                    last_done[i] = std::time::Instant::now();
+                }
+            }
+            for (i, shard) in walset.shards().iter().enumerate() {
+                if in_flight[i] {
+                    continue;
+                }
+                let size_due = wal_bytes > 0 && shard.wal_size_bytes() >= wal_bytes;
+                let time_due = last_done[i].elapsed() >= interval;
+                if !(size_due || time_due) {
+                    continue;
+                }
+                in_flight[i] = true;
                 let shard = Arc::clone(shard);
                 wave.spawn(async move {
                     if let Err(e) = shard.checkpoint().await {
                         eprintln!("WAL checkpoint failed for shard {:?}: {e}", shard.dir());
                     }
+                    i
                 });
             }
-            while wave.join_next().await.is_some() {}
         }
     });
 }
