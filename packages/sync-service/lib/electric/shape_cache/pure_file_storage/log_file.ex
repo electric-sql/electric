@@ -179,7 +179,8 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         log_file_path,
         start_position,
         end_position,
-        exclusive_min_offset
+        exclusive_min_offset,
+        project_item \\ &json_only/2
       ) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
     case safely_open_file!(opts, log_file_path, [:read, :raw]) do
@@ -189,7 +190,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
       {:ok, file} ->
         try do
           with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
-            {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
+            {jsons, _} =
+              extract_jsons_from_binary(data, exclusive_min_offset, nil, project_item)
+
             jsons
           else
             :eof ->
@@ -212,7 +215,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         log_file_path,
         start_position,
         exclusive_min_offset,
-        inclusive_max_offset
+        inclusive_max_offset,
+        project_item \\ &json_only/2,
+        read_fun \\ &:file.read/2
       ) do
     Stream.resource(
       fn ->
@@ -229,14 +234,18 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         :halt ->
           {:halt, []}
 
+        {file, :halt} ->
+          {:halt, {file, ""}}
+
         {file, binary_rest} ->
-          case :file.read(file, 4096) do
+          case read_fun.(file, 4096) do
             {:ok, data} ->
               {jsons, rest} =
                 extract_jsons_from_binary(
                   binary_rest <> data,
                   exclusive_min_offset,
-                  inclusive_max_offset
+                  inclusive_max_offset,
+                  project_item
                 )
 
               {jsons, {file, rest}}
@@ -252,10 +261,23 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     )
   end
 
-  @spec extract_jsons_from_binary(binary(), LogOffset.t(), LogOffset.t() | nil) ::
-          Enumerable.t(String.t())
-  defp extract_jsons_from_binary(binary, exclusive_min_offset, inclusive_max_offset, acc \\ [])
-  defp extract_jsons_from_binary(<<>>, _, _, acc), do: {Enum.reverse(acc), ""}
+  defp json_only(_offset, json), do: json
+
+  @spec extract_jsons_from_binary(
+          binary(),
+          LogOffset.t(),
+          LogOffset.t() | nil,
+          (LogOffset.t(), String.t() -> term())
+        ) :: {list(), binary() | :halt}
+  defp extract_jsons_from_binary(
+         binary,
+         exclusive_min_offset,
+         inclusive_max_offset,
+         project_item,
+         acc \\ []
+       )
+
+  defp extract_jsons_from_binary(<<>>, _, _, _, acc), do: {Enum.reverse(acc), ""}
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
@@ -265,41 +287,53 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
            op_offset: op_offset2
          } = log_offset,
          inclusive_max_offset,
+         project_item,
          acc
        )
        when tx_offset1 < tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 <= op_offset2),
-       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, acc)
+       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, project_item, acc)
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
            json_size::64, json::binary-size(json_size), _::binary>>,
-         log_offset,
-         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         _log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2},
+         project_item,
          acc
        )
        when tx_offset1 == tx_offset2 and op_offset1 == op_offset2,
-       do: extract_jsons_from_binary("", log_offset, inclusive_max_offset, [json | acc])
+       do: {
+         Enum.reverse([
+           project_item.(LogOffset.new(tx_offset1, op_offset1), json) | acc
+         ]),
+         :halt
+       }
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
            json_size::64, _json::binary-size(json_size), _::binary>>,
-         log_offset,
-         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         _log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2},
+         _project_item,
          acc
        )
        when tx_offset1 > tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 > op_offset2),
-       do: extract_jsons_from_binary("", log_offset, inclusive_max_offset, acc)
+       do: {Enum.reverse(acc), :halt}
 
   defp extract_jsons_from_binary(
-         <<_::128, key_size::32, _::binary-size(key_size), _::8, _flag::8, json_size::64,
-           json::binary-size(json_size), rest::binary>>,
+         <<tx_offset::64, op_offset::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, json::binary-size(json_size), rest::binary>>,
          log_offset,
          inclusive_max_offset,
+         project_item,
          acc
        ),
-       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, [json | acc])
+       do:
+         extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, project_item, [
+           project_item.(LogOffset.new(tx_offset, op_offset), json) | acc
+         ])
 
-  defp extract_jsons_from_binary(rest, _, _, acc),
+  defp extract_jsons_from_binary(rest, _, _, _, acc),
     do: {Enum.reverse(acc), rest}
 
   defp get_op_type(:insert), do: ?i

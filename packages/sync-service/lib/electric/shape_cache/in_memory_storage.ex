@@ -170,7 +170,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   defp snapshot_end(),
     do: snapshot_chunk_end(storage_offset(LogOffset.last_before_real_offsets()))
 
-  defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table) do
+  defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table, project_item) do
     offset = storage_offset(offset)
     max_offset = storage_offset(max_offset)
 
@@ -183,9 +183,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           nil
 
         {{:offset, position}, [{_, item}]} ->
-          {item, position}
+          {project_item.(LogOffset.new(position), item), position}
       end
     end)
+  end
+
+  defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table) do
+    get_offset_indexed_stream(offset, max_offset, offset_indexed_table, fn _, item -> item end)
   end
 
   @snapshot_boundary_offset LogOffset.last_before_real_offsets()
@@ -201,6 +205,37 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   def get_log_stream(offset, max_offset, %MS{} = opts) do
     get_offset_indexed_stream(offset, max_offset, opts.log_table)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def get_log_stream_with_offsets(offset, max_offset, %MS{} = opts)
+      when is_log_offset_lt(offset, @snapshot_boundary_offset) do
+    case :ets.lookup_element(opts.snapshot_table, snapshot_end(), 2, nil) do
+      nil ->
+        stream_from_snapshot_with_offsets(offset, max_offset, opts)
+
+      max when is_log_offset_lt(offset, max) ->
+        stream_from_snapshot_with_offsets(offset, max_offset, opts)
+
+      _ ->
+        get_offset_indexed_stream_with_offsets(offset, max_offset, opts.log_table)
+    end
+  end
+
+  def get_log_stream_with_offsets(offset, max_offset, %MS{} = opts) do
+    get_offset_indexed_stream_with_offsets(offset, max_offset, opts.log_table)
+  end
+
+  defp get_offset_indexed_stream_with_offsets(offset, max_offset, offset_indexed_table) do
+    get_offset_indexed_stream(offset, max_offset, offset_indexed_table, fn offset, item ->
+      {offset, item}
+    end)
+  end
+
+  defp stream_from_snapshot_with_offsets(offset, max_offset, opts) do
+    offset
+    |> stream_from_snapshot(max_offset, opts)
+    |> Stream.map(&{nil, &1})
   end
 
   defp stream_from_snapshot(offset, max_offset, %MS{} = opts) do

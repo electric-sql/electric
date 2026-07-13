@@ -36,6 +36,7 @@ defmodule Electric.ShapeCache.Storage do
           {LogOffset.t(), key :: String.t(), operation_type :: operation_type(),
            Querying.json_iodata()}
   @type log :: Enumerable.t(Querying.json_iodata())
+  @type offset_log :: Enumerable.t({LogOffset.t() | nil, Querying.json_iodata()})
 
   @typedoc """
   A move-in snapshot row, represented as a 3-element list `[key, tags, json]`:
@@ -187,6 +188,21 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(offset :: LogOffset.t(), max_offset :: LogOffset.t(), shape_opts()) ::
               log()
+
+  @doc """
+  Get a stream of the log together with the authoritative offsets assigned by
+  storage.
+
+  Main-log entries are returned as `{offset, item}`. Initial snapshot entries
+  have no main-log offset and are returned as `{nil, item}`.
+  """
+  @callback get_log_stream_with_offsets(
+              offset :: LogOffset.t(),
+              max_offset :: LogOffset.t(),
+              shape_opts()
+            ) :: offset_log()
+
+  @optional_callbacks get_log_stream_with_offsets: 3
 
   @doc """
   Get the last exclusive offset of the chunk starting from the given offset.
@@ -433,6 +449,31 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def get_log_stream(offset, max_offset, _storage) when is_log_offset_lt(max_offset, offset) do
+    []
+  end
+
+  @doc """
+  Get a shape log stream with the authoritative storage offset for each item.
+
+  The lower bound is exclusive and the upper bound is inclusive, matching
+  `get_log_stream/3`. Snapshot entries are paired with `nil` because they do
+  not have main-log offsets.
+  """
+  @impl __MODULE__
+  def get_log_stream_with_offsets(offset, max_offset \\ @last_log_offset, storage)
+
+  def get_log_stream_with_offsets(offset, max_offset, {mod, shape_opts})
+      when max_offset == @last_log_offset or not is_log_offset_lt(max_offset, offset) do
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :get_log_stream_with_offsets, 3) do
+      mod.get_log_stream_with_offsets(offset, max_offset, shape_opts)
+    else
+      raise Error,
+        message: "Storage adapter #{inspect(mod)} does not support offset-preserving log streams"
+    end
+  end
+
+  def get_log_stream_with_offsets(offset, max_offset, _storage)
+      when is_log_offset_lt(max_offset, offset) do
     []
   end
 

@@ -1035,7 +1035,71 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  def get_log_stream_with_offsets(
+        %LogOffset{} = min_offset,
+        %LogOffset{} = max_offset,
+        opts
+      )
+      when is_last_virtual_offset(min_offset) or is_real_offset(min_offset) do
+    stream_main_log_with_offsets(min_offset, max_offset, opts)
+  end
+
+  def get_log_stream_with_offsets(
+        %LogOffset{op_offset: op_offset} = min_offset,
+        %LogOffset{} = max_offset,
+        %__MODULE__{} = opts
+      ) do
+    metadata = read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
+
+    snapshot_started? = Keyword.get(metadata, :snapshot_started?) || false
+    last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
+
+    if not snapshot_started? and not shape_gone?(opts) do
+      raise(Storage.Error, message: "Snapshot not started")
+    end
+
+    {stream_kind, stream} =
+      case {last_snapshot_chunk, min_offset} do
+        {_, x} when is_min_offset(x) ->
+          {:snapshot, Snapshot.stream_chunk_lines(opts, 0)}
+
+        {%LogOffset{} = latest, min_offset} when is_log_offset_lt(min_offset, latest) ->
+          {:snapshot, Snapshot.stream_chunk_lines(opts, op_offset + 1)}
+
+        {nil, _offset} ->
+          {:snapshot, wait_for_chunk_file_or_snapshot_end(opts, op_offset + 1)}
+
+        {%LogOffset{}, offset} ->
+          {:main_log, stream_main_log_with_offsets(offset, max_offset, opts)}
+      end
+
+    case stream_kind do
+      :snapshot -> Stream.map(stream, &{nil, &1})
+      :main_log -> stream
+    end
+  end
+
+  defp stream_main_log_with_offsets(min_offset, max_offset, opts) do
+    stream_main_log(
+      min_offset,
+      max_offset,
+      opts,
+      fn offset, item -> {offset, item} end,
+      true
+    )
+  end
+
   defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts) do
+    stream_main_log(min_offset, max_offset, opts, fn _, item -> item end, false)
+  end
+
+  defp stream_main_log(
+         min_offset,
+         max_offset,
+         %__MODULE__{} = opts,
+         project_item,
+         exact_upper_bound?
+       ) do
     storage_meta(
       ets_table: ets,
       last_persisted_offset: last_persisted,
@@ -1058,43 +1122,66 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     upper_read_bound = LogOffset.min(max_offset, last_seen)
 
-    # Convert upper_read_bound to tuple for comparison with ETS offsets
-    upper_read_bound_tuple = LogOffset.to_tuple(upper_read_bound)
-
     cond do
       is_log_offset_lte(last_persisted, min_offset) and is_nil(ets) ->
         []
 
       is_log_offset_lte(last_persisted, min_offset) ->
         # Pure ETS read case
-        case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
-          {_data, last_offset}
-          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+        case read_range_from_ets_cache(ets, min_offset, upper_read_bound, project_item) do
+          {_data, :incomplete} ->
             # Empty or partial read - ETS was cleared by a concurrent flush.
             # Data is now on disk (flush writes to disk before clearing ETS),
             # so read directly from there using existing boundary info.
-            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+            stream_from_disk(
+              opts,
+              min_offset,
+              upper_read_bound,
+              boundary_info,
+              project_item,
+              exact_upper_bound?
+            )
 
-          {data, _last_offset} ->
+          {data, :complete} ->
             data
         end
 
       is_log_offset_lte(upper_read_bound, last_persisted) ->
-        stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+        stream_from_disk(
+          opts,
+          min_offset,
+          upper_read_bound,
+          boundary_info,
+          project_item,
+          exact_upper_bound?
+        )
 
       true ->
         # Mixed disk + ETS case
         # Because ETS may be cleared by a flush in a parallel process, we're reading it out into memory.
         # It's expected to be fairly small in the worst case, up 64KB
-        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
-          {_upper_range, last_offset}
-          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound, project_item) do
+          {_upper_range, :incomplete} ->
             # Empty or partial read - ETS was cleared by a concurrent flush.
             # Data is now on disk, so read the full range from there.
-            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+            stream_from_disk(
+              opts,
+              min_offset,
+              upper_read_bound,
+              boundary_info,
+              project_item,
+              exact_upper_bound?
+            )
 
-          {upper_range, _last_offset} ->
-            stream_from_disk(opts, min_offset, last_persisted, boundary_info)
+          {upper_range, :complete} ->
+            stream_from_disk(
+              opts,
+              min_offset,
+              last_persisted,
+              boundary_info,
+              project_item,
+              exact_upper_bound?
+            )
             |> Stream.concat(upper_range)
         end
     end
@@ -1139,15 +1226,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  # Returns {data, last_offset_read} where last_offset_read is the offset tuple of the
-  # last entry read, or nil if no entries were read. This allows callers to detect
-  # partial reads due to concurrent ETS clearing.
-  @spec read_range_from_ets_cache(:ets.tid() | nil, LogOffset.t(), LogOffset.t()) ::
-          {list(), LogOffset.t_tuple() | nil}
-  defp read_range_from_ets_cache(nil, _min, _max), do: {[], nil}
+  # Returns whether the requested range was read completely. A range can be
+  # complete even when no item exists at its upper bound because log offsets are
+  # sparse. `:incomplete` means ETS disappeared or ended before the known live
+  # tail, so callers must retry from disk after a concurrent flush.
+  @spec read_range_from_ets_cache(
+          :ets.tid() | nil,
+          LogOffset.t(),
+          LogOffset.t(),
+          (LogOffset.t(), binary() -> term())
+        ) ::
+          {list(), :complete | :incomplete}
+  defp read_range_from_ets_cache(nil, _min, _max, _project_item), do: {[], :incomplete}
 
-  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max) do
-    read_range_from_ets_cache(ets, LogOffset.to_tuple(min), LogOffset.to_tuple(max), [], nil)
+  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max, project_item) do
+    read_range_from_ets_cache(
+      ets,
+      LogOffset.to_tuple(min),
+      LogOffset.to_tuple(max),
+      [],
+      project_item
+    )
   end
 
   @spec read_range_from_ets_cache(
@@ -1155,21 +1254,33 @@ defmodule Electric.ShapeCache.PureFileStorage do
           LogOffset.t_tuple(),
           LogOffset.t_tuple(),
           list(),
-          LogOffset.t_tuple() | nil
-        ) :: {list(), LogOffset.t_tuple() | nil}
-  defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc, last_offset) do
+          (LogOffset.t(), binary() -> term())
+        ) :: {list(), :complete | :incomplete}
+  defp read_range_from_ets_cache(
+         ets,
+         min,
+         {max_tx, max_op} = max,
+         acc,
+         project_item
+       ) do
     case safe_next_lookup(ets, min) do
       :ets_dead ->
-        {Enum.reverse(acc), last_offset}
+        {Enum.reverse(acc), :incomplete}
 
       :"$end_of_table" ->
-        {Enum.reverse(acc), last_offset}
+        {Enum.reverse(acc), :incomplete}
 
       {{min_tx, min_op}, _} when min_tx > max_tx or (min_tx == max_tx and min_op > max_op) ->
-        {Enum.reverse(acc), last_offset}
+        {Enum.reverse(acc), :complete}
 
       {new_min, [{_, item}]} ->
-        read_range_from_ets_cache(ets, new_min, max, [item | acc], new_min)
+        projected_item = project_item.(LogOffset.new(new_min), item)
+
+        if new_min == max do
+          {Enum.reverse([projected_item | acc]), :complete}
+        else
+          read_range_from_ets_cache(ets, new_min, max, [projected_item | acc], project_item)
+        end
     end
   end
 
@@ -1181,7 +1292,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
     ArgumentError -> :ets_dead
   end
 
-  defp stream_from_disk(%__MODULE__{}, min_offset, max_offset, _)
+  defp stream_from_disk(
+         %__MODULE__{},
+         min_offset,
+         max_offset,
+         _,
+         _project_item,
+         _exact_upper_bound?
+       )
        when is_log_offset_lte(max_offset, min_offset),
        do: []
 
@@ -1189,20 +1307,43 @@ defmodule Electric.ShapeCache.PureFileStorage do
          %__MODULE__{} = opts,
          min_offset,
          max_offset,
-         boundary_info
+         boundary_info,
+         project_item,
+         exact_upper_bound?
        ) do
     suffix = get_suffix(min_offset, boundary_info)
 
     case fetch_chunk(min_offset, opts, boundary_info) do
       {:ok, chunk_end_offset, {start_pos, end_pos}} when not is_nil(end_pos) ->
-        LogFile.stream_jsons(
-          opts,
-          json_file(opts, suffix),
-          start_pos,
-          end_pos,
-          min_offset
-        )
-        |> Stream.concat(stream_from_disk(opts, chunk_end_offset, max_offset, boundary_info))
+        if exact_upper_bound? and is_log_offset_lt(max_offset, chunk_end_offset) do
+          LogFile.stream_jsons_until_offset(
+            opts,
+            json_file(opts, suffix),
+            start_pos,
+            min_offset,
+            max_offset,
+            project_item
+          )
+        else
+          LogFile.stream_jsons(
+            opts,
+            json_file(opts, suffix),
+            start_pos,
+            end_pos,
+            min_offset,
+            project_item
+          )
+          |> Stream.concat(
+            stream_from_disk(
+              opts,
+              chunk_end_offset,
+              max_offset,
+              boundary_info,
+              project_item,
+              exact_upper_bound?
+            )
+          )
+        end
 
       {:ok, nil, {start_pos, nil}} ->
         LogFile.stream_jsons_until_offset(
@@ -1210,7 +1351,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
           json_file(opts, suffix),
           start_pos,
           min_offset,
-          max_offset
+          max_offset,
+          project_item
         )
 
       :error ->
