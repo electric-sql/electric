@@ -14,7 +14,7 @@ import {
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 function createMockStreamFn(responseText: string): StreamFn {
   return vi.fn(((model) => {

@@ -50,7 +50,7 @@
     "@durable-streams/state": "^0.3.1",
     "@electric-ax/agents-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.22",
-    "@mariozechner/pi-agent-core": "^0.70.2",
+    "@earendil-works/pi-agent-core": "^0.80.5",
     "@opentelemetry/api": "^1.9.1",
     "@sinclair/typebox": "^0.34.48",
     "@tanstack/db": "^0.6.7",
