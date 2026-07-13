@@ -44,7 +44,7 @@ pub enum DurabilityMode {
     #[default]
     Wal,
     /// No WAL, no fsync: ack on the page-cache write. Durability comes from replication
-    /// (future). Linux-only (binary appends use zero-copy socket→file).
+    /// (future).
     Memory,
 }
 
@@ -1193,9 +1193,7 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         // `last_access` only gates TTL. So a plain non-TTL append needs no sidecar
         // rewrite here — dropping it removes the O(touched) `write_meta_sync` calls
         // that dominate the checkpoint's meta phase at high stream cardinality.
-        // `wal_meta_gate()` (default on) can be turned off to restore always-mark
-        // for a same-binary A/B of the gate.
-        if meta_persist_needed || !crate::store::wal_meta_gate() {
+        if meta_persist_needed {
             st.meta_dirty.store(true, std::sync::atomic::Ordering::Release);
         }
     } else if meta_persist_needed {
@@ -1204,21 +1202,14 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
         // batched treatment the wal branch above gets from the checkpoint: no
         // per-stream timer task, no per-append sidecar rewrite (#4691).
         //
-        // GATED (cardinality-cliff fix): only queue when the append actually
-        // changed state the sidecar must persist — producer/seq idempotency or a
-        // sliding TTL (see `meta_persist_needed`). A plain append to a non-TTL
-        // stream changes only `durable_tail`/`last_access`, and memory-mode
-        // recovery reads NEITHER (the tail is re-derived from the data-file
-        // length in `Store::new_with_tier`; `last_access` only gates TTL expiry,
-        // which these streams don't have). Skipping the queue for that common
-        // case removes the per-append sidecar rewrite whose cost stops amortizing
-        // at high stream cardinality (CARDINALITY_CLIFF_CAUSES.md #1).
-        //
-        // `mem_meta_gate()` (default on) can be turned off to restore always-queue
-        // for a same-binary A/B of the fix.
-        store.mark_meta_dirty(&st);
-    } else if !crate::store::mem_meta_gate() {
-        // A/B baseline (gate off): old behavior — queue every memory-mode append.
+        // Only queued when the append actually changed state the sidecar must
+        // persist — producer/seq idempotency or a sliding TTL. A plain append to
+        // a non-TTL stream changes only `durable_tail`/`last_access`, and
+        // memory-mode recovery reads NEITHER (the tail is re-derived from the
+        // data-file length in `Store::new_with_tier`; `last_access` only gates
+        // TTL expiry, which these streams don't have). Skipping the queue for
+        // that common case removes the per-append sidecar rewrite whose cost
+        // stops amortizing at high stream cardinality.
         store.mark_meta_dirty(&st);
     }
     if !wire.is_empty() {

@@ -168,10 +168,9 @@ fn main() {
                 let v = val(args.next(), "--tier");
                 tier.kind = match v.as_str() {
                     "off" => tier::TierKind::Off,
-                    "local" => tier::TierKind::Local,
                     "s3" => tier::TierKind::S3,
                     _ => {
-                        eprintln!("--tier must be off|local|s3");
+                        eprintln!("--tier must be off|s3");
                         std::process::exit(2);
                     }
                 };
@@ -194,9 +193,6 @@ fn main() {
             }
             "--tier-allow-http" => {
                 tier.allow_http = true;
-            }
-            "--tier-local-dir" => {
-                tier.local_dir = Some(val(args.next(), "--tier-local-dir").into());
             }
             "--wal-shards" => {
                 let n: usize = parse_val(args.next(), "--wal-shards");
@@ -240,12 +236,6 @@ fn main() {
                     }
                 }
             }
-            // Dev/benchmark toggles for the cardinality-cliff investigation.
-            // `--meta-sweep-disable` drops the memory-mode sidecar write (makes
-            // the sidecar permanently stale — bench-only); `--meta-sweep-stats`
-            // logs a META_SWEEP line per tick.
-            "--meta-sweep-disable" => store::set_meta_sweep_disable(true),
-            "--meta-sweep-stats" => store::set_meta_sweep_stats(true),
             // Periodic SRV_STATS line (both modes): cpu_cores / inflight / service
             // + appender-lock + durability wait — bottleneck analysis.
             "--server-stats" => {
@@ -255,49 +245,6 @@ fn main() {
                     std::process::exit(2);
                 }
                 server_stats_secs = Some(n);
-            }
-            "--wal-meta-gate" => {
-                let v = val(args.next(), "--wal-meta-gate");
-                match v.as_str() {
-                    "on" => store::set_wal_meta_gate(true),
-                    "off" => store::set_wal_meta_gate(false),
-                    _ => {
-                        eprintln!("--wal-meta-gate must be on|off");
-                        std::process::exit(2);
-                    }
-                }
-            }
-            "--mem-meta-gate" => {
-                let v = val(args.next(), "--mem-meta-gate");
-                match v.as_str() {
-                    "on" => store::set_mem_meta_gate(true),
-                    "off" => store::set_mem_meta_gate(false),
-                    _ => {
-                        eprintln!("--mem-meta-gate must be on|off");
-                        std::process::exit(2);
-                    }
-                }
-            }
-            // Removed knob: parallel per-file checkpoint fsync regressed in every
-            // controlled test; superseded by the (default-on) syncfs barrier.
-            // Accepted-and-ignored so old deploy scripts don't crash the server.
-            "--wal-fsync-parallel" => {
-                let _ = val(args.next(), "--wal-fsync-parallel");
-                eprintln!("warning: --wal-fsync-parallel is removed (no-op); the syncfs checkpoint barrier supersedes it");
-            }
-            // Checkpoint durability via per-lane syncfs() barriers instead of the
-            // O(N_touched) per-stream fdatasync loop (cardinality-cliff #1).
-            // DEFAULT ON for Linux; `off` = escape hatch. No-op elsewhere.
-            "--wal-checkpoint-syncfs" => {
-                let v = val(args.next(), "--wal-checkpoint-syncfs");
-                match v.as_str() {
-                    "on" => wal::shard::set_checkpoint_syncfs(true),
-                    "off" => wal::shard::set_checkpoint_syncfs(false),
-                    _ => {
-                        eprintln!("--wal-checkpoint-syncfs must be on|off");
-                        std::process::exit(2);
-                    }
-                }
             }
             // Checkpoint time trigger: per-shard cadence in ms (default 3000).
             "--wal-checkpoint-interval-ms" => {
@@ -349,6 +296,13 @@ fn main() {
     // tail-cache-off — those belonged to the removed zero-copy path); the only
     // gate is refusing to silently ignore a WAL left by a previous wal run.
     if handlers::durability() == handlers::DurabilityMode::Memory {
+        // Memory mode acks before anything is fsynced, so pairing it with a cold
+        // tier would offload un-fsynced (loseable) data as if it were durable —
+        // a combination with no coherent durability story. Refuse it.
+        if tier.kind != tier::TierKind::Off {
+            eprintln!("error: --durability memory cannot be combined with --tier (memory-mode acks are not durable; tiering presumes durable segments)");
+            std::process::exit(2);
+        }
         // Fail fast on a WAL left by a previous `--durability wal` run: memory mode
         // never opens/replays it, so starting here would silently ignore those
         // records (and drop any not yet folded into the per-stream files). Refuse

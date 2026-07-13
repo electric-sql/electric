@@ -385,29 +385,14 @@ const CHECKPOINT_FILE: &str = "checkpoint";
 // commit path. The syncfs barrier (default on Linux, below) replaces the loop
 // wholesale; the serial per-file loop remains only as the non-Linux fallback.)
 
-/// Checkpoint durability strategy (cardinality-cliff #1). The per-stream
-/// `fdatasync` loop (above) issues ONE device durability barrier per *touched*
-/// stream — `O(N_touched)` syscalls, measured at ~1.4 s of `fsync` per shard at
-/// 200k streams. Those barriers share the device's fixed `fdatasync`/s budget with
-/// the commit path, so the checkpoint storm steals throughput from acks (the cliff)
-/// AND caps wal throughput regardless of shard count (a shared-device sweep showed
-/// s1≈s24). When this is on, step 2 instead issues ONE `syncfs()` per stream lane —
-/// a filesystem-wide barrier that flushes every touched stream file (and everything
-/// else dirty on that fs) at once, collapsing the per-stream `O(N_touched)` cost to
-/// `O(lanes)` syscalls. The durability-before-recycle ordering is unchanged: the
-/// `syncfs` completes before `persist_durable_tails`/recycle.
-///
-/// **Default ON for Linux** (validated: +51% at the 100k-stream cliff, at worst
-/// neutral below it — wal-syncfs/splitlane campaigns 2026-07); `--wal-checkpoint-
-/// syncfs off` is the escape hatch. Non-Linux has no `syncfs` and always uses the
-/// per-stream loop regardless of this flag.
-static CHECKPOINT_SYNCFS: AtomicBool = AtomicBool::new(cfg!(target_os = "linux"));
-pub fn set_checkpoint_syncfs(on: bool) {
-    CHECKPOINT_SYNCFS.store(on, Ordering::Relaxed);
-}
-fn checkpoint_syncfs() -> bool {
-    CHECKPOINT_SYNCFS.load(Ordering::Relaxed)
-}
+/// Checkpoint durability strategy: on Linux, step 2 issues ONE `syncfs()` per
+/// stream lane — a filesystem-wide barrier that flushes every touched stream
+/// file at once, `O(lanes)` syscalls instead of `O(N_touched)` per-stream
+/// `fdatasync` (the cardinality cliff: the per-file loop measured ~1.4 s of
+/// fsync per shard at 200k streams and stole the commit path's device budget).
+/// Non-Linux has no `syncfs` and uses the serial per-file loop. The
+/// durability-before-recycle ordering is identical in both modes: the barrier
+/// completes before `persist_durable_tails`/recycle.
 
 /// Checkpoint cadence knobs (cardinality-cliff follow-up). The checkpoint's only
 /// job is bounding retained-WAL size (= crash-replay time): acks never gate on it
@@ -901,7 +886,7 @@ impl Shard {
             //      syncfs off) fallback. Serial on purpose: parallel fan-out
             //      regressed in every controlled test (it steals device budget
             //      from the commit path).
-            if checkpoint_syncfs() && cfg!(target_os = "linux") && n_touched > 0 {
+            if cfg!(target_os = "linux") && n_touched > 0 {
                 crate::store::syncfs_stream_lanes(&touched[0].2)?;
             } else {
                 for (_, _, f) in &touched {

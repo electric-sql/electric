@@ -12,7 +12,7 @@ is flat from 10k → 100k streams (−5%) at ~26–32× the pre-fix baseline.
 | configuration | ops/s |
 |---|---|
 | pre-fix: streams on network PD, per-stream checkpoint fdatasync storm | 10.4k |
-| + `--wal-checkpoint-syncfs on` (PR #4697) | 13.6k |
+| + syncfs checkpoint barrier (PR #4697) | 13.6k |
 | + stream files on local NVMe (not the boot disk) | 46k |
 | + split-lane layout (WAL shards on their own NVMe devices) | 272k |
 | + size-triggered checkpoint (PR #4704, `--wal-checkpoint-wal-bytes 1GiB`) | 303k |
@@ -77,10 +77,9 @@ Split the box between data lanes and WAL lanes **by cardinality**:
 --worker-threads <vCPUs>
 ```
 
-The syncfs checkpoint barrier (PR #4697) is **default-on for Linux** — one
-`syncfs` per stream lane instead of O(N-touched) per-stream `fdatasync`;
-`--wal-checkpoint-syncfs off` is the escape hatch. `--wal-fsync-parallel` is
-removed (regressed in every controlled test; accepted as a warning no-op).
+The syncfs checkpoint barrier (PR #4697) is unconditional on Linux — one
+`syncfs` per stream lane instead of O(N-touched) per-stream `fdatasync`.
+Non-Linux uses the serial per-file loop (no `syncfs` there).
 
 ### 3. CPU binding (+21–24%)
 
@@ -115,7 +114,7 @@ no longer fsync-bound, it scales with cores again — don't starve it.
   streams = 96% of the default 1,048,576 limit. Not the throughput wall, but a
   hard scale ceiling just above 1M: raise LimitNOFILE, or see #4706 (lazy fd
   management).
-- `--wal-checkpoint-syncfs` and the size trigger are opt-in; flipping defaults
-  (syncfs on for Linux) is a candidate after soak.
+- The checkpoint size trigger is opt-in (`--wal-checkpoint-wal-bytes 0` default);
+  making ~1 GiB the default is a candidate after soak.
 - Larger retained WAL = longer replay: 1 GiB/shard ≈ sub-second on local NVMe,
   but budget it consciously on slower disks.

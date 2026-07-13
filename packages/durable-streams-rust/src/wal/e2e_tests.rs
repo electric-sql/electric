@@ -962,7 +962,6 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
 async fn e2e_stream_lanes_recover_acked_records() {
     let _guard = DurabilityGuard::wal();
     crate::store::set_stream_lanes(3);
-    crate::wal::shard::set_checkpoint_syncfs(true);
     const SEG: u64 = 4096;
     let dir = tmp("stream-lanes");
 
@@ -1009,7 +1008,6 @@ async fn e2e_stream_lanes_recover_acked_records() {
         );
     }
     h2.crash();
-    crate::wal::shard::set_checkpoint_syncfs(cfg!(target_os = "linux")); // restore platform default
     crate::store::set_stream_lanes(1);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1024,7 +1022,6 @@ async fn e2e_stream_lanes_recover_acked_records() {
 #[tokio::test]
 async fn e2e_checkpoint_syncfs_recovers_acked_records() {
     let _guard = DurabilityGuard::wal();
-    crate::wal::shard::set_checkpoint_syncfs(true);
     const SEG: u64 = 4096;
     let dir = tmp("syncfs-ckpt");
 
@@ -1057,7 +1054,6 @@ async fn e2e_checkpoint_syncfs_recovers_acked_records() {
         "syncfs-checkpoint acked records recover byte-identical (durability-before-recycle held)"
     );
     h2.crash();
-    crate::wal::shard::set_checkpoint_syncfs(cfg!(target_os = "linux")); // restore platform default
     let _ = std::fs::remove_dir_all(&dir);
 }
 

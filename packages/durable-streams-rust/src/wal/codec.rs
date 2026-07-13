@@ -24,11 +24,8 @@
 //! trivially true even when a crash left a valid header over a zeroed,
 //! never-fully-written payload. Every WAL record is written by the buffered path,
 //! which has the payload in userspace and always sets `PAYLOAD_CHECKSUMMED`, so
-//! such a torn record now fails decode. The old `--zero-copy` splice relay (the
-//! only writer that left the flag clear) has been removed, so Bug #1 is **fully
-//! closed** — there is no longer any unchecksummed WAL record in production. The
-//! `PAYLOAD_CHECKSUMMED` flag and the flag-clear decode branch are retained only
-//! for on-disk format stability.
+//! such a torn record now fails decode. Every WAL record is checksummed; a
+//! record with the flag clear is treated as torn/corrupt (ends the durable log).
 //!
 //! The header CRC also doubles as a torn-header detector: a partially-written
 //! header almost always fails the CRC, and an all-zero (`fallocate`'d,
@@ -41,10 +38,8 @@
 pub const HEADER_LEN: usize = 38;
 
 /// `flags` bit 0: the record's `payload_crc` field is a valid crc32c over the
-/// payload and MUST be verified on decode. Every WAL writer (`encode_into`) sets
-/// this — the old zero-copy splice relay that left it clear has been removed, so
-/// all production WAL records are checksummed. The flag-clear branch in
-/// [`decode_at`] is retained only for on-disk format stability.
+/// payload. Every WAL writer (`encode_into`) sets it, and decode REQUIRES it —
+/// a flag-clear header is treated as torn/corrupt.
 pub const PAYLOAD_CHECKSUMMED: u8 = 0b0000_0001;
 
 /// Record kind discriminant. The numeric values are the on-disk encoding and
@@ -229,12 +224,12 @@ pub fn decode_at(seg: &[u8], off: usize) -> Decoded {
         return Decoded::Torn;
     }
 
-    // Bug #1 fix: if the writer checksummed the payload (buffered path), verify
-    // it. A torn/zeroed payload under a valid header (the fallocate'd-tail case)
-    // fails here and is rejected as Torn. Zero-copy records leave the flag clear
-    // and keep the "bytes present = complete" behavior (documented residual).
-    if flags & PAYLOAD_CHECKSUMMED != 0
-        && crc32c::crc32c(&seg[payload_off..payload_off + len]) != payload_crc
+    // Bug #1 fix: verify the payload CRC. A torn/zeroed payload under a valid
+    // header (the fallocate'd-tail case) fails here and is rejected as Torn.
+    // Every writer sets PAYLOAD_CHECKSUMMED; a clear flag marks the record
+    // torn/corrupt (no writer has ever legitimately omitted the checksum here).
+    if flags & PAYLOAD_CHECKSUMMED == 0
+        || crc32c::crc32c(&seg[payload_off..payload_off + len]) != payload_crc
     {
         return Decoded::Torn;
     }
@@ -315,31 +310,6 @@ mod tests {
         }
     }
 
-    // Pure decode-behavior test (NOT a production case): a header with
-    // PAYLOAD_CHECKSUMMED clear opts out of the payload CRC, so a torn/zeroed
-    // payload tail decodes as `Record` (the legacy "bytes present = complete"
-    // branch). No WAL writer emits flag-clear records any more — the zero-copy
-    // splice relay that used to has been removed — so this branch is unreachable
-    // in production and Bug #1 is fully closed. The test pins the decode
-    // semantics only, for on-disk format stability.
-    #[test]
-    fn flag_clear_payload_skips_crc_validation_decode_only() {
-        let len: usize = 8192;
-        let prefix: usize = 4096;
-        let mut seg = Vec::new();
-        // flags=0, payload_crc=0 — a hand-built flag-clear header (no production
-        // writer emits this).
-        encode_header_into(&mut seg, 1, RecordKind::Append, 42, 0, len as u32, 0, 0);
-        seg.extend(std::iter::repeat(0xAB).take(prefix));
-        seg.extend(std::iter::repeat(0u8).take(len - prefix));
-        seg.extend(std::iter::repeat(0u8).take(1 << 20));
-
-        assert!(
-            matches!(decode_at(&seg, 0), Decoded::Record { .. }),
-            "a flag-clear (PAYLOAD_CHECKSUMMED unset) header skips payload-CRC \
-             validation — decode-only behavior, unreachable in production"
-        );
-    }
 
     #[test]
     fn encode_decode_roundtrip_and_torn() {
