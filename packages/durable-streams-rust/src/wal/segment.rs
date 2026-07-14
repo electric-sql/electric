@@ -109,6 +109,7 @@ impl FileSegment {
     /// changes the inode size, we `fsync` (not just `fdatasync`) so the metadata
     /// size change is itself durable — a torn size would re-expose the zero tail.
     pub fn seal_to(&self, len: u64) -> io::Result<()> {
+        crate::fault::check(crate::fault::Site::Seal, 0)?;
         self.file.set_len(len)?;
         let fd = self.file.as_raw_fd();
         // The truncate changes file SIZE (metadata), so a plain fdatasync may not
@@ -178,6 +179,7 @@ fn macos_full_fsync(fd: libc::c_int) -> io::Result<()> {
 
 impl SegmentWriter for FileSegment {
     fn write_at(&self, off: u64, bytes: &[u8]) -> io::Result<()> {
+        crate::fault::check(crate::fault::Site::WalWrite, bytes.len())?;
         let fd = self.file.as_raw_fd();
         let mut written: usize = 0;
         // pwrite may return a short count; loop until the whole slice lands.
@@ -208,6 +210,7 @@ impl SegmentWriter for FileSegment {
     }
 
     fn fdatasync(&self) -> io::Result<()> {
+        crate::fault::check(crate::fault::Site::WalFsync, 0)?;
         let fd = self.file.as_raw_fd();
         // Mirror `store::barrier_fsync`: macOS has no fdatasync, so use
         // F_FULLFSYNC for a true flush-to-platter (power-loss durable); Linux

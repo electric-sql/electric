@@ -954,7 +954,11 @@ impl Shard {
             //    records that were the only durable copy (acked-data loss).
             //    Nothing acked is at risk at abort time: acks never gate on the
             //    checkpoint, and the WAL still holds every record.
-            let barrier = if cfg!(target_os = "linux") && n_touched > 0 {
+            let barrier = if let Err(e) =
+                crate::fault::check(crate::fault::Site::CkptBarrier, 0)
+            {
+                Err(e)
+            } else if cfg!(target_os = "linux") && n_touched > 0 {
                 crate::store::syncfs_stream_lanes(&touched[0].2)
             } else {
                 touched
@@ -1057,6 +1061,7 @@ impl Shard {
             // Nothing touched and no prior map: nothing to persist.
             return Ok(0);
         }
+        crate::fault::check(crate::fault::Site::TailsWrite, 0)?;
         let mut cache = self.tails_cache.lock().unwrap();
         let map = cache.get_or_insert_with(|| Self::read_durable_tails_at(&self.dir));
         for &(id, tail) in touched {

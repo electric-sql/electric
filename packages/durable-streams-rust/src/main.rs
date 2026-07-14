@@ -1,6 +1,7 @@
 mod api;
 mod blobstore;
 mod engine_raw;
+mod fault;
 mod handlers;
 mod http1;
 mod srvstats;

@@ -748,7 +748,19 @@ async fn wait_durable_lsn(store: &Arc<Store>, st: &Arc<StreamState>, lsn: u64) {
 /// awaited in `wait_durable_lsn`.
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
     use std::io::Write;
-    if let Err(e) = (&*ap.file).write_all(wire) {
+    let write_res = match crate::fault::check(crate::fault::Site::DataWrite, wire.len()) {
+        Ok(None) => (&*ap.file).write_all(wire),
+        Ok(Some(n)) => {
+            // Injected SHORT write: emulate ENOSPC mid-slice — a prefix lands in
+            // the file, then the write "fails". Falls through to the SAME
+            // rollback the production error path takes (that rollback is what
+            // this injection validates).
+            let _ = (&*ap.file).write_all(&wire[..n]);
+            Err(std::io::Error::other("injected short data write"))
+        }
+        Err(e) => Err(e),
+    };
+    if let Err(e) = write_res {
         // A partial write (ENOSPC mid-slice) leaves garbage bytes in the file
         // PAST `ap.written` while the logical offsets don't advance — every
         // later append would land after the garbage (O_APPEND) with a logical
