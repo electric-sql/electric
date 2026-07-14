@@ -376,7 +376,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     stream
     |> decode_json_stream_with_offsets()
-    |> chunk_by_txn()
+    |> chunk_by_offset()
     |> Enum.reduce(acc, fn {txn_offset, changes, txids}, acc ->
       emit? = is_log_offset_lt(from_lsn, txn_offset)
 
@@ -414,9 +414,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   # Decode a `{log_offset, json}` log stream (from `get_log_stream_with_offsets/3`)
   # into `{log_offset, txids, change}` tuples so replay can delimit transactions
-  # and tag emitted moves. Unlike the JSON headers, the storage offset is present
-  # for *every* item — including control messages, which carry no `lsn`/`op_position`
-  # in their headers and would otherwise collapse to `before_all/0`.
+  # and tag emitted moves. The storage offset is used rather than the JSON
+  # headers because control messages carry no `lsn`/`op_position` there.
   defp decode_json_stream_with_offsets(stream) do
     stream
     |> Stream.map(fn {offset, json} -> {offset, Jason.decode!(json)} end)
@@ -474,12 +473,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
     %{headers: %{event: event, patterns: patterns, txids: Map.get(headers, "txids", [])}}
   end
 
-  # Group consecutive decoded items into per-transaction batches. Items sharing a
-  # `tx_offset` belong to the same source transaction; each batch is tagged with
-  # the batch's last (largest) offset as its source LSN.
-  defp chunk_by_txn(items) do
+  # Group consecutive decoded items into replay batches keyed by their full
+  # `(tx_offset, op_offset)` offset — the same space `from_lsn`/`move_positions`
+  # live in, so the seed cut and emit boundary can fall between any two items.
+  # This matters because dependency-driven moves (subquery move-in/out) have no
+  # WAL LSN of their own and are appended as successive `op_offset`s within one
+  # `tx_offset`, so grouping by `tx_offset` alone cannot separate them. Each
+  # batch is tagged with its last (largest) offset as its source LSN. Snapshot
+  # lines all share `before_all/0`, so they group into a single pre-real-offsets
+  # batch.
+  defp chunk_by_offset(items) do
     items
-    |> Enum.chunk_by(fn {offset, _txids, _change} -> offset.tx_offset end)
+    |> Enum.chunk_by(fn {offset, _txids, _change} -> {offset.tx_offset, offset.op_offset} end)
     |> Enum.map(fn batch ->
       {offset, _, _} = List.last(batch)
       changes = Enum.map(batch, fn {_o, _t, change} -> change end)
