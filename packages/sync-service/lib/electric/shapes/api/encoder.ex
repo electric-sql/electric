@@ -67,12 +67,10 @@ defmodule Electric.Shapes.Api.Encoder.JSON do
   @json_item_separator ","
 
   # Batch stream items into iodata units bounded by BOTH item count and byte
-  # size. Batching by count alone let a batch of large rows grow into a
-  # multi-megabyte unit; each response body element is held in full by the
-  # request process and by the socket's driver queue while it is being written,
-  # so a serve to a slow or stalled client pins the whole unit for as long as
-  # the serve lives. Bounding the unit size bounds the memory pinned per
-  # stalled connection.
+  # size. Each response body element is held in full by the request process
+  # and by the socket's driver queue while it is being written, so a serve to
+  # a slow or stalled client pins the whole unit for as long as the serve
+  # lives. Bounding the unit size bounds the memory pinned per connection.
   @max_batch_items 500
   @max_batch_bytes 256 * 1024
 

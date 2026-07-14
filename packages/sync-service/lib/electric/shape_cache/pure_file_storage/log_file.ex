@@ -179,9 +179,8 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
   # Every emitted json is a sub-binary of the block it was read from, and the
   # response-streaming pipeline can hold an in-flight element (and everything
   # it references) for the whole lifetime of a serve — including one stalled
-  # on a slow client. An eager whole-range read pinned the entire ~10MB chunk
-  # (once as the read binary, again as the full list of entries) per stalled
-  # connection; bounding the read block bounds that to ~the block size.
+  # on a slow client. Bounding the read block bounds the memory each stalled
+  # connection can pin.
   @read_block_bytes 64 * 1024
 
   def stream_jsons(
