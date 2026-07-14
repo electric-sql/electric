@@ -185,7 +185,7 @@ export async function stopRuntimeEntry(
   }
 }
 
-export async function startRuntime(
+async function startRuntimeAttempt(
   deps: RuntimeLifecycleDeps,
   serverId: string
 ): Promise<void> {
@@ -387,6 +387,35 @@ export async function startRuntime(
       (error instanceof Error ? error.message : String(error))
     entry.reconnectAttempt += 1
     refreshPowerSaveBlocker(deps)
+    scheduleReconnect(deps, serverId)
+  }
+}
+
+export async function startRuntime(
+  deps: RuntimeLifecycleDeps,
+  serverId: string
+): Promise<void> {
+  try {
+    await startRuntimeAttempt(deps, serverId)
+  } catch (error) {
+    const activeServer = deps.findServer(serverId)
+    if (!activeServer) return
+    const entry = deps.ensureRuntimeEntry(activeServer)
+    if (entry.desiredState !== `connected`) return
+
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(
+      `[agents-desktop] Failed to start built-in agents runtime for ${activeServer.url}:`,
+      error
+    )
+    entry.status = `error`
+    entry.localRuntimeStatus = `error`
+    entry.runtimeUrl = null
+    entry.runtimeError = message
+    entry.lastError = message
+    entry.reconnectAttempt += 1
+    refreshPowerSaveBlocker(deps)
+    deps.refreshDesktopState()
     scheduleReconnect(deps, serverId)
   }
 }

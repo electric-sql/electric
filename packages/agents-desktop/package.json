@@ -24,7 +24,8 @@
     "rebuild:native": "electron-builder install-app-deps",
     "start": "pnpm run ensure:electron && electron .",
     "coverage": "true",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@electric-sql/client": "^1.5.22",
@@ -53,6 +54,7 @@
     "typescript": "^5.8.3",
     "vite": "^7.1.7",
     "vite-plugin-electron": "^0.29.1",
-    "wait-on": "^9.0.1"
+    "wait-on": "^9.0.1",
+    "vitest": "^3.2.4"
   }
 }

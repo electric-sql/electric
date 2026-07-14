@@ -279,13 +279,13 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
-  it(`coalesces wake notifications skipped while the same stream is already being claimed`, async () => {
+  it(`retries every wake notification skipped while the same stream is already being claimed`, async () => {
     const events = [
       { ...wakeEvent(`parent`), generation: 1 },
       { ...wakeEvent(`parent`), generation: 2 },
       { ...wakeEvent(`parent`), generation: 3 },
     ]
-    const claims = [`one`, `coalesced`].map(notification)
+    const claims = [`one`, `two`, `three`].map(notification)
     const firstClaimResponse = deferred<Response>()
     const fetchMock = vi
       .fn()
@@ -294,6 +294,9 @@ describe(`createPullWakeRunner`, () => {
       )
       .mockImplementationOnce(async (_input: RequestInfo | URL) =>
         Response.json(claims[1])
+      )
+      .mockImplementationOnce(async (_input: RequestInfo | URL) =>
+        Response.json(claims[2])
       )
     vi.stubGlobal(`fetch`, fetchMock)
     const testRuntime = runtime()
@@ -322,10 +325,10 @@ describe(`createPullWakeRunner`, () => {
 
     firstClaimResponse.resolve(Response.json(claims[0]))
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     })
     await waitFor(() => {
-      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(2)
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(3)
     })
 
     await runner.stop()
@@ -375,8 +378,9 @@ describe(`createPullWakeRunner`, () => {
     await waitFor(() => {
       expect(requestGenerations).toEqual([1, 2])
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(requestGenerations).toEqual([1, 2])
+    await waitFor(() => {
+      expect(requestGenerations).toEqual([1, 2, 3])
+    })
 
     await runner.stop()
   })
