@@ -521,7 +521,15 @@ impl Store {
             };
             let (tail, file_base, file) = {
                 let s = st.shared.read().unwrap();
-                (s.tail, s.file_base, s.file.clone())
+                // Seal at most up to the DURABLE frontier, never the writer
+                // tail: `s.tail` includes bytes whose WAL fdatasync hasn't
+                // completed (un-acked). Sealing them makes never-acked bytes
+                // durably part of the sealed record — after a crash, recovery
+                // truncates the live file to the durable frontier but nothing
+                // trims sealed segments, so the torn bytes would be SERVED as
+                // durable and would permanently shadow the client's retried
+                // (acked) bytes at the same offsets.
+                (s.durable_tail, s.file_base, s.file.clone())
             };
             let unsealed = tail.saturating_sub(sealed_offset);
             if unsealed < seg_bytes {
@@ -827,8 +835,29 @@ impl TierTask {
                 }
             }
             let stc = st.clone();
-            let _ = tokio::task::spawn_blocking(move || write_meta_sync(&stc, true)).await;
-            let _ = tokio::fs::remove_file(&path).await;
+            // The unlink is safe ONLY after the Local->Remote flip is durable:
+            // unlinking first and crashing leaves a durable sidecar that says
+            // Local pointing at a file that no longer exists — the segment
+            // becomes permanently unreadable even though the object is in S3.
+            match tokio::task::spawn_blocking(move || write_meta_sync(&stc, true)).await {
+                Ok(Ok(())) => {
+                    let _ = tokio::fs::remove_file(&path).await;
+                }
+                Ok(Err(e)) => {
+                    eprintln!(
+                        "WARN: boot offload of {} uploaded but could not durably flip \
+                         the manifest ({e}); keeping the local chunk for retry",
+                        path.display()
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "WARN: boot offload manifest flip task failed for {} ({e}); \
+                         keeping the local chunk",
+                        path.display()
+                    );
+                }
+            }
         }
         st.tier.manifest.lock().unwrap().offloading = false;
     }
@@ -840,6 +869,10 @@ impl TierTask {
 pub enum ResolvedSlice {
     Local(Segment),
     Remote { key: String, offset: u64, len: u64 },
+    /// A slice whose backing local chunk could not be opened (missing/EIO).
+    /// Poison: any read resolving this must ERROR, never serve around it —
+    /// omitting it would produce a well-formed 200 missing interior bytes.
+    Missing,
 }
 
 /// If every resolved slice is `Local` (the live data file and/or sealed chunk
@@ -854,7 +887,9 @@ pub fn into_local_segments(slices: Vec<ResolvedSlice>) -> Result<Vec<Segment>, V
             .into_iter()
             .map(|s| match s {
                 ResolvedSlice::Local(seg) => seg,
-                ResolvedSlice::Remote { .. } => unreachable!("checked all-Local above"),
+                ResolvedSlice::Remote { .. } | ResolvedSlice::Missing => {
+                    unreachable!("checked all-Local above")
+                }
             })
             .collect())
     } else {
@@ -933,12 +968,24 @@ fn resolve_sealed(st: &Arc<StreamState>, lo: u64, hi: u64, out: &mut Vec<Resolve
                 // lock), so we always open the chunk file *before* it is unlinked
                 // (and the fd stays valid after unlink). Do not move the open
                 // outside the lock: that reintroduces an open-vs-unlink race.
-                if let Ok(f) = OpenOptions::new().read(true).open(path) {
-                    out.push(ResolvedSlice::Local(Segment {
+                match OpenOptions::new().read(true).open(path) {
+                    Ok(f) => out.push(ResolvedSlice::Local(Segment {
                         file: Arc::new(f),
                         file_start: off_in_seg,
                         len,
-                    }));
+                    })),
+                    Err(e) => {
+                        // NEVER silently omit a slice: Content-Length is computed
+                        // from the resolved slices, so a dropped slice produces a
+                        // well-formed 200 that is simply MISSING interior bytes —
+                        // the client's next offset then skips them forever.
+                        // Surface a poison slice so the read errors instead.
+                        eprintln!(
+                            "ERROR: sealed chunk {} unreadable ({e}) — failing the read",
+                            path.display()
+                        );
+                        out.push(ResolvedSlice::Missing);
+                    }
                 }
             }
             Placement::Remote(key) => {

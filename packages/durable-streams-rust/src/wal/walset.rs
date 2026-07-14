@@ -107,7 +107,20 @@ impl WalSet {
             None => {
                 // Fresh data dir: persist the requested N, or the caller's default.
                 let n = requested_n.unwrap_or(default_n).max(1);
-                std::fs::write(&shards_path, n.to_string())?;
+                // Durable write (tmp + sync + rename + dir fsync): a lost
+                // `shards` file next to surviving shard dirs would re-derive a
+                // DIFFERENT N on the next boot — shard dirs >= N would silently
+                // never be opened or replayed (acked-data loss) and stream->shard
+                // routing would shift.
+                let tmp = wal_dir.join("shards.tmp");
+                {
+                    use std::io::Write;
+                    let mut f = std::fs::File::create(&tmp)?;
+                    f.write_all(n.to_string().as_bytes())?;
+                    f.sync_all()?;
+                }
+                std::fs::rename(&tmp, &shards_path)?;
+                crate::store::fsync_parent_dir(&shards_path)?;
                 n
             }
         };

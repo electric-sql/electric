@@ -228,20 +228,6 @@ impl CommitSignal {
         g.work_pending = false;
         g.stop
     }
-
-    /// Error-backoff wait: park up to `timeout`, returning early if stop is
-    /// requested. Returns whether `stop` was requested. Does **not** clear
-    /// `work_pending` — we want to retry the same un-acked watermark, and a
-    /// pending stage should still drive the next wake. Using the condvar (rather
-    /// than `thread::sleep`) lets shutdown interrupt a long backoff.
-    fn backoff_wait(&self, timeout: std::time::Duration) -> bool {
-        let g = self.state.lock().unwrap();
-        if g.stop {
-            return true;
-        }
-        let (g, _timed_out) = self.cv.wait_timeout(g, timeout).unwrap();
-        g.stop
-    }
 }
 
 /// Handle to a shard's dedicated committer OS thread. Signalling stop + joining
@@ -492,7 +478,12 @@ impl Shard {
             Some((start, path)) => (start, Arc::new(FileSegment::open_existing(path)?)),
             None => (
                 1,
-                Arc::new(FileSegment::create(seg_path(&dir, 1), segment_size)?),
+                {
+                    let seg = Arc::new(FileSegment::create(seg_path(&dir, 1), segment_size)?);
+                    // Durable dirent for the fresh segment (see roll-site note).
+                    crate::store::fsync_parent_dir(&seg_path(&dir, 1))?;
+                    seg
+                },
             ),
         };
         Ok(std::sync::Arc::new(Shard {
@@ -583,6 +574,11 @@ impl Shard {
             seg_path(&self.dir, seg_start_lsn),
             self.segment_size,
         )?);
+        // Barrier the shard DIR: reset unlinked the old segments and created a
+        // fresh one under the SAME name — without a dir fsync a crash can leave
+        // the dirent pointing at the OLD inode, and the next recovery would
+        // replay stale pre-reset records as if they were the fresh log.
+        crate::store::fsync_parent_dir(&seg_path(&self.dir, 1))?;
         let mut g = self.inner.lock().unwrap();
         g.active = active;
         g.seg_start_lsn = seg_start_lsn;
@@ -616,6 +612,15 @@ impl Shard {
         stream_offset: u64,
         payload: &[u8],
     ) -> io::Result<u64> {
+        // Test-only fault injection: simulate a stage failure. Fires BEFORE the
+        // lsn reservation: production write failures retry-then-abort (see
+        // below), so a reserved-but-unwritten gap is unreachable in production —
+        // the hook models the reachable outcome (a clean Err, no lsn consumed).
+        #[cfg(test)]
+        if self.fail_next_write.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            return Err(io::Error::other("injected WAL stage failure"));
+        }
+
         // Test-only ordering seam (CQ-1): fires before any lsn is reserved, i.e.
         // before this record can ever become durable. A test uses it to assert the
         // stream was already registered dirty by the caller (register-before-stage).
@@ -668,7 +673,22 @@ impl Shard {
                 // packed seam). The committer additionally fsyncs this sealed
                 // segment via `sealed_pending` to cover any record still being
                 // written into it off-lock (see `sealed_pending` docs).
-                g.active.seal_to(g.write_pos)?;
+                if let Err(e) = g.active.seal_to(g.write_pos) {
+                    // FAIL-STOP: seal_to is a durability barrier (set_len +
+                    // fsync). A failed one retried on the next overflowing
+                    // append can falsely succeed (kernel consumed the error);
+                    // after a crash the un-truncated segment reads with a
+                    // grafted zero tail that silently ENDS replay — discarding
+                    // every acked record in every later segment. Nothing acked
+                    // is at risk at abort time (no lsn reserved yet).
+                    eprintln!(
+                        "FATAL: WAL segment seal (truncate+fsync) failed for shard {:?}: {e}. \
+                         Aborting: a retried seal can falsely succeed and a later \
+                         crash would silently truncate the replayed log.",
+                        self.dir
+                    );
+                    std::process::abort();
+                }
                 let next_lsn = g.next_lsn;
                 // The highest lsn already reserved in the old segment is
                 // `next_lsn - 1` (the rolling record itself, `next_lsn`, lands in
@@ -681,6 +701,11 @@ impl Shard {
                     seg_path(&self.dir, next_lsn),
                     self.segment_size,
                 )?);
+                // Make the new segment's DIR ENTRY durable: fdatasync of record
+                // bytes persists file data, not the dirent — without this, a
+                // crash can orphan the inode and replay never sees the segment
+                // (acked records in it silently vanish).
+                crate::store::fsync_parent_dir(&seg_path(&self.dir, next_lsn))?;
                 g.active = new_seg;
                 g.seg_start_lsn = next_lsn;
                 g.write_pos = 0;
@@ -703,13 +728,32 @@ impl Shard {
             &Record { lsn, kind, stream_id, stream_offset, payload },
         );
 
-        // Test-only fault injection: simulate a write_at failure.
-        #[cfg(test)]
-        if self.fail_next_write.swap(false, std::sync::atomic::Ordering::SeqCst) {
-            return Err(io::Error::other("injected WAL segment write_at failure"));
-        }
 
-        seg.write_at(off, &buf)?;
+        // A failed positioned WRITE is soundly retryable (unlike fsync: the
+        // encoded bytes are still in hand) — but an UNRECOVERED failure leaves a
+        // permanent gap lsn that freezes the shard's contiguous watermark
+        // forever: every later append would stage fine and then hang in
+        // wait_durable with no ack and no error (silent whole-shard wedge).
+        // Bounded retries close the transient case; a persistent write error is
+        // fail-stop, mirroring the committer's barrier policy.
+        let mut write_result = seg.write_at(off, &buf);
+        for _ in 0..2 {
+            if write_result.is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            write_result = seg.write_at(off, &buf);
+        }
+        if let Err(e) = write_result {
+            eprintln!(
+                "FATAL: WAL segment write failed for shard {:?} lsn {lsn} after retries: {e}. \
+                 Aborting: the reserved lsn range would otherwise become a permanent \
+                 gap that silently wedges the shard's durability watermark (all later \
+                 appends would hang un-acked forever).",
+                self.dir
+            );
+            std::process::abort();
+        }
         {
             let mut g = super::telemetry::timed_lock(
                 |ns| self.stats.record_inner_lock_wait(ns),
@@ -845,6 +889,35 @@ impl Shard {
         // checkpoint_lsn → recycle. Acks never gate on any of this.
         let this = Arc::clone(self);
         tokio::task::spawn_blocking(move || -> io::Result<u64> {
+            let result = Self::checkpoint_blocking(&this, &drained, checkpoint_lsn);
+            if result.is_err() {
+                // A failed checkpoint must NOT drop the drained dirty set: these
+                // streams' tails proofs were never persisted, and nothing
+                // re-registers them until their NEXT append — a later successful
+                // checkpoint would recycle their WAL records anyway and a
+                // subsequent restart would truncate acked bytes back to a stale
+                // frontier. Re-register so the next checkpoint re-barriers and
+                // re-records their tails. (register_dirty is epoch-CAS'd, so a
+                // stream that re-appended meanwhile is not double-added.)
+                for st in drained.iter() {
+                    this.register_dirty(st.id, Arc::clone(st));
+                }
+            }
+            result
+        })
+        .await
+        .expect("checkpoint task panicked")
+    }
+
+    /// The blocking body of [`Self::checkpoint`]: capture → barrier → tails →
+    /// checkpoint_lsn → recycle → sidecars. Split out so the caller can
+    /// re-register `drained` on error (see checkpoint()).
+    fn checkpoint_blocking(
+        this: &Arc<Self>,
+        drained: &[Arc<StreamState>],
+        checkpoint_lsn: u64,
+    ) -> io::Result<u64> {
+        {
             // Phase timing for the `WAL_CKPT` line (`--wal-stats`). One clock
             // read per phase, once per ~3 s per shard — nowhere near the hot path.
             let t_start = std::time::Instant::now();
@@ -874,12 +947,30 @@ impl Shard {
             //      syncfs off) fallback. Serial on purpose: parallel fan-out
             //      regressed in every controlled test (it steals device budget
             //      from the commit path).
-            if cfg!(target_os = "linux") && n_touched > 0 {
-                crate::store::syncfs_stream_lanes(&touched[0].2)?;
+            //    FAIL-STOP on barrier error: like the committer's fdatasync, a
+            //    failed syncfs/fsync must not be retried in place — the kernel
+            //    consumes the error and drops the dirty pages, so the NEXT
+            //    checkpoint's barrier can falsely succeed and recycle the WAL
+            //    records that were the only durable copy (acked-data loss).
+            //    Nothing acked is at risk at abort time: acks never gate on the
+            //    checkpoint, and the WAL still holds every record.
+            let barrier = if cfg!(target_os = "linux") && n_touched > 0 {
+                crate::store::syncfs_stream_lanes(&touched[0].2)
             } else {
-                for (_, _, f) in &touched {
-                    crate::store::barrier_fsync(f)?;
-                }
+                touched
+                    .iter()
+                    .try_for_each(|(_, _, f)| crate::store::barrier_fsync(f))
+            };
+            if let Err(e) = barrier {
+                eprintln!(
+                    "FATAL: checkpoint durability barrier failed for shard {:?}: {e}. \
+                     Aborting: a retried barrier can falsely succeed (the kernel \
+                     drops dirty pages and clears the error) and the next \
+                     checkpoint would recycle the WAL over lost bytes. Restart \
+                     recovery replays the retained WAL.",
+                    this.dir
+                );
+                std::process::abort();
             }
             let t_fsync = t_start.elapsed();
 
@@ -919,7 +1010,7 @@ impl Shard {
             //    must never delay the recycle floor. Errors are ignored exactly
             //    like the debounced flush ignored them.
             let mut n_meta = 0u64;
-            for st in &drained {
+            for st in drained {
                 if st.meta_dirty.swap(false, Ordering::AcqRel) {
                     let _ = crate::store::write_meta_sync(st, false);
                     n_meta += 1;
@@ -944,9 +1035,7 @@ impl Shard {
             }
 
             Ok(checkpoint_lsn)
-        })
-        .await
-        .expect("checkpoint task panicked")
+        }
     }
 
     /// Merge `touched` `(stream_id, durable_tail)` pairs into the persisted
@@ -997,6 +1086,11 @@ impl Shard {
         // crash-durable BEFORE recycle (the whole point of 11b).
         std::fs::File::open(&tmp)?.sync_all()?;
         std::fs::rename(&tmp, &path)?;
+        // The rename is crash-durable only once the shard DIR entry is fsynced —
+        // and recycle's unlinks in the same tick hit this same directory. Without
+        // this barrier a crash could persist the unlinks but not the rename:
+        // stale tails proof + WAL gone = recovery truncates acked bytes.
+        crate::store::fsync_parent_dir(&path)?;
         Ok(n)
     }
 
@@ -1393,44 +1487,33 @@ impl Shard {
     /// we always re-snapshot the watermark off-lock after waking. A stage racing
     /// the park is therefore never lost (see [`CommitSignal`]).
     ///
-    /// **fsync-error path:** on `fdatasync` failure we do **not** advance
-    /// `durable_lsn` (no ack) and back off with bounded exponential delay
-    /// (interruptible by shutdown), exactly as the no-loss invariant requires.
+    /// **fsync-error path: FAIL-STOP.** A failed WAL `fdatasync` must never be
+    /// retried in place: on Linux (>=4.13) a failed fsync marks the dirty pages
+    /// clean and consumes the fd's error state, so a retry on the same fd can
+    /// return success without the bytes ever reaching stable storage — the
+    /// retry would then publish `durable_lsn` over lost bytes and ack them
+    /// (the PostgreSQL "fsyncgate" failure mode). Aborting here is provably
+    /// safe: `durable_lsn` was not advanced, so everything at risk is un-acked,
+    /// and restart replay ends at the torn point exactly as a crash would.
     ///
     /// **Shutdown:** on a stop signal the loop performs a **final drain**
     /// (commits everything already contiguous-written, so in-flight commits are
-    /// not dropped) and then returns so the thread can be joined.
+    /// not dropped) and then returns so the thread can be joined. A drain-time
+    /// fsync error gives up WITHOUT acking (no-loss holds; the process is
+    /// exiting anyway, so no abort is needed to prevent a later false ack).
     pub fn run_committer(&self) {
-        // Backoff state for the fsync-error path: a persistently failing disk
-        // (ENOSPC/EIO/read-only volume) must not busy-spin a core, hammer the disk,
-        // and flood stderr. The no-loss invariant holds throughout — `durable_lsn`
-        // is never advanced on failure, so nothing is ever acked.
-        const RETRY_BACKOFF_MIN: std::time::Duration = std::time::Duration::from_millis(5);
-        const RETRY_BACKOFF_MAX: std::time::Duration = std::time::Duration::from_secs(1);
-        const LOG_EVERY: u64 = 100;
-        let mut backoff = RETRY_BACKOFF_MIN;
-        let mut consecutive_errors: u64 = 0;
         loop {
             match self.commit_once() {
                 Ok(Some(_)) => {
                     // Advanced — re-snapshot immediately; more may have arrived
                     // while we were fsyncing (group commit naturally batches them).
-                    consecutive_errors = 0;
-                    backoff = RETRY_BACKOFF_MIN;
                     continue;
                 }
                 Ok(None) => {
-                    // Caught up — reset the error backoff and park for the next
-                    // stage (or a stop signal).
-                    consecutive_errors = 0;
-                    backoff = RETRY_BACKOFF_MIN;
+                    // Caught up — park for the next stage (or a stop signal).
                     if self.commit_signal.wait_for_work() {
                         // Stop requested: drain any records that became
-                        // contiguous-written before/at the stop, then exit. We do
-                        // NOT retry fsync errors forever here — on error we log and
-                        // give up (no-loss holds: durable_lsn is not advanced, so
-                        // the un-drained tail simply stays un-acked, exactly as a
-                        // crash would leave it).
+                        // contiguous-written before/at the stop, then exit.
                         loop {
                             match self.commit_once() {
                                 Ok(Some(_)) => continue,
@@ -1447,23 +1530,17 @@ impl Shard {
                     }
                 }
                 Err(e) => {
-                    // Rate-limited log + bounded exponential backoff. The backoff
-                    // parks on the condvar (not a raw sleep) so shutdown can
-                    // interrupt it; a stream of concurrent stages cannot turn the
-                    // retry into a hot loop (we do not clear `work_pending` here,
-                    // so the same un-acked watermark is retried).
-                    consecutive_errors += 1;
-                    if consecutive_errors == 1 || consecutive_errors % LOG_EVERY == 0 {
-                        eprintln!(
-                            "WAL committer fdatasync failed (attempt {consecutive_errors}): {e}"
-                        );
-                    }
-                    if self.commit_signal.backoff_wait(backoff) {
-                        // Stop requested during backoff: exit without acking the
-                        // failing watermark (no-loss preserved).
-                        return;
-                    }
-                    backoff = (backoff * 2).min(RETRY_BACKOFF_MAX);
+                    // FAIL-STOP (see doc above): no in-place fsync retry is
+                    // sound on Linux, and the design keeps no in-memory copy to
+                    // re-write the range. Nothing at risk was acked.
+                    eprintln!(
+                        "FATAL: WAL committer fdatasync failed for shard {:?}: {e}. \
+                         Aborting: a retried fsync can falsely succeed (the kernel \
+                         drops dirty pages and clears the error) and would ack lost \
+                         bytes. Restart recovery replays the durable log.",
+                        self.dir
+                    );
+                    std::process::abort();
                 }
             }
         }
@@ -1476,7 +1553,29 @@ impl Shard {
         let me = Arc::clone(self);
         let join = std::thread::Builder::new()
             .name("wal-committer".to_string())
-            .spawn(move || me.run_committer())
+            .spawn(move || {
+                // SUPERVISION: a committer that dies of a PANIC (poisoned lock,
+                // bug) must not leave a half-alive server — durable_lsn freezes,
+                // every in-flight wait_durable parks forever, appends keep being
+                // staged and their connections never release their permits, and
+                // the server degrades into a silent total denial of service.
+                // Fail-stop instead: nothing at risk was acked (durable_lsn only
+                // advances on a successful barrier), so restart recovery is
+                // strictly better than the frozen half-life. A normal return
+                // (stop-signal shutdown drain) is NOT a failure.
+                let dir = me.dir.clone();
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    me.run_committer()
+                }));
+                if r.is_err() {
+                    eprintln!(
+                        "FATAL: WAL committer thread for shard {dir:?} panicked. \
+                         Aborting: a dead committer freezes durable_lsn and turns \
+                         every append into a silent, permanent hang."
+                    );
+                    std::process::abort();
+                }
+            })
             .expect("spawn WAL committer thread");
         CommitterHandle {
             shard: Arc::clone(self),
@@ -1814,28 +1913,24 @@ mod tests {
 
     #[tokio::test]
     async fn write_error_fails_the_stage_without_panicking() {
-        // A transient WAL `write_at` failure must surface as a `Result::Err`
-        // (so the caller fails the ack) — NOT a process panic. The reserved lsn
-        // stays a permanent gap, so a LATER good stage can never become durable
-        // past it (the committer's contiguous watermark is blocked).
+        // An injected stage failure must surface as a `Result::Err` (so the
+        // caller fails the ack) — NOT a process panic — and must consume no
+        // lsn: the next good stage proceeds and becomes durable normally.
+        // (Production `write_at` failures after reservation retry then
+        // fail-stop, so a reserved-but-unwritten gap is unreachable; the pure
+        // gap-blocks-watermark invariant is covered by the reserve_only test
+        // above.)
         let sh = Shard::open(tmp("write-err")).unwrap();
 
         sh.fail_next_write();
         let err = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"boom");
-        assert!(err.is_err(), "an injected write_at failure must return Err, not panic");
+        assert!(err.is_err(), "an injected stage failure must return Err, not panic");
 
-        // The failed lsn (1) was reserved but never written → permanent gap. A
-        // subsequent good stage (lsn 2) is on disk, but the committer must NOT
-        // advance durable_lsn past the gap at lsn 1.
-        let l2 = sh.reserve_and_stage(RecordKind::Append, 1, 4, b"ok").unwrap();
-        assert_eq!(l2, 2, "the failed stage still consumed lsn 1 (it stays a gap)");
+        let l1 = sh.reserve_and_stage(RecordKind::Append, 1, 0, b"ok").unwrap();
+        assert_eq!(l1, 1, "the failed stage consumed no lsn");
         let h = sh.spawn_committer();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        assert_eq!(
-            sh.durable_lsn(),
-            0,
-            "durable_lsn cannot advance past the unwritten (failed) lsn-1 gap"
-        );
+        sh.wait_durable(l1).await;
+        assert!(sh.durable_lsn() >= l1, "the shard is fully functional after the error");
         h.stop();
     }
 
