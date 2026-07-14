@@ -9,16 +9,16 @@ is flat from 10k → 100k streams (−5%) at ~26–32× the pre-fix baseline.
 
 ## The ladder (what each step bought, @100k streams)
 
-| configuration | ops/s |
-|---|---|
-| pre-fix: streams on network PD, per-stream checkpoint fdatasync storm | 10.4k |
-| + syncfs checkpoint barrier (PR #4697) | 13.6k |
-| + stream files on local NVMe (not the boot disk) | 46k |
-| + split-lane layout (WAL shards on their own NVMe devices) | 272k |
-| + size-triggered checkpoint (PR #4704, `--wal-checkpoint-wal-bytes 1GiB`) | 303k |
-| + exclusive pinned cores (Guaranteed QoS + static CPU manager) | 328k |
-| **all of the above stacked** (suite `wal-stacked-1m`) | **383k** |
-| reference: memory durability (no fsync anywhere) | 512k |
+| configuration                                                             | ops/s    |
+| ------------------------------------------------------------------------- | -------- |
+| pre-fix: streams on network PD, per-stream checkpoint fdatasync storm     | 10.4k    |
+| + syncfs checkpoint barrier (PR #4697)                                    | 13.6k    |
+| + stream files on local NVMe (not the boot disk)                          | 46k      |
+| + split-lane layout (WAL shards on their own NVMe devices)                | 272k     |
+| + size-triggered checkpoint (PR #4704, `--wal-checkpoint-wal-bytes 1GiB`) | 303k     |
+| + exclusive pinned cores (Guaranteed QoS + static CPU manager)            | 328k     |
+| **all of the above stacked** (suite `wal-stacked-1m`)                     | **383k** |
+| reference: memory durability (no fsync anywhere)                          | 512k     |
 
 At extreme cardinality the stacked config on ONE data lane hits a second wall —
 checkpoint writeback (~40× metadata amplification of small appends) saturates
@@ -41,13 +41,13 @@ barrier). Then:
 
 - **One device for stream data files** — mount it and point `--data-dir` at it.
   The per-stream files and the checkpoint's `syncfs` domain live here.
-- **One device per WAL shard** — mount device *j* at `<data-dir>/wal/<i>` (the
-  server opens shard *i* at that path automatically). `--wal-shards` = number of
+- **One device per WAL shard** — mount device _j_ at `<data-dir>/wal/<i>` (the
+  server opens shard _i_ at that path automatically). `--wal-shards` = number of
   dedicated WAL devices.
 - **Never share a device between WAL and stream data.** Commit `fdatasync` vs
   checkpoint writeback contention on one queue was worth 5× by itself
   (55k → 272k). On dedicated lanes the commit-fsync cost is ~zero (checkpoint-off
-  measured *below* an all-lanes-shared no-fsync control).
+  measured _below_ an all-lanes-shared no-fsync control).
 - **Never leave stream data on the boot disk / network PD.** On Kubernetes
   raw-block node pools the default emptyDir sits on the boot PD — this single
   mistake mismeasures (and misdeploys) WAL mode by 5–26×.
@@ -93,7 +93,7 @@ no longer fsync-bound, it scales with cores again — don't starve it.
 
 - **Read performance while tuning checkpoints.** Reads never touch the WAL and
   are served zero-copy (`sendfile`) from the data file's page cache, which is
-  written *before* the WAL ack barrier. Checkpoint cadence has zero read-path
+  written _before_ the WAL ack barrier. Checkpoint cadence has zero read-path
   cost.
 - **Ack latency vs checkpoints.** Acks gate only on the WAL group-commit
   `fdatasync`; a checkpoint never blocks appends.
@@ -101,7 +101,7 @@ no longer fsync-bound, it scales with cores again — don't starve it.
   segment is recycled only after its records' stream bytes are fsynced into
   their files **and** the durable-tail map is persisted (`wal/shard.rs`
   checkpoint ordering; crash-recovery e2e + randomized crash sim cover it).
-  The size trigger only changes *when* that sequence runs.
+  The size trigger only changes _when_ that sequence runs.
 
 ## Caveats / follow-ups
 

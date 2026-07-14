@@ -9,13 +9,13 @@
 //! accumulators.
 //!
 //! Fields:
-//! - `cpu_cores`   process CPU utilization in cores (utime+stime delta / wall);
-//!                 ≈ the cgroup cpu quota ⇒ CPU-bound. Linux only (`-1` elsewhere).
-//! - `appends_s`   acked appends/sec over the interval.
-//! - `inflight`    in-flight append handlers sampled at tick time (queue depth).
-//! - `svc_us`      mean append handler wall time (service time).
-//! - `applock_us`  mean time waiting to acquire the per-stream appender lock.
-//! - `durwait_us`  mean time in `wait_durable_lsn` (WAL fsync wait; ~0 in memory).
+//! - `cpu_cores` process CPU utilization in cores (utime+stime delta / wall);
+//!   ≈ the cgroup cpu quota ⇒ CPU-bound. Linux only (`-1` elsewhere).
+//! - `appends_s` acked appends/sec over the interval.
+//! - `inflight` in-flight append handlers sampled at tick time (queue depth).
+//! - `svc_us` mean append handler wall time (service time).
+//! - `applock_us` mean time waiting to acquire the per-stream appender lock.
+//! - `durwait_us` mean time in `wait_durable_lsn` (WAL fsync wait; ~0 in memory).
 
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::Instant;

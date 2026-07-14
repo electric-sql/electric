@@ -87,28 +87,28 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 
 **Cold-storage tier** — off by default; see [Tiered storage](#tiered-storage-cold-offload). With `--tier off` the server is byte-identical to a single-file deployment.
 
-| Flag                                          | Default    | Description                                                                              |
-| --------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| `--tier`                                      | `off`      | `off` \| `s3` (S3-compatible object storage)                                             |
-| `--tier-endpoint`                             | —          | (`tier=s3`) S3 endpoint URL                                                              |
-| `--tier-region`                               | —          | (`tier=s3`) region                                                                       |
-| `--tier-bucket`                               | —          | (`tier=s3`) bucket name                                                                  |
-| `--tier-key-prefix`                           | —          | object-key prefix for sealed segments                                                    |
-| `--tier-segment-bytes`                        | `8 MiB`    | sealed-segment size (fixed-size, CDN-friendly)                                           |
-| `--tier-compact-bytes`                        | `64 MiB`   | small-segment compaction threshold                                                       |
-| `--tier-path-style` / `--tier-virtual-hosted` | path-style | S3 addressing style                                                                      |
-| `--tier-allow-http`                           | off        | allow plain HTTP to the S3 endpoint (e.g. a local MinIO)                                 |
+| Flag                                          | Default    | Description                                              |
+| --------------------------------------------- | ---------- | -------------------------------------------------------- |
+| `--tier`                                      | `off`      | `off` \| `s3` (S3-compatible object storage)             |
+| `--tier-endpoint`                             | —          | (`tier=s3`) S3 endpoint URL                              |
+| `--tier-region`                               | —          | (`tier=s3`) region                                       |
+| `--tier-bucket`                               | —          | (`tier=s3`) bucket name                                  |
+| `--tier-key-prefix`                           | —          | object-key prefix for sealed segments                    |
+| `--tier-segment-bytes`                        | `8 MiB`    | sealed-segment size (fixed-size, CDN-friendly)           |
+| `--tier-compact-bytes`                        | `64 MiB`   | small-segment compaction threshold                       |
+| `--tier-path-style` / `--tier-virtual-hosted` | path-style | S3 addressing style                                      |
+| `--tier-allow-http`                           | off        | allow plain HTTP to the S3 endpoint (e.g. a local MinIO) |
 
 S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID` /
 `DS_S3_SECRET_ACCESS_KEY` (or the standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
 
 ### Choosing a configuration
 
-| Your situation                                      | Use                                                                                                         |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Your situation                                      | Use                                                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **Bounded local disk with long history**            | `--tier s3` — seal cold segments to object storage; the recent tail stays local and zero-copy. |
-| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
-| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                               |
+| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).    |
+| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                  |
 
 ### macOS write latency (`F_FULLFSYNC`)
 
