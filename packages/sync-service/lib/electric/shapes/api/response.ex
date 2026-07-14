@@ -523,9 +523,14 @@ defmodule Electric.Shapes.Api.Response do
             # The label groups these processes under a low-cardinality
             # process_type in the per-process telemetry, rather than leaving
             # them anonymous — serves and their guards should be visible.
+            # Logger metadata is set explicitly: this process does not inherit
+            # the handler's, and the reap warning below is the only signal an
+            # otherwise-invisible stalled serve emits, so it must carry enough
+            # to correlate (which stack, which shape).
             Process.set_label({:serve_watchdog, shape_handle})
+            Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
             ref = Process.monitor(handler)
-            write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
+            write_watchdog_loop(handler, ref, timeout, :idle)
           end)
 
         watchdog
@@ -536,13 +541,13 @@ defmodule Electric.Shapes.Api.Response do
     end
   end
 
-  defp write_watchdog_loop(handler, ref, shape_handle, timeout, writing?) do
+  defp write_watchdog_loop(handler, ref, timeout, writing?) do
     receive do
       :write_start ->
-        write_watchdog_loop(handler, ref, shape_handle, timeout, :writing)
+        write_watchdog_loop(handler, ref, timeout, :writing)
 
       :write_done ->
-        write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
+        write_watchdog_loop(handler, ref, timeout, :idle)
 
       :stop ->
         :ok
@@ -553,8 +558,7 @@ defmodule Electric.Shapes.Api.Response do
       watchdog_wait(writing?, timeout) ->
         Logger.warning(
           "Terminating stalled shape response serve: client accepted no data " <>
-            "for #{timeout}ms",
-          shape_handle: shape_handle
+            "for #{timeout}ms"
         )
 
         Process.exit(handler, :kill)
