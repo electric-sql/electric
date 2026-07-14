@@ -19,7 +19,7 @@ vi.mock(`electron`, () => ({
 
 vi.mock(`./health`, async (importOriginal) => {
   // prettier-ignore
-  const actual = await importOriginal<typeof import(`./health`)>()
+  const actual = await importOriginal<typeof import('./health')>() // eslint-disable-line quotes
   return {
     ...actual,
     checkAgentsServerHealth: vi.fn(async () => ({ ok: true })),
