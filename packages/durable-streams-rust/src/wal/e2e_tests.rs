@@ -952,6 +952,105 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Recovery-hardening: a stage failure must leave NO trace — the 500'd bytes
+/// must not be resurrected by later successful appends, neither live nor
+/// across a crash/recovery. (Uses the shard's test-only write-failure
+/// injection, which surfaces exactly like a production stage error.)
+#[tokio::test]
+async fn e2e_stage_failure_rolls_back_data_write() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("stage-rollback");
+    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    create_stream(&h.store, "rb", OCTET).await;
+
+    let mut expected = Vec::new();
+    append_acked(&h.store, "rb", OCTET, b"first|").await;
+    expected.extend_from_slice(b"first|");
+
+    // Inject: the next WAL stage write fails -> the append must 500 and the
+    // data-file write must be rolled back.
+    h.walset.shards()[0].fail_next_write();
+    let resp = handlers::handle(
+        Arc::clone(&h.store),
+        post_req("rb", OCTET, b"LOST-must-not-resurrect|"),
+    )
+    .await;
+    assert_eq!(resp.status, 500, "injected stage failure must 500");
+
+    // A later append succeeds; the failed bytes must NOT appear before it.
+    append_acked(&h.store, "rb", OCTET, b"second|").await;
+    expected.extend_from_slice(b"second|");
+
+    let live = stream_file_bytes(&h.store, "rb");
+    assert_eq!(live, expected, "500'd bytes must not persist in the live file");
+
+    h.crash();
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    let got = stream_file_bytes(&h2.store, "rb");
+    assert_eq!(got, expected, "500'd bytes must not resurrect across recovery");
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Recovery-hardening: an unparsable sidecar must QUARANTINE the stream (skip
+/// + keep the data file + park the sidecar as .meta.corrupt), never delete the
+/// data file — a torn sidecar next to real data is a torn write, not garbage.
+#[tokio::test]
+async fn e2e_corrupt_sidecar_quarantines_instead_of_deleting() {
+    let _guard = DurabilityGuard::wal();
+    let dir = tmp("sidecar-quarantine");
+    let h = Harness::boot(&dir, Some(1), 1).unwrap();
+    create_stream(&h.store, "q", OCTET).await;
+    append_acked(&h.store, "q", OCTET, b"precious|").await;
+    let data_path = h.store.get("q").unwrap().file_path.clone();
+    let meta_path = std::path::PathBuf::from(format!("{}.meta", data_path.display()));
+    h.crash();
+
+    // Tear the sidecar (simulates a crash-torn rename target).
+    std::fs::write(&meta_path, b"{ this is not json").unwrap();
+
+    let h2 = Harness::boot(&dir, None, 1).unwrap();
+    assert!(h2.store.get("q").is_none(), "stream is skipped this boot");
+    assert!(data_path.exists(), "data file must NOT be deleted");
+    assert!(
+        meta_path.with_extension("meta.corrupt").exists(),
+        "sidecar parked as .meta.corrupt for repair"
+    );
+    h2.crash();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Recovery-hardening: on an initialized store, a stream lane whose dir is
+/// empty and unmarked (= its device mount is missing) must REFUSE to boot —
+/// continuing would drop the lane's streams and let the WAL reset destroy
+/// their acked records.
+#[tokio::test]
+async fn e2e_missing_lane_mount_refuses_boot() {
+    let _guard = DurabilityGuard::wal();
+    crate::store::set_stream_lanes(3);
+    let dir = tmp("lane-mount-guard");
+    {
+        let h = Harness::boot(&dir, Some(1), 1).unwrap();
+        create_stream(&h.store, "lm", OCTET).await;
+        append_acked(&h.store, "lm", OCTET, b"x|").await;
+        h.crash();
+    }
+    // Simulate a missing mount: replace lane 1's dir with a fresh empty dir.
+    let lane1 = dir.join("streams").join("1");
+    std::fs::remove_dir_all(&lane1).unwrap();
+    std::fs::create_dir_all(&lane1).unwrap();
+
+    let err = Store::new_with_tier(dir.clone(), TierConfig::default())
+        .err()
+        .expect("boot must refuse when a lane mount is missing");
+    assert!(
+        err.to_string().contains("mount"),
+        "error should name the missing mount: {err}"
+    );
+    crate::store::set_stream_lanes(1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--stream-lanes N`: stream data files hash across `streams/<0..N>/` subdirs
 /// (one per device in the intended deployment — the ~1M-stream writeback-wall
 /// fix). Crash recovery must find every file in its lane dir, and the

@@ -513,6 +513,10 @@ impl Store {
     ) -> std::io::Result<Self> {
         let streams_dir = data_dir.join("streams");
         std::fs::create_dir_all(&streams_dir)?;
+        // Whether this store existed before THIS boot — captured before the
+        // `.lanes` block below writes the marker on first initialization (the
+        // lane-mount guard must not fire on a genuinely fresh store).
+        let store_initialized = streams_dir.join(".lanes").exists();
         // Persist + validate the stream-lane count (mirrors the WAL shard count's
         // persisted-N contract): opening a laned layout with a different
         // `--stream-lanes` would make every existing stream silently invisible
@@ -531,7 +535,7 @@ impl Store {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
                             format!(
-                                "--stream-lanes {} does not match this data dir's on-disk layout                                  ({} lanes, recorded in {}). The lane count is a layout choice                                  and must match across restarts.",
+                                "--stream-lanes {} does not match this data dir's on-disk layout ({} lanes, recorded in {}). The lane count is a layout choice and must match across restarts.",
                                 stream_lanes(),
                                 on_disk,
                                 marker.display()
@@ -549,10 +553,21 @@ impl Store {
                     {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
-                            "--stream-lanes > 1 over an existing flat streams/ layout;                              this data dir was created with 1 lane",
+                            "--stream-lanes > 1 over an existing flat streams/ layout; this data dir was created with 1 lane",
                         ));
                     }
-                    std::fs::write(&marker, format!("{}\n", stream_lanes()))?;
+                    // Durable write (tmp + sync + rename + dir fsync): losing
+                    // this marker while laned dirs full of data survive would
+                    // let a later boot mis-read the layout.
+                    let tmp = streams_dir.join(".lanes.tmp");
+                    {
+                        use std::io::Write;
+                        let mut f = File::create(&tmp)?;
+                        f.write_all(format!("{}\n", stream_lanes()).as_bytes())?;
+                        f.sync_all()?;
+                    }
+                    std::fs::rename(&tmp, &marker)?;
+                    fsync_parent_dir(&marker)?;
                 }
                 Err(e) => return Err(e),
             }
@@ -563,7 +578,44 @@ impl Store {
             let mut lane_fds = Vec::with_capacity(stream_lanes());
             for lane in 0..stream_lanes() {
                 let d = lane_dir(&data_dir, lane);
+                // MOUNT GUARD: each lane dir carries a `.lane` marker written at
+                // first initialization. Lane dirs are mountpoints for independent
+                // devices in the intended layout — if a lane's mount is absent at
+                // boot, `create_dir_all` silently recreates an EMPTY dir on the
+                // parent fs, every stream on that lane vanishes from recovery,
+                // and the WAL reset then destroys their acked records. So: once
+                // the store is initialized (the `.lanes` count marker exists), a
+                // lane whose `.lane` marker is missing AND whose dir is empty is
+                // treated as a missing mount and boot is refused. (A missing
+                // marker with contents present = pre-marker layout: adopt it.)
+                let marker = d.join(".lane");
+                if store_initialized && !marker.exists() {
+                    let has_contents = std::fs::read_dir(&d)
+                        .map(|mut it| it.next().is_some())
+                        .unwrap_or(false);
+                    if !has_contents {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!(
+                                "stream lane {lane} at {} is empty and unmarked on an \
+                                 initialized store — its device mount is likely missing. \
+                                 Refusing to boot: continuing would drop every stream on \
+                                 this lane and the WAL reset would destroy their acked \
+                                 records. Mount the lane device (or restore its data) and \
+                                 restart.",
+                                d.display()
+                            ),
+                        ));
+                    }
+                }
                 std::fs::create_dir_all(&d)?;
+                if !marker.exists() {
+                    let mut f = File::create(&marker)?;
+                    use std::io::Write;
+                    f.write_all(lane.to_string().as_bytes())?;
+                    f.sync_all()?;
+                    fsync_parent_dir(&marker)?;
+                }
                 lane_fds.push(File::open(&d)?);
             }
             *LANE_SYNC_FDS.lock().unwrap() = Some(Arc::new(lane_fds));
@@ -610,6 +662,7 @@ impl Store {
         let _ = streams_dir; // root; per-lane dirs derived below (lane 0 == root when lanes == 1)
         let mut metas: HashMap<String, (Meta, PathBuf)> = HashMap::new();
         let mut data_files: Vec<PathBuf> = Vec::new();
+        let mut quarantined: Vec<PathBuf> = Vec::new();
         let mut entries: Vec<PathBuf> = Vec::new();
         for lane in 0..stream_lanes() {
             for entry in std::fs::read_dir(lane_dir(&self.data_dir, lane))? {
@@ -618,8 +671,8 @@ impl Store {
         }
         for p in entries {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name == ".lanes" {
-                // stream-lane layout marker, not stream data
+            if name == ".lanes" || name == ".lane" {
+                // stream-lane layout / lane-mount markers, not stream data
                 continue;
             }
             if name.ends_with(".meta.tmp") {
@@ -633,21 +686,49 @@ impl Store {
             } else if name.ends_with(".meta") {
                 let data_path = PathBuf::from(p.as_os_str().to_str().unwrap().trim_end_matches(".meta"));
                 if data_path.exists() {
-                    if let Ok(bytes) = std::fs::read(&p) {
-                        if let Ok(meta) = serde_json::from_slice::<Meta>(&bytes) {
-                            metas.insert(meta.path.clone(), (meta, data_path));
-                            continue;
+                    match std::fs::read(&p) {
+                        Ok(bytes) => {
+                            if let Ok(meta) = serde_json::from_slice::<Meta>(&bytes) {
+                                metas.insert(meta.path.clone(), (meta, data_path));
+                            } else {
+                                // QUARANTINE, never delete: an unparsable sidecar
+                                // next to a data file is far more likely a torn
+                                // write than garbage worth destroying — deleting
+                                // it (and then the "orphaned" data file) would
+                                // silently erase a fully-acked stream. Park the
+                                // sidecar, keep the data file untouched, and skip
+                                // the stream loudly so an operator can repair.
+                                eprintln!(
+                                    "WARN: quarantining unparsable stream sidecar {} \
+                                     (stream skipped this boot; data file kept)",
+                                    p.display()
+                                );
+                                let _ = std::fs::rename(&p, p.with_extension("meta.corrupt"));
+                                quarantined.push(data_path);
+                            }
+                        }
+                        Err(e) => {
+                            // A transient READ error (EIO/EACCES) is not
+                            // corruption: fail the boot rather than misclassify
+                            // and destroy data.
+                            return Err(std::io::Error::new(
+                                e.kind(),
+                                format!("failed to read stream sidecar {}: {e}", p.display()),
+                            ));
                         }
                     }
+                    continue;
                 }
+                // Sidecar with NO data file: stale leftover, safe to remove.
                 let _ = std::fs::remove_file(&p);
             } else {
                 data_files.push(p);
             }
         }
-        // Drop orphan data files (no usable sidecar).
+        // Drop orphan data files (no usable sidecar) — but NEVER a data file
+        // whose sidecar was quarantined above.
         for p in data_files {
-            if !metas.values().any(|(_, dp)| *dp == p) {
+            if !metas.values().any(|(_, dp)| *dp == p) && !quarantined.contains(&p) {
                 let _ = std::fs::remove_file(&p);
             }
         }
@@ -733,14 +814,35 @@ impl Store {
         }
         // Remove any temp not promoted above (post-rename leftover, or a partial).
         let _ = std::fs::remove_file(&tmp_path);
+        // A failed open/stat here is a RESOURCE error (EMFILE, EIO, perms) on a
+        // data file whose sidecar just parsed — silently skipping the stream
+        // (the old `.ok()?`) meant its WAL records were skipped at replay and
+        // then destroyed by reset_after_recovery: acked-data loss with no log
+        // line. Boot must fail loudly instead; the operator fixes the resource
+        // limit and the data is still intact.
         let file = Arc::new(
             OpenOptions::new()
                 .read(true)
                 .append(true)
                 .open(data_path)
-                .ok()?,
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "recovery: cannot open stream data file {} ({e}); refusing \
+                         to boot without it — skipping would let WAL reset destroy \
+                         its acked records",
+                        data_path.display()
+                    )
+                }),
         );
-        let written = file.metadata().ok()?.len();
+        let written = file
+            .metadata()
+            .unwrap_or_else(|e| {
+                panic!(
+                    "recovery: cannot stat stream data file {} ({e})",
+                    data_path.display()
+                )
+            })
+            .len();
         // `file_base` is the live file's logical start. With a `pending_compaction`
         // intent and the durable temp promoted above, the live file IS the full
         // residual `[new_file_base, tail)` — so `file_base = new_file_base`, derived
@@ -830,6 +932,23 @@ impl Store {
         // Re-enqueue any sealed-but-not-yet-offloaded segments left by a crash
         // mid-offload (placement still Local while a remote tier is configured).
         self.reconcile_manifest_on_boot(&state);
+        // A recovered `pending_compaction` intent must be durably CLEARED (with
+        // the derived `file_base`) before this stream can accept appends: the
+        // derivation branches assume the file length still matches the crash
+        // moment, so "appends after boot + a second crash before any sidecar
+        // write" would re-enter them with a grown file and mis-derive
+        // `file_base` — shifting every subsequent live read AND replay write by
+        // the appended delta (silent corruption). Persisting now closes that
+        // double-crash window; a persist failure fails the boot loudly.
+        if meta.pending_compaction.is_some() {
+            write_meta_sync(&state, true).unwrap_or_else(|e| {
+                panic!(
+                    "recovery: cannot durably clear the compaction intent for {} ({e}); \
+                     booting without it risks a mis-derived file_base after another crash",
+                    state.file_path.display()
+                )
+            });
+        }
         self.streams.insert(path.to_string(), state.clone());
         Some(state)
     }
@@ -1037,11 +1156,34 @@ impl Store {
                 v.insert(state.clone());
                 // Take the fork reference only once insertion has succeeded, so
                 // rejected/raced creates never leak a refcount on the source.
-                if let Some(p) = &parent {
-                    p.shared.write().unwrap().ref_count += 1;
-                    write_meta_sync(p, true)?;
+                let created = (|| -> std::io::Result<()> {
+                    if let Some(p) = &parent {
+                        p.shared.write().unwrap().ref_count += 1;
+                        if let Err(e) = write_meta_sync(p, true) {
+                            p.shared.write().unwrap().ref_count -= 1;
+                            return Err(e);
+                        }
+                    }
+                    if let Err(e) = write_meta_sync(&state, true) {
+                        if let Some(p) = &parent {
+                            p.shared.write().unwrap().ref_count -= 1;
+                            let _ = write_meta_sync(p, true);
+                        }
+                        return Err(e);
+                    }
+                    Ok(())
+                })();
+                if let Err(e) = created {
+                    // UNDO the create: without a durable sidecar the stream must
+                    // not stay live — WAL mode would happily ack appends to it,
+                    // and the next boot would treat the sidecar-less data file as
+                    // an orphan and delete it (acked appends destroyed after a
+                    // create the client saw fail).
+                    self.streams
+                        .remove_if(&state.path, |_, cur| Arc::ptr_eq(cur, &state));
+                    let _ = std::fs::remove_file(&state.file_path);
+                    return Err(e);
                 }
-                write_meta_sync(&state, true)?;
                 Ok(CreateResult::Created(state))
             }
         }
@@ -1234,6 +1376,32 @@ fn unix_secs(t: SystemTime) -> u64 {
 
 impl Meta {
     fn capture(st: &StreamState) -> Meta {
+        let seg_snapshot: (Vec<MetaSegment>, u64) = {
+            let m = st.tier.manifest.lock().unwrap();
+            (
+                m.segments
+                    .iter()
+                    .map(|seg| match &seg.placement {
+                        crate::tier::Placement::Local(p) => MetaSegment {
+                            logical_start: seg.logical_start,
+                            len: seg.len,
+                            remote_key: None,
+                            local_file: p
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .map(|s| s.to_string()),
+                        },
+                        crate::tier::Placement::Remote(key) => MetaSegment {
+                            logical_start: seg.logical_start,
+                            len: seg.len,
+                            remote_key: Some(key.clone()),
+                            local_file: None,
+                        },
+                    })
+                    .collect(),
+                m.sealed_offset,
+            )
+        };
         let s = st.shared.read().unwrap();
         Meta {
             id: st.id,
@@ -1254,30 +1422,14 @@ impl Meta {
             last_access_unix: unix_secs(s.last_access),
             ref_count: s.ref_count,
             soft_deleted: s.soft_deleted,
-            segments: {
-                let m = st.tier.manifest.lock().unwrap();
-                m.segments
-                    .iter()
-                    .map(|seg| match &seg.placement {
-                        crate::tier::Placement::Local(p) => MetaSegment {
-                            logical_start: seg.logical_start,
-                            len: seg.len,
-                            remote_key: None,
-                            local_file: p
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .map(|s| s.to_string()),
-                        },
-                        crate::tier::Placement::Remote(key) => MetaSegment {
-                            logical_start: seg.logical_start,
-                            len: seg.len,
-                            remote_key: Some(key.clone()),
-                            local_file: None,
-                        },
-                    })
-                    .collect()
-            },
-            sealed_offset: st.tier.manifest.lock().unwrap().sealed_offset,
+            // segments + sealed_offset MUST come from ONE lock acquisition: a
+            // seal pass interleaving between two separate acquisitions would
+            // yield a capture whose sealed_offset covers a region absent from
+            // `segments` — persisted, that is a permanent manifest hole below
+            // the watermark (reads resolve nothing there; the sealer never
+            // re-seals it).
+            segments: seg_snapshot.0,
+            sealed_offset: seg_snapshot.1,
             file_base: Some(s.file_base),
             pending_compaction: *st.compaction.lock().unwrap(),
             durable_tail: Some(s.durable_tail),
@@ -1304,9 +1456,14 @@ pub fn write_meta_sync(st: &StreamState, durable: bool) -> std::io::Result<()> {
         use std::io::Write;
         let mut f = File::create(&tmp)?;
         f.write_all(&bytes)?;
-        if durable {
-            f.sync_all()?;
-        }
+        // ALWAYS sync the tmp's data before the rename — even for the
+        // "non-durable" lagging flushes. Renaming an unsynced tmp over the
+        // previously-durable sidecar lets a power crash land the rename with
+        // zero-length/garbage content (no ext4-style rename heuristic on all
+        // filesystems), and boot treats an unparsable sidecar as corruption.
+        // The `durable` flag now only gates the parent-dir fsync (rename
+        // persistence), preserving the lagging-flush contract's cheapness.
+        f.sync_all()?;
     }
     std::fs::rename(&tmp, &final_path)?;
     // A rename is crash-durable only once the parent dir entry is fsynced.
@@ -1499,6 +1656,7 @@ mod tier_tests {
                     let b = bs.get_range(&key, offset, len).await.unwrap();
                     out.extend_from_slice(&b);
                 }
+                ResolvedSlice::Missing => panic!("test read hit a poison slice"),
             }
         }
         out

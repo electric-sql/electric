@@ -585,6 +585,7 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 let lock_t0 = crate::telemetry::Timer::start();
                 let mut ap = st.appender.lock().await;
                 crate::telemetry::record_append_lock_wait(lock_t0.elapsed_secs());
+                let pre_written = ap.written;
                 let new_tail = match write_wire(&st, &mut ap, &wire) {
                     Ok(t) => t,
                     Err(_) => return text_response(500, "write failed"),
@@ -599,7 +600,19 @@ async fn handle_create(store: Arc<Store>, req: Req, path: String) -> Resp {
                 // durability wait runs after the lock is dropped.
                 let staged_lsn = match stage_for_durability(&store, &st, &wire, stream_offset) {
                     Ok(lsn) => lsn,
-                    Err(_) => return text_response(500, "wal stage failed"),
+                    Err(_) => {
+                        // ROLL BACK the data-file write: the bytes were 500'd but
+                        // already sit in the file — left in place they would be
+                        // durably resurrected by the next successful append /
+                        // checkpoint (client told "failed", bytes served anyway).
+                        let _ = ap.file.set_len(pre_written);
+                        ap.written = pre_written;
+                        {
+                            let mut sh = st.shared.write().unwrap();
+                            sh.tail = sh.file_base + pre_written;
+                        }
+                        return text_response(500, "wal stage failed");
+                    }
                 };
                 drop(ap);
                 if let Some(lsn) = staged_lsn {
@@ -735,7 +748,16 @@ async fn wait_durable_lsn(store: &Arc<Store>, st: &Arc<StreamState>, lsn: u64) {
 /// awaited in `wait_durable_lsn`.
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
     use std::io::Write;
-    (&*ap.file).write_all(wire)?;
+    if let Err(e) = (&*ap.file).write_all(wire) {
+        // A partial write (ENOSPC mid-slice) leaves garbage bytes in the file
+        // PAST `ap.written` while the logical offsets don't advance — every
+        // later append would land after the garbage (O_APPEND) with a logical
+        // offset that assumes it landed at `ap.written`: silent, permanent
+        // offset desync for all subsequent data. Truncate back to the exact
+        // pre-write length so physical == logical again.
+        let _ = ap.file.set_len(ap.written);
+        return Err(e);
+    }
     ap.written += wire.len() as u64;
     let tail = {
         let mut s = st.shared.write().unwrap();
@@ -1082,6 +1104,20 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     // readers only AFTER durability (below), so a live reader never observes
     // bytes a crash could roll back (PROTOCOL.md §4.1).
     let mut new_tail = None;
+    let pre_written = ap.written;
+    // Pre-mutation snapshots for the stage-failure rollback below: a 500'd
+    // append must leave NO trace — neither bytes (resurrected by the next
+    // append/checkpoint) nor producer/seq dedup state (which would swallow the
+    // client's retry as a duplicate: silent loss from the client's view).
+    let (prev_producer, prev_seq_header) = {
+        let sh = st.shared.read().unwrap();
+        (
+            producer
+                .as_ref()
+                .map(|p| (p.id.clone(), sh.producers.get(&p.id).cloned())),
+            sh.last_seq_header.clone(),
+        )
+    };
     if !wire.is_empty() {
         match write_wire(&st, &mut ap, &wire) {
             Ok(t) => new_tail = Some(t),
@@ -1136,7 +1172,39 @@ async fn handle_append_inner(store: Arc<Store>, req: Req, path: String) -> (Resp
     let staged_lsn = if !wire.is_empty() {
         match stage_for_durability(&store, &st, &wire, stream_offset) {
             Ok(lsn) => lsn,
-            Err(_) => ret!(text_response(500, "wal stage failed"), Conflict),
+            Err(_) => {
+                // ROLL BACK everything this append changed (still under the
+                // appender lock, so no concurrent appender observed it):
+                // 1) the data-file bytes — otherwise the next successful append
+                //    advances the durable frontier over them and they are served
+                //    (and checkpoint-persisted) despite the 500;
+                // 2) the in-memory tail;
+                // 3) producer/seq/closed state — otherwise the client's RETRY of
+                //    this failed append is deduplicated as "already seen" and
+                //    silently dropped.
+                let _ = ap.file.set_len(pre_written);
+                ap.written = pre_written;
+                {
+                    let mut sh = st.shared.write().unwrap();
+                    sh.tail = sh.file_base + pre_written;
+                    if let Some((id, prev)) = &prev_producer {
+                        match prev {
+                            Some(ps) => {
+                                sh.producers.insert(id.clone(), ps.clone());
+                            }
+                            None => {
+                                sh.producers.remove(id);
+                            }
+                        }
+                    }
+                    sh.last_seq_header = prev_seq_header.clone();
+                    if close_req {
+                        sh.closed = false;
+                        sh.closed_by = None;
+                    }
+                }
+                ret!(text_response(500, "wal stage failed"), Conflict)
+            }
         }
     } else {
         None
@@ -1338,6 +1406,13 @@ fn stream_resolved_body(
         }
         for sl in slices {
             match sl {
+                ResolvedSlice::Missing => {
+                    // Poison slice (unreadable sealed chunk): abort the
+                    // connection — a response missing interior bytes must never
+                    // terminate cleanly.
+                    fail();
+                    return;
+                }
                 ResolvedSlice::Local(seg) => {
                     // Window the (possibly large) local slice so we never hold
                     // more than COLD_LOCAL_WINDOW of it in memory at once.
@@ -1410,6 +1485,12 @@ async fn materialize_resolved(
     out.put_slice(prefix);
     for sl in slices {
         match sl {
+            ResolvedSlice::Missing => {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "sealed chunk unreadable (poison slice)",
+                ));
+            }
             ResolvedSlice::Local(seg) => {
                 let want = seg.len;
                 let bytes = tokio::task::spawn_blocking(move || {
