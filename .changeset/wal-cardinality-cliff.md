@@ -1,5 +1,5 @@
 ---
-"@electric-ax/durable-streams-server-rust": minor
+"@electric-ax/durable-streams-server-rust": patch
 ---
 
 Eliminate the WAL write cardinality cliff (10.4k → 383k appends/s @100k streams; 212k @1M).
