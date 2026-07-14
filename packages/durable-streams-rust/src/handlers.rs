@@ -1636,7 +1636,19 @@ async fn handle_long_poll(
                 }
             }
             _ = tokio::time::sleep(deadline.saturating_duration_since(Instant::now())) => {
+                // Deadline hit — but re-check the tail EXACTLY like the
+                // closed-channel arm above. Returning a timeout that advertises
+                // the fresh tail as `Stream-Next-Offset` while NOT delivering
+                // the bytes behind it silently SKIPS data: an append whose
+                // durable-tail publish lands inside the deadline window gets
+                // jumped over (the client adopts the header offset from every
+                // response, including empty 204s) and is never delivered.
+                // Invariant: a long-poll response never advances the client's
+                // offset beyond the bytes it actually delivered.
                 let t = st.tail();
+                if t.bytes > from {
+                    return long_poll_data(&st, from, t, client_cursor, true, cache_hit).await;
+                }
                 return long_poll_timeout(t.bytes, cursor, t.closed);
             }
         }
@@ -2379,6 +2391,85 @@ mod memory_mode_tests {
             "a plain non-TTL memory-mode append must not queue a sidecar flush"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Long-poll deadline/data race (conformance flake root cause): a long-poll
+    /// response must NEVER advance `Stream-Next-Offset` past the client's `from`
+    /// without delivering the bytes in between — otherwise an append whose
+    /// durable-tail publish lands inside the deadline window is advertised but
+    /// not sent, and the client skips it forever. This drives many iterations of
+    /// an append racing a long-poll whose deadline is aligned with the append
+    /// (the conformance suite's exact shape, tightened) and asserts the
+    /// invariant on every response.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn long_poll_timeout_never_skips_observed_data() {
+        let _guard = crate::handlers::test_support::DurabilityGuard::memory();
+        crate::handlers::set_long_poll_timeout(20);
+        let dir = tmp("lp-race");
+        let store = Arc::new(Store::new_with_tier(dir.clone(), TierConfig::default()).unwrap());
+
+        let resp = handle(Arc::clone(&store), put_req("lp/r", "application/octet-stream")).await;
+        assert!((200..300).contains(&resp.status), "create: {}", resp.status);
+
+        let next_offset = |r: &crate::api::Resp| -> u64 {
+            r.headers
+                .iter()
+                .find(|(k, _)| *k == "stream-next-offset")
+                .map(|(_, v)| v.rsplit('_').next().unwrap().parse().unwrap())
+                .unwrap_or(0)
+        };
+        let mut from: u64 = 0;
+        for i in 0..200u32 {
+            // Long-poll from the current offset...
+            let lp = tokio::spawn(handle(
+                Arc::clone(&store),
+                Req {
+                    method: Method::Get,
+                    path: "lp/r".to_string(),
+                    query: Some(format!("live=long-poll&offset={:016}_{:016}", 0, from)),
+                    headers: vec![],
+                    body: Bytes::new(),
+                },
+            ));
+            // ...and race an append onto the deadline (spread over the window).
+            tokio::time::sleep(std::time::Duration::from_millis(15 + (i % 10) as u64))
+                .await;
+            let ar = handle(
+                Arc::clone(&store),
+                post_req("lp/r", "application/octet-stream", b"x"),
+            )
+            .await;
+            assert!((200..300).contains(&ar.status), "append: {}", ar.status);
+            let r = lp.await.unwrap();
+            let next = next_offset(&r);
+            let has_body = !matches!(r.body, crate::api::Body::Empty);
+            assert!(
+                has_body || next <= from,
+                "iteration {i}: empty long-poll response advanced the offset \
+                 {from} -> {next} without delivering data (status {})",
+                r.status
+            );
+            // Catch up for the next round.
+            from = from.max(next);
+            if !has_body && next == from {
+                // ensure we don't fall behind the appends
+                let t_resp = handle(
+                    Arc::clone(&store),
+                    Req {
+                        method: Method::Get,
+                        path: "lp/r".to_string(),
+                        query: Some(format!("offset={:016}_{:016}", 0, from)),
+                        headers: vec![],
+                        body: Bytes::new(),
+                    },
+                )
+                .await;
+                from = from.max(next_offset(&t_resp));
+            }
+        }
+
+        crate::handlers::set_long_poll_timeout(30_000);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
