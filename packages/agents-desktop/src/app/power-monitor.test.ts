@@ -13,6 +13,20 @@ class FakePowerMonitor extends EventEmitter {
 }
 
 describe(`power monitor recovery`, () => {
+  it(`routes resume through the supplied runtime recovery boundary`, () => {
+    const monitor = new FakePowerMonitor()
+    const reconnectPullWakesAfterResume = vi.fn()
+    const recovery = createPowerMonitorRecovery({
+      monitor,
+      onResume: reconnectPullWakesAfterResume,
+    })
+    recovery.start()
+
+    monitor.emit(`resume`)
+
+    expect(reconnectPullWakesAfterResume).toHaveBeenCalledTimes(1)
+  })
+
   it(`runs resume recovery once and does not duplicate listeners`, () => {
     const monitor = new FakePowerMonitor()
     const onResume = vi.fn()

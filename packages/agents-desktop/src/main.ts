@@ -129,6 +129,7 @@ async function main(): Promise<void> {
   if (!LoginItems.isBackgroundLaunch()) {
     controller.createWindow()
   }
+  controller.startPowerMonitorRecovery()
   controller.connectConfiguredServers()
   controller.startDiscoveryLoop()
   controller.initializeUpdater()

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import type { DesktopAppContext } from './context'
 import * as AppLifecycle from './lifecycle'
 import * as LoginItems from './login-items'
+import { createPowerMonitorRecovery } from './power-monitor'
 import { createDesktopUpdater } from './updater'
 import * as CloudAuthInjection from '../cloud/auth-injection'
 import * as ServerFetch from '../cloud/server-fetch'
@@ -11,7 +12,10 @@ import { createLocalDiscoveryLoop } from '../discovery/local-discovery'
 import * as DesktopIpc from '../ipc/register'
 import { ensureRuntimeEntry as ensureRuntimeEntryInStore } from '../runtime/entries'
 import { createRuntimeController } from '../runtime/controller'
-import { desktopSkillDirectories } from '../runtime/lifecycle'
+import {
+  desktopSkillDirectories,
+  reconnectPullWakesAfterResume,
+} from '../runtime/lifecycle'
 import * as SettingsBootstrap from '../settings/bootstrap'
 import * as ServerSelection from '../settings/selection'
 import {
@@ -177,6 +181,10 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     getCloudAgentServers: ctx.getCloudAgentServers,
     getCloudAuthState: () => ctx.services.cloudAuth?.getState(),
     selectedServerIdForWindow,
+  })
+
+  const powerMonitorRecovery = createPowerMonitorRecovery({
+    onResume: () => reconnectPullWakesAfterResume(runtime.lifecycleDeps),
   })
 
   function hasConnectedLocalRuntime(): boolean {
@@ -599,9 +607,11 @@ export function createDesktopMainController(ctx: DesktopAppContext) {
     showOrCreateWindow,
     syncLaunchAtLoginSetting,
     connectConfiguredServers,
+    startPowerMonitorRecovery: powerMonitorRecovery.start,
     startDiscoveryLoop: localDiscovery.startDiscoveryLoop,
     initializeUpdater: updater.initialize,
     quitApp: async (): Promise<void> => {
+      powerMonitorRecovery.stop()
       for (const watcher of skillDirectoryWatchers) watcher.close()
       skillDirectoryWatchers = []
       if (skillReloadTimer) clearTimeout(skillReloadTimer)
