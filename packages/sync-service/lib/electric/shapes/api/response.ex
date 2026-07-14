@@ -478,12 +478,12 @@ defmodule Electric.Shapes.Api.Response do
   # once the transport buffers drain — gives the stall watchdog below a
   # progress signal: each completed piece is proof the client accepted data.
   #
-  # The size matches the encoder's batch byte cap, so ordinary body elements
-  # are written as-is (no flattening or splitting); only oversized single
+  # Derived from the encoder's batch cap so that ordinary body elements are
+  # written as-is (no flattening or splitting) and only oversized single
   # items (e.g. one very large row) are split. Making pieces smaller would
   # not sharpen the watchdog: write completion is quantized by the OS at up
   # to a kernel send buffer of drain, which dwarfs the piece size.
-  @socket_write_bytes 256 * 1024
+  @socket_write_bytes Electric.Shapes.Api.Encoder.JSON.max_batch_bytes()
 
   # A serve whose client stops accepting data blocks inside the socket write
   # and cannot recover on its own: the TCP send timeout only catches a write
@@ -499,17 +499,16 @@ defmodule Electric.Shapes.Api.Response do
   # within `:stalled_serve_timeout`. Write completion is quantized by the OS:
   # a blocked write may only complete after the kernel send buffer frees a
   # substantial fraction of its capacity, so the effective contract is that a
-  # healthy client must drain roughly one OS send buffer per timeout window —
-  # on the order of 10 KB/s at the 60s default with megabyte-class buffers,
-  # and far less on stacks that signal writability at finer granularity. The
+  # healthy client must drain roughly one OS send buffer per timeout window
+  # (e.g. ~10 KB/s for a megabyte-class buffer and a 60-second window, and
+  # far less on stacks that signal writability at finer granularity). The
   # timer is armed only while a write is in flight, so a serve idling between
   # body elements (a live long-poll hold, an SSE stream waiting for changes)
   # is never at risk. The terminated client can reconnect and resume from its
   # last offset.
   defp start_write_watchdog(stack_id, response) do
-    # The fallback only applies to stacks whose seed config omits the key
-    # (e.g. minimal unit-test stacks); StackSupervisor-managed stacks always
-    # seed it. Electric.Config is the single source of truth for the default.
+    # Fallback for stacks whose seed config omits the key (e.g. minimal
+    # unit-test stacks); Electric.Config is the single source of truth.
     case Electric.StackConfig.lookup(
            stack_id,
            :stalled_serve_timeout,
@@ -525,9 +524,9 @@ defmodule Electric.Shapes.Api.Response do
             # process_type in the per-process telemetry, rather than leaving
             # them anonymous — serves and their guards should be visible.
             # Logger metadata is set explicitly: this process does not inherit
-            # the handler's, and the reap warning below is the only signal an
-            # otherwise-invisible stalled serve emits, so it must carry enough
-            # to correlate (which stack, which shape).
+            # the handler's, and the reap warning below is the primary signal
+            # an otherwise-invisible stalled serve emits, so it must carry
+            # enough to correlate (which stack, which shape).
             Process.set_label({:serve_watchdog, shape_handle})
             Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
             ref = Process.monitor(handler)
@@ -571,7 +570,7 @@ defmodule Electric.Shapes.Api.Response do
 
   # Write one response body element as a sequence of bounded socket writes,
   # notifying the watchdog around each one. Elements within the bound — the
-  # common case, since the encoder caps batches at the same size — are
+  # common case, as the bound is derived from the encoder's batch cap — are
   # written directly without flattening.
   defp write_in_bounded_pieces(conn, chunk, chunk_size, watchdog)
        when chunk_size <= @socket_write_bytes do
