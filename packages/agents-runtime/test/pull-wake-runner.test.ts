@@ -152,11 +152,24 @@ describe(`createPullWakeRunner`, () => {
       .fn()
       .mockResolvedValueOnce(firstResponse)
       .mockResolvedValueOnce(secondResponse)
+    const activeWakeReleased = deferred<void>()
+    const activeWakeCompleted = vi.fn()
+    let activeWake = false
     vi.stubGlobal(
       `fetch`,
-      vi.fn(async () => new Response(null, { status: 204 }))
+      vi.fn(async () => Response.json(notification(`one`)))
     )
-    const testRuntime = runtime()
+    const testRuntime = {
+      ...runtime(),
+      dispatchWake: vi.fn(() => {
+        activeWake = true
+        void activeWakeReleased.promise.then(() => {
+          activeWake = false
+          activeWakeCompleted()
+        })
+      }),
+      isWakeActive: vi.fn(() => activeWake),
+    }
     const runner = createPullWakeRunner({
       baseUrl: `http://server`,
       runnerId: `runner-1`,
@@ -167,6 +180,10 @@ describe(`createPullWakeRunner`, () => {
 
     runner.start()
     await vi.waitFor(() => expect(runner.offset).toBe(`42`))
+    await vi.waitFor(() =>
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    )
+    expect(testRuntime.isWakeActive(`/chat/one/main`)).toBe(true)
 
     runner.reconnect()
     runner.reconnect()
@@ -182,6 +199,12 @@ describe(`createPullWakeRunner`, () => {
     )
     expect(testRuntime.abortWakes).not.toHaveBeenCalled()
     expect(testRuntime.drainWakes).not.toHaveBeenCalled()
+    expect(testRuntime.isWakeActive(`/chat/one/main`)).toBe(true)
+    expect(activeWakeCompleted).not.toHaveBeenCalled()
+
+    activeWakeReleased.resolve()
+    await vi.waitFor(() => expect(activeWakeCompleted).toHaveBeenCalledTimes(1))
+    expect(testRuntime.isWakeActive(`/chat/one/main`)).toBe(false)
 
     await runner.stop()
   })
