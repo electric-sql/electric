@@ -18,6 +18,7 @@ vi.mock(`electron`, () => ({
 }))
 
 vi.mock(`./health`, async (importOriginal) => {
+  // prettier-ignore
   const actual = await importOriginal<typeof import(`./health`)>()
   return {
     ...actual,
