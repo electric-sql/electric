@@ -366,6 +366,17 @@ defmodule Electric.Application do
         send_timeout -> [send_timeout: send_timeout]
       end
 
+    # ThousandIsland's read_timeout doubles as the HTTP keep-alive idle timeout:
+    # Bandit closes a connection that has waited this long for the next request,
+    # without announcing it via `connection: close`. Behind a connection-pooling
+    # proxy this must exceed the proxy's idle timeout so the proxy is always the
+    # side that closes first (see ELECTRIC_TCP_READ_TIMEOUT).
+    read_timeout_opts =
+      case get_env(opts, :tcp_read_timeout) do
+        nil -> []
+        read_timeout -> [read_timeout: read_timeout]
+      end
+
     ipv6_opts =
       if get_env(opts, :listen_on_ipv6?) do
         [:inet6]
@@ -383,7 +394,7 @@ defmodule Electric.Application do
         n -> [genserver_options: [spawn_opt: [fullsweep_after: n]]]
       end
 
-    acceptor_opts ++ transport_opts ++ genserver_opts
+    acceptor_opts ++ read_timeout_opts ++ transport_opts ++ genserver_opts
   end
 
   defp cowboy_options(opts) do
