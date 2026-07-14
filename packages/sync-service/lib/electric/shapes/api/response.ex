@@ -434,37 +434,149 @@ defmodule Electric.Shapes.Api.Response do
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
 
     conn = Plug.Conn.send_chunked(conn, status)
+    watchdog = start_write_watchdog(stack_id, response)
 
     {conn, bytes_sent} =
-      response.body
-      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
-        chunk_size = IO.iodata_length(chunk)
+      try do
+        response.body
+        |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
+          chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span(
-          "shape_get.plug.stream_chunk",
-          Map.put(sample_rate_attrs, "chunk_size", chunk_size),
-          stack_id,
-          fn ->
-            case Plug.Conn.chunk(conn, chunk) do
-              {:ok, conn} ->
-                {:cont, {conn, bytes_sent + chunk_size}}
+          OpenTelemetry.with_span(
+            "shape_get.plug.stream_chunk",
+            Map.put(sample_rate_attrs, "chunk_size", chunk_size),
+            stack_id,
+            fn ->
+              case write_in_bounded_pieces(conn, chunk, watchdog) do
+                {:ok, conn} ->
+                  {:cont, {conn, bytes_sent + chunk_size}}
 
-              {:error, reason} when reason in ["closed", :closed] ->
-                error_str = "Connection closed unexpectedly while streaming response"
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:error, reason} when reason in ["closed", :closed] ->
+                  error_str = "Connection closed unexpectedly while streaming response"
+                  conn = Plug.Conn.assign(conn, :error_str, error_str)
+                  {:halt, {conn, bytes_sent}}
 
-              {:error, reason} ->
-                error_str = "Error while streaming response: #{inspect(reason)}"
-                Logger.error(error_str)
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:error, reason} ->
+                  error_str = "Error while streaming response: #{inspect(reason)}"
+                  Logger.error(error_str)
+                  conn = Plug.Conn.assign(conn, :error_str, error_str)
+                  {:halt, {conn, bytes_sent}}
+              end
             end
-          end
-        )
-      end)
+          )
+        end)
+      after
+        watchdog && Kernel.send(watchdog, :stop)
+      end
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
+  end
+
+  @stalled_serve_timeout_default :timer.seconds(60)
+
+  # Socket writes are split into pieces of at most this size. Bounding the
+  # write unit bounds both the response data queued in the socket's driver
+  # queue at any moment and — because a bounded write to a live client
+  # completes quickly once the transport buffers are full — gives the stall
+  # watchdog below a rate-independent progress signal: each completed piece
+  # is proof the client accepted data.
+  @socket_write_bytes 16 * 1024
+
+  # A serve whose client stops accepting data blocks inside the socket write
+  # and cannot recover on its own: the TCP send timeout only catches a write
+  # that is *fully* blocked for its whole window, so a client draining at a
+  # trickle — or a proxy buffering for a vanished client — can hold the
+  # serve, everything it pins, and its file descriptor forever. Such serves
+  # never complete, so they emit no telemetry, and they accumulate with
+  # connection count (see the 2026-07-01 OOM reproduced in
+  # test/integration/stalled_serve_memory_test.exs).
+  #
+  # The watchdog is a small companion process that terminates the serve when
+  # a single bounded socket write (≤ @socket_write_bytes) fails to complete
+  # within `:stalled_serve_timeout`. Write completion is quantized by the OS:
+  # a blocked write may only complete after the kernel send buffer frees a
+  # substantial fraction of its capacity, so the effective contract is that a
+  # healthy client must drain roughly one OS send buffer per timeout window —
+  # on the order of 10 KB/s at the 60s default with megabyte-class buffers,
+  # and far less on stacks that signal writability at finer granularity. The
+  # timer is armed only while a write is in flight, so a serve idling between
+  # body elements (a live long-poll hold, an SSE stream waiting for changes)
+  # is never at risk. The terminated client can reconnect and resume from its
+  # last offset.
+  defp start_write_watchdog(stack_id, response) do
+    case Electric.StackConfig.lookup(
+           stack_id,
+           :stalled_serve_timeout,
+           @stalled_serve_timeout_default
+         ) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        handler = self()
+        shape_handle = response.handle
+
+        spawn(fn ->
+          ref = Process.monitor(handler)
+          write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
+        end)
+
+      # 0 (or any non-positive value) disables reaping.
+      _disabled ->
+        nil
+    end
+  end
+
+  defp write_watchdog_loop(handler, ref, shape_handle, timeout, writing?) do
+    receive do
+      :write_start ->
+        write_watchdog_loop(handler, ref, shape_handle, timeout, :writing)
+
+      :write_done ->
+        write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
+
+      :stop ->
+        :ok
+
+      {:DOWN, ^ref, :process, ^handler, _reason} ->
+        :ok
+    after
+      watchdog_wait(writing?, timeout) ->
+        Logger.warning(
+          "Terminating stalled shape response serve: client accepted no data " <>
+            "for #{timeout}ms",
+          shape_handle: shape_handle
+        )
+
+        Process.exit(handler, :kill)
+    end
+  end
+
+  defp watchdog_wait(:writing, timeout), do: timeout
+  defp watchdog_wait(:idle, _timeout), do: :infinity
+
+  # Write one response body element as a sequence of bounded socket writes,
+  # notifying the watchdog around each one.
+  defp write_in_bounded_pieces(conn, chunk, watchdog) do
+    chunk
+    |> IO.iodata_to_binary()
+    |> write_pieces(conn, watchdog)
+  end
+
+  defp write_pieces(<<piece::binary-size(@socket_write_bytes), rest::binary>>, conn, watchdog)
+       when byte_size(rest) > 0 do
+    case guarded_chunk(conn, piece, watchdog) do
+      {:ok, conn} -> write_pieces(rest, conn, watchdog)
+      error -> error
+    end
+  end
+
+  defp write_pieces(piece, conn, watchdog) do
+    guarded_chunk(conn, piece, watchdog)
+  end
+
+  defp guarded_chunk(conn, data, watchdog) do
+    watchdog && Kernel.send(watchdog, :write_start)
+    result = Plug.Conn.chunk(conn, data)
+    watchdog && Kernel.send(watchdog, :write_done)
+    result
   end
 
   def etag(response, opts \\ [])

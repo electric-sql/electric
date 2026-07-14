@@ -120,6 +120,11 @@ defmodule Electric.Config do
     # Heap-size threshold (in BYTES) above which a consumer runs :erlang.garbage_collect()
     # after processing a transaction fragment.
     consumer_gc_heap_threshold: nil,
+    # Terminate a shape response serve when a single socket write makes no
+    # progress for this long (ms). Catches serves to clients that stop
+    # accepting data, which otherwise pin memory and a file descriptor
+    # indefinitely. 0 disables reaping.
+    stalled_serve_timeout: :timer.seconds(60),
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
