@@ -123,6 +123,69 @@ describe(`createPullWakeRunner`, () => {
     await runner.stop()
   })
 
+  it(`explicitly reconnects a stalled stream without aborting active wakes`, async () => {
+    vi.useFakeTimers()
+    const firstCancelled = deferred<void>()
+    const secondCancelled = deferred<void>()
+    let firstOffset = `-1`
+    const firstResponse: PullWakeStreamResponse = {
+      get offset() {
+        return firstOffset
+      },
+      async *jsonStream() {
+        firstOffset = `42`
+        yield wakeEvent(`one`)
+        await firstCancelled.promise
+      },
+      cancel: vi.fn(() => firstCancelled.resolve()),
+      closed: firstCancelled.promise,
+    }
+    const secondResponse: PullWakeStreamResponse = {
+      offset: `42`,
+      async *jsonStream() {
+        await secondCancelled.promise
+      },
+      cancel: vi.fn(() => secondCancelled.resolve()),
+      closed: secondCancelled.promise,
+    }
+    const streamFactory = vi
+      .fn()
+      .mockResolvedValueOnce(firstResponse)
+      .mockResolvedValueOnce(secondResponse)
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async () => new Response(null, { status: 204 }))
+    )
+    const testRuntime = runtime()
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(runner.offset).toBe(`42`))
+
+    runner.reconnect()
+    runner.reconnect()
+    await vi.waitFor(() =>
+      expect(firstResponse.cancel).toHaveBeenCalledTimes(1)
+    )
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.waitFor(() => expect(streamFactory).toHaveBeenCalledTimes(2))
+
+    expect(streamFactory).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ offset: `42` })
+    )
+    expect(testRuntime.abortWakes).not.toHaveBeenCalled()
+    expect(testRuntime.drainWakes).not.toHaveBeenCalled()
+
+    await runner.stop()
+  })
+
   it(`claims compact DS wake events before dispatching runtime wakes`, async () => {
     const event = wakeEvent(`one`)
     const claimed = notification(`one`)

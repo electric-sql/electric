@@ -63,6 +63,7 @@ export interface PullWakeStreamResponse {
 
 export interface PullWakeRunner {
   start: () => void
+  reconnect: () => void
   stop: () => Promise<void>
   waitForStopped: () => Promise<void>
   readonly running: boolean
@@ -666,6 +667,13 @@ export function createPullWakeRunner(
       controller = new AbortController()
       startHeartbeat(controller.signal)
       actor.send({ type: `START` })
+    },
+    reconnect() {
+      if (!isRunningState()) return
+      actor.send({
+        type: `STREAM_RESET`,
+        error: new Error(`Pull-wake runner reconnect requested`),
+      })
     },
     async stop() {
       if (stopPromise) return stopPromise
