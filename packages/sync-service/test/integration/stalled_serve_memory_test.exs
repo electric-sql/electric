@@ -28,9 +28,7 @@ defmodule Electric.Integration.StalledServeMemoryTest do
   @moduletag :tmp_dir
 
   # Stalled connections and the per-connection pinned-memory budget the server
-  # must stay within regardless of chunk size. Today each stalled serve pins
-  # ~2x the 10 MB chunk (handler + socket driver queue), so the budget is
-  # exceeded ~10x over.
+  # must stay within regardless of the configured chunk size.
   @stalled_clients 10
   @per_connection_budget 2 * 1024 * 1024
 
