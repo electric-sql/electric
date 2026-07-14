@@ -114,6 +114,11 @@ export class BuiltinAgentsServer {
     return this._mcpRegistry
   }
 
+  /** Reconnect only the pull-wake subscription, preserving active wake work. */
+  reconnectPullWake(): void {
+    this.pullWakeRunner?.reconnect()
+  }
+
   /**
    * Replace the in-memory `extras` list and re-apply the merged config
    * against the last-known workspace `mcp.json` state. Workspace
