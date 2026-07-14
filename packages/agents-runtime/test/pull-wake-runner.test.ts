@@ -168,7 +168,7 @@ describe(`createPullWakeRunner`, () => {
           activeWakeCompleted()
         })
       }),
-      isWakeActive: vi.fn(() => activeWake),
+      isWakeActive: vi.fn((_streamPath: string) => activeWake),
     }
     const runner = createPullWakeRunner({
       baseUrl: `http://server`,
