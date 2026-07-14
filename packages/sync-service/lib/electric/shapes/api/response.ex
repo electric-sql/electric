@@ -472,8 +472,6 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
   end
 
-  @stalled_serve_timeout_default :timer.seconds(60)
-
   # Socket writes are split into pieces of at most this size. Bounding the
   # write unit bounds the response data queued in the socket's driver queue
   # at any moment and — because a bounded write to a live client completes
@@ -509,10 +507,13 @@ defmodule Electric.Shapes.Api.Response do
   # is never at risk. The terminated client can reconnect and resume from its
   # last offset.
   defp start_write_watchdog(stack_id, response) do
+    # The fallback only applies to stacks whose seed config omits the key
+    # (e.g. minimal unit-test stacks); StackSupervisor-managed stacks always
+    # seed it. Electric.Config is the single source of truth for the default.
     case Electric.StackConfig.lookup(
            stack_id,
            :stalled_serve_timeout,
-           @stalled_serve_timeout_default
+           Electric.Config.default(:stalled_serve_timeout)
          ) do
       timeout when is_integer(timeout) and timeout > 0 ->
         handler = self()
