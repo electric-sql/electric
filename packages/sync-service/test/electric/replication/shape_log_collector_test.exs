@@ -1665,6 +1665,138 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  # Reproduction of the "system stops flushing the WAL" stall:
+  #
+  # A consumer that dies WITHOUT running its terminate callback (e.g. an
+  # untrappable `:kill` exit) after its shape has been tracked in the
+  # FlushTracker leaves a permanently incomplete entry. The only two cleanup
+  # paths — DOWN detection during `ConsumerRegistry.publish/2` for that same
+  # shape, and `ShapeCleaner`-driven `ShapeLogCollector.remove_shape/2` from the
+  # consumer's `terminate/2` — both require either new traffic routed to the
+  # dead shape or a terminate that never ran. If the shape's table stays quiet,
+  # the FlushTracker's global minimum is pinned forever and
+  # `confirmed_flush_lsn` never advances for the whole stack, even though every
+  # live consumer is fully flushed => unbounded WAL growth on Postgres.
+  describe "FlushTracker stall when tracked consumer dies without cleanup on a quiet shape" do
+    @quiet_inspector Support.StubInspector.new(
+                       tables: [{5678, {"public", "other_table"}}],
+                       columns: [%{name: "id", type: "int8", pk_position: 0}]
+                     )
+    @quiet_shape Shape.new!("other_table", inspector: @quiet_inspector)
+
+    setup :setup_log_collector
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn
+          {"public", "test_table"}, _ -> {:ok, {1234, {"public", "test_table"}}}
+          {"public", "other_table"}, _ -> {:ok, {5678, {"public", "other_table"}}}
+        end,
+        load_relation_info: fn
+          1234, _ ->
+            {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+
+          5678, _ ->
+            {:ok, %{id: 5678, schema: "public", name: "other_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn
+          1234, _ -> {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+          5678, _ -> {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      consumer_alive =
+        start_supervised!(
+          {Support.TransactionConsumer,
+           id: :alive,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @shape,
+           shape_handle: "shape-alive"},
+          id: {:consumer, :alive}
+        )
+
+      consumer_doomed =
+        start_supervised!(
+          {Support.TransactionConsumer,
+           id: :doomed,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @quiet_shape,
+           shape_handle: "shape-doomed"},
+          id: {:consumer, :doomed}
+        )
+
+      %{consumer_alive: consumer_alive, consumer_doomed: consumer_doomed}
+    end
+
+    test "flush boundary is pinned forever while the dead shape receives no traffic", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      # Txn 1 (lsn 42) touches both tables: both consumers process it and both
+      # shapes are tracked in the FlushTracker at commit.
+      lsn1 = Lsn.from_integer(42)
+
+      txn1 =
+        complete_txn_fragment(100, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn1, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn1, 2)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
+
+      # The doomed consumer dies before flushing, without terminate running
+      # (`:kill` is untrappable), so it neither deregisters from the SLC nor
+      # goes through ShapeCleaner. Its FlushTracker entry stays incomplete.
+      kill_consumer(ctx.consumer_doomed, :kill)
+
+      # The alive consumer flushes txn 1 completely. The flush boundary can
+      # only advance up to just before the dead shape's tracked position.
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn1, 2))
+      assert_receive {:flush_boundary_updated, 40}
+
+      # Txn 2 (lsn 50) touches only test_table, so it is never routed to the
+      # dead consumer and publish-time DOWN detection never triggers.
+      lsn2 = Lsn.from_integer(50)
+
+      txn2 =
+        complete_txn_fragment(101, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      refute_receive {Support.TransactionConsumer, {:doomed, _}, _}
+
+      # Even with every live consumer fully flushed to lsn 50, the flush
+      # boundary does not move: the dead shape's entry pins the global minimum.
+      # This is the WAL-growth stall as seen from Postgres.
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn2, 0))
+      refute_receive {:flush_boundary_updated, _}
+
+      # Root cause proof: explicitly removing the dead shape from the SLC (the
+      # step that out-of-band death skips) immediately unblocks the boundary.
+      ShapeLogCollector.remove_shape(ctx.stack_id, "shape-doomed")
+      assert_receive {:flush_boundary_updated, 50}
+    end
+  end
+
   defp kill_consumer(pid, reason) do
     ref = Process.monitor(pid)
     Process.exit(pid, reason)
