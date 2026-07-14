@@ -161,6 +161,114 @@ pub(crate) fn barrier_fsync(file: &File) -> std::io::Result<()> {
     }
 }
 
+/// A single filesystem-wide durability barrier (Linux `syncfs`). Flushes ALL dirty
+/// data+metadata on the filesystem that `file` lives on — used by the checkpoint's
+/// `--wal-checkpoint-syncfs` path to make every touched per-stream file durable with
+/// ONE syscall instead of `O(N_touched)` `fdatasync`s (cardinality-cliff #1). `file`
+/// can be any open fd on the target fs (the checkpoint passes a touched stream file).
+/// Linux-only; the caller gates on `cfg!(target_os = "linux")`, so the non-Linux stub
+/// (which errors) is never reached in practice — it exists only so the crate compiles
+/// on macOS.
+#[cfg(target_os = "linux")]
+pub(crate) fn syncfs_barrier(file: &File) -> std::io::Result<()> {
+    // SAFETY: `fd` is a valid open descriptor for the lifetime of `file`.
+    if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn syncfs_barrier(_file: &File) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "syncfs is Linux-only",
+    ))
+}
+
+/// Stream-lane count (`--stream-lanes`, default 1 = the flat `streams/` layout).
+/// With N > 1, stream data files are hashed across `streams/<0..N>/` subdirs so
+/// each lane can be mounted on its OWN device: the checkpoint's dirty-file
+/// writeback (the ~1M-stream wall — one `syncfs` measured at 60–74 s when every
+/// stream shared one device, wal-1m-diag 2026-07-13) spreads over N devices and
+/// runs N barriers in parallel, and no single ext4 directory holds every stream.
+/// Must be set BEFORE `Store::open` and match the on-disk layout across restarts
+/// (same N or files won't be found — a layout choice, not a runtime tunable).
+static STREAM_LANES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+pub fn set_stream_lanes(n: usize) {
+    STREAM_LANES.store(n.max(1), Ordering::Relaxed);
+}
+pub fn stream_lanes() -> usize {
+    STREAM_LANES.load(Ordering::Relaxed)
+}
+
+/// Stable lane for a stream data-file name (FNV-1a; the fname embeds the stream
+/// id, so this is fixed for the stream's lifetime and recomputable anywhere).
+fn lane_of(fname: &str) -> usize {
+    let lanes = stream_lanes();
+    if lanes <= 1 {
+        return 0;
+    }
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in fname.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x1000_0000_01b3);
+    }
+    (h % lanes as u64) as usize
+}
+
+/// Directory of lane `lane`: the flat `streams/` when lanes == 1 (byte-identical
+/// to the historical layout), else `streams/<lane>/`.
+fn lane_dir(data_dir: &std::path::Path, lane: usize) -> PathBuf {
+    let root = data_dir.join("streams");
+    if stream_lanes() <= 1 {
+        root
+    } else {
+        root.join(lane.to_string())
+    }
+}
+
+/// Open directory fds, one per stream lane, registered at `Store::open` — the
+/// checkpoint's syncfs must barrier EVERY lane's filesystem (touched files can
+/// live on any lane), and a dir fd is a valid syncfs target. Replaced (not
+/// appended) per open so tests that build many stores target the latest layout.
+static LANE_SYNC_FDS: StdMutex<Option<Arc<Vec<File>>>> = StdMutex::new(None);
+
+/// Checkpoint durability barrier across all stream lanes: one `syncfs` per lane,
+/// parallelized (each is a full device writeback and the lanes are independent
+/// devices in the intended deployment). Falls back to a single barrier on
+/// `fallback`'s fs when no lane registry exists (e.g. shard-only unit tests).
+pub(crate) fn syncfs_stream_lanes(fallback: &File) -> std::io::Result<()> {
+    let fds = LANE_SYNC_FDS.lock().unwrap().clone();
+    match fds {
+        Some(fds) if !fds.is_empty() => {
+            if fds.len() == 1 {
+                return syncfs_barrier(&fds[0]);
+            }
+            std::thread::scope(|s| {
+                let handles: Vec<_> = fds
+                    .iter()
+                    .map(|f| s.spawn(move || syncfs_barrier(f)))
+                    .collect();
+                let mut first_err = None;
+                for h in handles {
+                    if let Err(e) = h
+                        .join()
+                        .unwrap_or_else(|_| Err(std::io::Error::other("syncfs thread panicked")))
+                    {
+                        first_err.get_or_insert(e);
+                    }
+                }
+                match first_err {
+                    None => Ok(()),
+                    Some(e) => Err(e),
+                }
+            })
+        }
+        _ => syncfs_barrier(fallback),
+    }
+}
+
 pub struct StreamState {
     pub id: u64,
     pub path: String,
@@ -405,6 +513,61 @@ impl Store {
     ) -> std::io::Result<Self> {
         let streams_dir = data_dir.join("streams");
         std::fs::create_dir_all(&streams_dir)?;
+        // Persist + validate the stream-lane count (mirrors the WAL shard count's
+        // persisted-N contract): opening a laned layout with a different
+        // `--stream-lanes` would make every existing stream silently invisible
+        // (recovery walks the wrong dirs). Refuse loudly instead.
+        {
+            let marker = streams_dir.join(".lanes");
+            match std::fs::read_to_string(&marker) {
+                Ok(txt) => {
+                    let on_disk: usize = txt.trim().parse().map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("corrupt stream-lane marker {}", marker.display()),
+                        )
+                    })?;
+                    if on_disk != stream_lanes() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!(
+                                "--stream-lanes {} does not match this data dir's on-disk layout                                  ({} lanes, recorded in {}). The lane count is a layout choice                                  and must match across restarts.",
+                                stream_lanes(),
+                                on_disk,
+                                marker.display()
+                            ),
+                        ));
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // Legacy pre-marker dirs are all lanes == 1: refuse enabling
+                    // lanes over an existing flat layout (its files would vanish).
+                    if stream_lanes() > 1
+                        && std::fs::read_dir(&streams_dir)?
+                            .flatten()
+                            .any(|e| e.path().is_file())
+                    {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "--stream-lanes > 1 over an existing flat streams/ layout;                              this data dir was created with 1 lane",
+                        ));
+                    }
+                    std::fs::write(&marker, format!("{}\n", stream_lanes()))?;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        // Create every stream-lane dir and register their dir fds for the
+        // checkpoint's per-lane syncfs barrier (see `syncfs_stream_lanes`).
+        {
+            let mut lane_fds = Vec::with_capacity(stream_lanes());
+            for lane in 0..stream_lanes() {
+                let d = lane_dir(&data_dir, lane);
+                std::fs::create_dir_all(&d)?;
+                lane_fds.push(File::open(&d)?);
+            }
+            *LANE_SYNC_FDS.lock().unwrap() = Some(Arc::new(lane_fds));
+        }
         // Stream data can be sensitive; keep the data dir owner-only (best-effort).
         #[cfg(unix)]
         {
@@ -444,11 +607,21 @@ impl Store {
     /// everything else. Orphan files (crash between create and meta write) are
     /// discarded.
     fn recover(&self, streams_dir: &std::path::Path) -> std::io::Result<()> {
+        let _ = streams_dir; // root; per-lane dirs derived below (lane 0 == root when lanes == 1)
         let mut metas: HashMap<String, (Meta, PathBuf)> = HashMap::new();
         let mut data_files: Vec<PathBuf> = Vec::new();
-        for entry in std::fs::read_dir(streams_dir)? {
-            let p = entry?.path();
+        let mut entries: Vec<PathBuf> = Vec::new();
+        for lane in 0..stream_lanes() {
+            for entry in std::fs::read_dir(lane_dir(&self.data_dir, lane))? {
+                entries.push(entry?.path());
+            }
+        }
+        for p in entries {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == ".lanes" {
+                // stream-lane layout marker, not stream data
+                continue;
+            }
             if name.ends_with(".meta.tmp") {
                 let _ = std::fs::remove_file(&p);
             } else if name.ends_with(".compact.tmp") {
@@ -792,7 +965,7 @@ impl Store {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let fname = format!("{}~{}", encode_path(path), id);
-        let file_path = self.data_dir.join("streams").join(fname);
+        let file_path = lane_dir(&self.data_dir, lane_of(&fname)).join(fname);
         let file = Arc::new(
             OpenOptions::new()
                 .create(true)

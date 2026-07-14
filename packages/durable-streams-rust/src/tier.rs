@@ -173,6 +173,9 @@ pub enum TierKind {
     Off,
     /// Local-filesystem BlobStore (a chunk directory) — for testing offload
     /// without S3.
+    /// Sealed segments to a local directory. Test-only backend (no CLI
+    /// surface): exercises the seal/offload/compaction machinery without S3.
+    #[allow(dead_code)]
     Local,
     /// S3-compatible object storage (feature `tier`).
     S3,

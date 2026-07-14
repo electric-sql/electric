@@ -87,29 +87,28 @@ durable, single-node server on `127.0.0.1:4437` with its data dir under `$TMPDIR
 
 **Cold-storage tier** — off by default; see [Tiered storage](#tiered-storage-cold-offload). With `--tier off` the server is byte-identical to a single-file deployment.
 
-| Flag                                          | Default    | Description                                                                              |
-| --------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| `--tier`                                      | `off`      | `off` \| `local` (sealed segments to a local dir) \| `s3` (S3-compatible object storage) |
-| `--tier-local-dir`                            | —          | (`tier=local`) directory for sealed segments                                             |
-| `--tier-endpoint`                             | —          | (`tier=s3`) S3 endpoint URL                                                              |
-| `--tier-region`                               | —          | (`tier=s3`) region                                                                       |
-| `--tier-bucket`                               | —          | (`tier=s3`) bucket name                                                                  |
-| `--tier-key-prefix`                           | —          | object-key prefix for sealed segments                                                    |
-| `--tier-segment-bytes`                        | `8 MiB`    | sealed-segment size (fixed-size, CDN-friendly)                                           |
-| `--tier-compact-bytes`                        | `64 MiB`   | small-segment compaction threshold                                                       |
-| `--tier-path-style` / `--tier-virtual-hosted` | path-style | S3 addressing style                                                                      |
-| `--tier-allow-http`                           | off        | allow plain HTTP to the S3 endpoint (e.g. a local MinIO)                                 |
+| Flag                                          | Default    | Description                                              |
+| --------------------------------------------- | ---------- | -------------------------------------------------------- |
+| `--tier`                                      | `off`      | `off` \| `s3` (S3-compatible object storage)             |
+| `--tier-endpoint`                             | —          | (`tier=s3`) S3 endpoint URL                              |
+| `--tier-region`                               | —          | (`tier=s3`) region                                       |
+| `--tier-bucket`                               | —          | (`tier=s3`) bucket name                                  |
+| `--tier-key-prefix`                           | —          | object-key prefix for sealed segments                    |
+| `--tier-segment-bytes`                        | `8 MiB`    | sealed-segment size (fixed-size, CDN-friendly)           |
+| `--tier-compact-bytes`                        | `64 MiB`   | small-segment compaction threshold                       |
+| `--tier-path-style` / `--tier-virtual-hosted` | path-style | S3 addressing style                                      |
+| `--tier-allow-http`                           | off        | allow plain HTTP to the S3 endpoint (e.g. a local MinIO) |
 
 S3 credentials come from the **environment**, never flags: `DS_S3_ACCESS_KEY_ID` /
 `DS_S3_SECRET_ACCESS_KEY` (or the standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
 
 ### Choosing a configuration
 
-| Your situation                                      | Use                                                                                                         |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Bounded local disk with long history**            | `--tier s3` (or `local`) — seal cold segments to object storage; the recent tail stays local and zero-copy. |
-| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).                 |
-| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                               |
+| Your situation                                      | Use                                                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Bounded local disk with long history**            | `--tier s3` — seal cold segments to object storage; the recent tail stays local and zero-copy. |
+| **High fan-out p99 across many streams on Linux**   | try `--tail-cache-bytes 65536` (off by default there because `sendfile` already covers it).    |
+| **Experimenting on macOS and writes take ~2–10 ms** | expected — see [macOS write latency](#macos-write-latency-f_fullfsync) below.                  |
 
 ### macOS write latency (`F_FULLFSYNC`)
 
@@ -179,7 +178,7 @@ Opt-in (`--tier`, off by default). Because streams are append-only and immutable
 
 - **S3-compatible, not AWS-only.** The `s3` backend works with any S3-compatible endpoint — Cloudflare R2, Fly/Tigris, MinIO, Backblaze B2 — via a configurable endpoint + path-style addressing. It's built on the `object_store` crate behind the **`tier` Cargo feature** (so a default build pulls no object-storage dependencies): `cargo build --release --features tier`. A `local` backend (sealed segments to a directory) needs no feature/deps and is handy for testing.
 - **How it stays correct.** Each stream keeps a manifest of its sealed segments. The lifecycle is seal → upload → `head`-verify → durably flip the manifest entry `local → remote` → only then unlink the staged chunk file (safe even under an in-flight read — Unix keeps an open fd readable after unlink). A read resolves each requested offset against the manifest — local ranges (live file or sealed chunk file) keep the zero-copy `sendfile` path; remote ranges are fetched by range-GET and streamed in. JSON seals always land on a value boundary (never inside a string). Durability is unchanged: an append still acks only after the local fsync — offload is strictly post-durability. Fully-sealed ranges are stamped `Cache-Control: immutable` for long-lived CDN caching, and remote objects are GC'd ref-count-aware with forks. The live data file's redundant sealed prefix is reclaimed by **compaction**: once it exceeds `--tier-compact-bytes` (default 64 MiB), the live file is rewritten to hold only the hot tail, under the appender lock and crash-safe via a `pending_compaction` intent. In-flight reads drain off the old fd, so reads stay lock-free — this is why compaction is used rather than `fallocate` hole-punching, which raced those reads. Set `--tier-compact-bytes 0` to disable.
-- **Flags:** `--tier {off|local|s3}`, `--tier-segment-bytes`, `--tier-compact-bytes` (live-file compaction threshold; `0` disables), `--tier-key-prefix`, `--tier-local-dir` (local), `--tier-endpoint` / `--tier-region` / `--tier-bucket`, `--tier-path-style` / `--tier-virtual-hosted`, `--tier-allow-http`. S3 credentials come from `DS_S3_ACCESS_KEY_ID` / `DS_S3_SECRET_ACCESS_KEY` (with `AWS_*` fallback), env only.
+- **Flags:** `--tier {off|s3}`, `--tier-segment-bytes`, `--tier-compact-bytes` (live-file compaction threshold; `0` disables), `--tier-key-prefix`, `--tier-endpoint` / `--tier-region` / `--tier-bucket`, `--tier-path-style` / `--tier-virtual-hosted`, `--tier-allow-http`. S3 credentials come from `DS_S3_ACCESS_KEY_ID` / `DS_S3_SECRET_ACCESS_KEY` (with `AWS_*` fallback), env only.
   Conformance passes with tiering on as well as off (verified manually with a small `--tier-segment-bytes` so streams seal and offload mid-suite; catch-up reads, ETag/304, closed-stream EOF, and forks are all served correctly from cold). Note this is a manual check, not a CI gate: the `rust-conformance` matrix in `.github/workflows/ci.yml` builds the default feature set (no `--features tier`) and never passes `--tier`, so the tier code path is not exercised in CI today.
 
 ## Observability (OpenTelemetry)

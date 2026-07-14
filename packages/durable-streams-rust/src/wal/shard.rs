@@ -379,6 +379,36 @@ pub struct Shard {
 /// recyclable.
 const CHECKPOINT_FILE: &str = "checkpoint";
 
+/// Checkpoint cadence knobs. The checkpoint's only job is bounding retained-WAL
+/// size (= crash-replay time): acks never gate on it (the disk-bounded safety
+/// valve) and reads never touch the WAL, so firing it less often is free except
+/// for disk space and replay budget. (Durability strategy is not a knob: on
+/// Linux, checkpoint step 2 issues one `syncfs` per stream lane; elsewhere it
+/// runs the serial per-file `fdatasync` loop. Ordering is identical: the barrier
+/// completes before `persist_durable_tails`/recycle.) Two triggers, whichever
+/// comes first per shard:
+///   * time: `--wal-checkpoint-interval-ms` (default 3000 — the historical 3 s
+///     wave cadence, now per-shard).
+///   * size: `--wal-checkpoint-wal-bytes` (default 0 = disabled) — checkpoint a
+///     shard as soon as its retained WAL exceeds this many bytes. This turns the
+///     hardcoded timer into an explicit replay-time budget (e.g. 1 GiB ≈ <1 s of
+///     replay on NVMe) and lets shards self-stagger by their own write rates
+///     instead of storming together on a shared tick.
+static CHECKPOINT_INTERVAL_MS: AtomicU64 = AtomicU64::new(3_000);
+pub fn set_checkpoint_interval_ms(ms: u64) {
+    CHECKPOINT_INTERVAL_MS.store(ms.max(1), Ordering::Relaxed);
+}
+pub fn checkpoint_interval_ms() -> u64 {
+    CHECKPOINT_INTERVAL_MS.load(Ordering::Relaxed)
+}
+static CHECKPOINT_WAL_BYTES: AtomicU64 = AtomicU64::new(0);
+pub fn set_checkpoint_wal_bytes(bytes: u64) {
+    CHECKPOINT_WAL_BYTES.store(bytes, Ordering::Relaxed);
+}
+pub fn checkpoint_wal_bytes() -> u64 {
+    CHECKPOINT_WAL_BYTES.load(Ordering::Relaxed)
+}
+
 /// Name of the per-shard durable-tail map: `<shard_dir>/tails` (task 11b). A
 /// CUMULATIVE `stream_id durable_tail` line map (plain decimal text, one stream
 /// per line). At checkpoint, each touched stream's current logical `Shared.tail`
@@ -833,9 +863,23 @@ impl Shard {
             let n_touched = touched.len();
             let t_capture = t_start.elapsed();
 
-            // 2. fdatasync each touched per-stream file.
-            for (_, _, f) in &touched {
-                crate::store::barrier_fsync(f)?;
+            // 2. Make every touched per-stream file durable, strictly BEFORE
+            //    persist_durable_tails/recycle (the durability-before-recycle
+            //    ordering). Two modes:
+            //    * syncfs (Linux default): one filesystem-wide barrier per stream
+            //      lane — O(lanes) syscalls instead of O(N_touched) fdatasyncs
+            //      (the cardinality cliff). Lanes are independent devices in the
+            //      intended layout, so the barriers run in parallel.
+            //    * per-file fdatasync loop: the non-Linux (or --wal-checkpoint-
+            //      syncfs off) fallback. Serial on purpose: parallel fan-out
+            //      regressed in every controlled test (it steals device budget
+            //      from the commit path).
+            if cfg!(target_os = "linux") && n_touched > 0 {
+                crate::store::syncfs_stream_lanes(&touched[0].2)?;
+            } else {
+                for (_, _, f) in &touched {
+                    crate::store::barrier_fsync(f)?;
+                }
             }
             let t_fsync = t_start.elapsed();
 
