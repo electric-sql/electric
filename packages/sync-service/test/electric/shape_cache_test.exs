@@ -1116,7 +1116,13 @@ defmodule Electric.ShapeCacheTest do
       # should delay in responding
       refute Task.yield(wait_task, 10)
       Task.await(creation_task)
-      assert :started = Task.await(wait_task, start_consumer_delay + 5_000)
+
+      # We're asserting that the snapshot *eventually* starts once the consumer comes up,
+      # not that it does so within a few seconds. This normally resolves in well under a
+      # second; the generous-but-bounded timeout absorbs CI scheduler/PG load spikes (which
+      # occasionally pushed the old 5.3s bound over the edge) while still failing reasonably
+      # fast on a genuine hang — see https://github.com/electric-sql/electric/issues/4712.
+      assert :started = Task.await(wait_task, 15_000)
     end
 
     test "should not loop forever waiting for consumer to come up", ctx do
