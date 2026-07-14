@@ -118,6 +118,31 @@ export function refreshPowerSaveBlocker(deps: RuntimeLifecycleDeps): void {
   powerSaveBlockerId = null
 }
 
+export function reconnectPullWakesAfterResume(
+  deps: RuntimeLifecycleDeps
+): void {
+  for (const entry of deps.runtimeEntries.values()) {
+    const server = deps.findServer(entry.serverId)
+    if (
+      !server?.localRuntimeEnabled ||
+      entry.desiredState !== `connected` ||
+      entry.localRuntimeStatus !== `running` ||
+      !entry.runtime
+    ) {
+      continue
+    }
+
+    try {
+      entry.runtime.reconnectPullWake()
+    } catch (error) {
+      console.warn(
+        `[agents-desktop] Failed to reconnect pull-wake after resume for ${entry.serverId}:`,
+        error
+      )
+    }
+  }
+}
+
 export async function restartConnectedRuntimes(
   deps: RuntimeLifecycleDeps
 ): Promise<void> {
