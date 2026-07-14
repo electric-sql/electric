@@ -513,10 +513,17 @@ defmodule Electric.Shapes.Api.Response do
         handler = self()
         shape_handle = response.handle
 
-        spawn(fn ->
-          ref = Process.monitor(handler)
-          write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
-        end)
+        {:ok, watchdog} =
+          Task.start(fn ->
+            # The label groups these processes under a low-cardinality
+            # process_type in the per-process telemetry, rather than leaving
+            # them anonymous — serves and their guards should be visible.
+            Process.set_label({:serve_watchdog, shape_handle})
+            ref = Process.monitor(handler)
+            write_watchdog_loop(handler, ref, shape_handle, timeout, :idle)
+          end)
+
+        watchdog
 
       # 0 (or any non-positive value) disables reaping.
       _disabled ->
