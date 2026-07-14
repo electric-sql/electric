@@ -1,4 +1,5 @@
 ---
+'@electric-ax/agents': patch
 '@electric-ax/agents-runtime': patch
 '@electric-ax/agents-desktop': patch
 ---
