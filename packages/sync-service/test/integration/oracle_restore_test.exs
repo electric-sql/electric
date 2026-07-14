@@ -1,8 +1,8 @@
 defmodule Electric.Integration.OracleRestoreTest do
   @moduledoc """
-  Targeted regression tests for restore-from-file. Each test exercises a
-  scenario from `bugs.md` with a deterministic, minimal mutation sequence,
-  reusing `Support.OracleHarness.test_against_oracle/4`.
+  Targeted regression tests for subquery-shape restore across a server restart,
+  each with a deterministic, minimal mutation sequence, reusing
+  `Support.OracleHarness.test_against_oracle/4`.
 
   These tests use a small, readable "issue tracker" domain schema rather than
   the abstract `level_N` hierarchy from `Support.OracleHarness.StandardSchema`:
@@ -12,9 +12,6 @@ defmodule Electric.Integration.OracleRestoreTest do
 
   The shape under test is "issues belonging to an active project", expressed
   as a subquery over `projects.active`.
-
-  These tests are expected to fail until the underlying Electric bugs are
-  fixed.
   """
 
   use ExUnit.Case, async: false
@@ -35,10 +32,9 @@ defmodule Electric.Integration.OracleRestoreTest do
   setup ctx do
     ctx =
       with_electric_client(ctx,
-        # A realistic long-poll timeout. A very short one (e.g. 100ms) trips a
-        # separate post-restart long-poll readiness race (bug 3): the poll times
-        # out before replication has caught up after the restart, yielding a
-        # spurious 409. That is independent of the subquery-restore behaviour
+        # A realistic long-poll timeout. A very short one (e.g. 100ms) can time
+        # out before replication has caught up after a restart, yielding a
+        # spurious 409 that is independent of the subquery-restore behaviour
         # under test here.
         router_opts: [long_poll_timeout: 5000],
         num_clients: 1
@@ -101,12 +97,11 @@ defmodule Electric.Integration.OracleRestoreTest do
   end
 
   @tag :oracle_restore_bug_1
-  test "bug 1: subquery shape diverges from oracle after server restart", ctx do
-    # Shape on `issues` with a subquery predicate over `projects.active`.
-    # After the server is restarted, the subquery materializer state is not
-    # restored from disk, so toggling `projects.active` on either side of the
-    # restart produces a divergence between the client view and the oracle
-    # (or a 409 must-refetch on this `optimized: true` shape).
+  test "subquery shape stays consistent with oracle across a server restart", ctx do
+    # A single `optimized: true` shape on `issues` with a subquery predicate over
+    # `projects.active`. Toggling `projects.active` on either side of the restart
+    # moves issue rows in and out of the shape via the subquery materializer; the
+    # client view must stay consistent with the oracle across the restart.
     shapes = [
       %{
         name: "issues_of_active_projects",
@@ -140,24 +135,13 @@ defmodule Electric.Integration.OracleRestoreTest do
   # under a small `chunk_bytes_threshold` so its log spans many chunks. After the
   # restart the persistent replication slot has to replay that backlog.
   @tag chunk_bytes_threshold: 200
-  test "optimized subquery shape must-refetches after restart during slot catch-up replay",
+  test "optimized subquery shapes stay consistent when the slot replays a backlog after restart",
        ctx do
-    # Two `optimized: true` subquery shapes over the same `projects` source.
-    #
-    # Regression test. Before the fix: after the restart, the `projects` source
-    # consumer replays batch_1 from the persistent slot and re-delivers those
-    # already-applied changes to the subquery materializer via `new_changes`. The
-    # materializer re-applied them and crashed ("Key ... already exists"), which
-    # cascaded — handle_materializer_down -> stop_and_clean ->
-    # handle_writer_termination({:shutdown, :cleanup}) -> remove_shape_async ->
-    # notify_shape_rotation — removing the (healthy) shapes and sending the
-    # polling client a 409 must-refetch.
-    #
-    # The fix makes the materializer ignore `new_changes` ranges it already
-    # applied during its startup history replay, so the crash (and the whole
-    # removal cascade) no longer happens. NB the underlying cascade — a
-    # materializer crash tearing down and *removing* healthy dependent shapes —
-    # is a separate hardening concern (the "bug 6" cascade) this fix leaves open.
+    # Two `optimized: true` subquery shapes over the same `projects` source. After
+    # the restart the persistent slot re-delivers batch_1's already-applied changes
+    # to the subquery materializer; the materializer must ignore ranges it already
+    # applied during its startup history replay so the shapes stay consistent and
+    # the polling client is not sent a 409 must-refetch.
     shapes = [
       %{
         name: "issues_of_active_projects",
@@ -194,6 +178,106 @@ defmodule Electric.Integration.OracleRestoreTest do
     # harness runs a post-restart batch/check.
     batch_2 = [
       [%{name: "deactivate_p3", sql: "UPDATE projects SET active = false WHERE id = 'p3'"}]
+    ]
+
+    batches = [toggles, batch_2]
+
+    OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
+  end
+
+  # A three-level "issue tracker": regions own projects own issues.
+  #
+  #     regions (id, active)
+  #         └── projects (id, region_id)
+  #                 └── issues (id, project_id, title)
+  #
+  # r1, r3 start active; r2 starts inactive. Two projects per region, two issues
+  # per project.
+  defp setup_nested_schema(ctx) do
+    OracleHarness.apply_sql(ctx, [
+      "DROP TABLE IF EXISTS issues CASCADE",
+      "DROP TABLE IF EXISTS projects CASCADE",
+      "DROP TABLE IF EXISTS regions CASCADE",
+      """
+      CREATE TABLE regions (
+        id TEXT PRIMARY KEY,
+        active BOOLEAN NOT NULL DEFAULT true
+      )
+      """,
+      """
+      CREATE TABLE projects (
+        id TEXT PRIMARY KEY,
+        region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE
+      )
+      """,
+      """
+      CREATE TABLE issues (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title TEXT NOT NULL
+      )
+      """
+    ])
+
+    OracleHarness.apply_sql(ctx, [
+      "INSERT INTO regions (id, active) VALUES ('r1', true), ('r2', false), ('r3', true)",
+      """
+      INSERT INTO projects (id, region_id) VALUES
+        ('p1', 'r1'), ('p2', 'r1'),
+        ('p3', 'r2'), ('p4', 'r2'),
+        ('p5', 'r3'), ('p6', 'r3')
+      """,
+      "INSERT INTO issues (id, project_id, title) VALUES " <>
+        (for(n <- 1..12, do: "('i#{n}', 'p#{div(n - 1, 2) + 1}', 'Issue #{n}')")
+         |> Enum.join(", "))
+    ])
+
+    :ok
+  end
+
+  @tag :oracle_restore_nested_subquery
+  # As with the single-level case, force the source shape's log to span multiple
+  # chunks so the post-restart replay path is exercised.
+  @tag chunk_bytes_threshold: 200
+  test "nested optimized subquery shape stays consistent with oracle across a restart", ctx do
+    setup_nested_schema(ctx)
+
+    # The shape under test is a *nested* subquery: issues whose project belongs to
+    # an active region. Its dependency shape — `projects WHERE region_id IN (SELECT
+    # id FROM regions WHERE active)` — is itself an optimized subquery shape, so
+    # its log contains move-in/move-out *control messages* (projects moving in and
+    # out as regions toggle). On restart the dependency materializer replays that
+    # log to catch the outer consumer up; the control-message moves must be
+    # re-emitted so the outer shape isn't left missing the issues of projects that
+    # moved via a control message.
+    shapes = [
+      %{
+        name: "issues_of_active_regions",
+        table: "issues",
+        where:
+          "project_id IN (SELECT id FROM projects WHERE region_id IN " <>
+            "(SELECT id FROM regions WHERE active = true))",
+        columns: ["id", "project_id", "title"],
+        pk: ["id"],
+        optimized: true
+      }
+    ]
+
+    # batch_1: 200 toggles of r3's `active` flag — each toggle moves p5/p6 in and
+    # out of the inner subquery shape, writing control messages to its log. r3 ends
+    # active, so pre-restart the shape matches the oracle.
+    toggles =
+      Enum.flat_map(1..100, fn _ ->
+        [
+          [%{name: "deactivate_r3", sql: "UPDATE regions SET active = false WHERE id = 'r3'"}],
+          [%{name: "reactivate_r3", sql: "UPDATE regions SET active = true WHERE id = 'r3'"}]
+        ]
+      end)
+
+    # batch_2 (after the restart): a single region deactivate that moves a project
+    # out of the inner subquery via a control message.
+    batch_2 = [
+      [%{name: "deactivate_r1", sql: "UPDATE regions SET active = false WHERE id = 'r1'"}]
     ]
 
     batches = [toggles, batch_2]
