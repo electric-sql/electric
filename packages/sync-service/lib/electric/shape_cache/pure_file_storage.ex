@@ -1035,7 +1035,59 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts) do
+  def get_log_stream_with_offsets(%LogOffset{} = min_offset, %LogOffset{} = max_offset, opts)
+      when is_last_virtual_offset(min_offset) or is_real_offset(min_offset) do
+    stream_main_log(min_offset, max_offset, opts, with_offsets?: true)
+  end
+
+  def get_log_stream_with_offsets(
+        %LogOffset{op_offset: op_offset} = min_offset,
+        %LogOffset{} = max_offset,
+        %__MODULE__{} = opts
+      ) do
+    metadata = read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
+
+    snapshot_started? = Keyword.get(metadata, :snapshot_started?) || false
+    last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
+
+    if not snapshot_started? and not shape_gone?(opts) do
+      raise(Storage.Error, message: "Snapshot not started")
+    end
+
+    case {last_snapshot_chunk, min_offset} do
+      {_, x} when is_min_offset(x) ->
+        snapshot_lines_with_offsets(Snapshot.stream_chunk_lines(opts, 0))
+
+      {%LogOffset{} = latest, min_offset} when is_log_offset_lt(min_offset, latest) ->
+        snapshot_lines_with_offsets(Snapshot.stream_chunk_lines(opts, op_offset + 1))
+
+      {nil, _offset} ->
+        snapshot_lines_with_offsets(wait_for_chunk_file_or_snapshot_end(opts, op_offset + 1))
+
+      {%LogOffset{}, offset} ->
+        stream_main_log(offset, max_offset, opts, with_offsets?: true)
+    end
+  end
+
+  # Snapshot lines precede all real offsets, so tag them with `before_all/0`.
+  defp snapshot_lines_with_offsets(stream),
+    do: Stream.map(stream, &{LogOffset.before_all(), &1})
+
+  defp stream_main_log(min_offset, max_offset, opts, gen_opts \\ [])
+
+  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts, gen_opts) do
+    with_offsets? = Keyword.get(gen_opts, :with_offsets?, false)
+
+    ets_reader =
+      if with_offsets?,
+        do: &read_range_from_ets_cache_with_offsets/3,
+        else: &read_range_from_ets_cache/3
+
+    disk_streamer =
+      if with_offsets?,
+        do: &stream_from_disk_with_offsets/4,
+        else: &stream_from_disk/4
+
     storage_meta(
       ets_table: ets,
       last_persisted_offset: last_persisted,
@@ -1067,34 +1119,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
       is_log_offset_lte(last_persisted, min_offset) ->
         # Pure ETS read case
-        case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
+        case ets_reader.(ets, min_offset, upper_read_bound) do
           {_data, last_offset}
           when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
             # Empty or partial read - ETS was cleared by a concurrent flush.
             # Data is now on disk (flush writes to disk before clearing ETS),
             # so read directly from there using existing boundary info.
-            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+            disk_streamer.(opts, min_offset, upper_read_bound, boundary_info)
 
           {data, _last_offset} ->
             data
         end
 
       is_log_offset_lte(upper_read_bound, last_persisted) ->
-        stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+        disk_streamer.(opts, min_offset, upper_read_bound, boundary_info)
 
       true ->
         # Mixed disk + ETS case
         # Because ETS may be cleared by a flush in a parallel process, we're reading it out into memory.
         # It's expected to be fairly small in the worst case, up 64KB
-        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
+        case ets_reader.(ets, last_persisted, upper_read_bound) do
           {_upper_range, last_offset}
           when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
             # Empty or partial read - ETS was cleared by a concurrent flush.
             # Data is now on disk, so read the full range from there.
-            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+            disk_streamer.(opts, min_offset, upper_read_bound, boundary_info)
 
           {upper_range, _last_offset} ->
-            stream_from_disk(opts, min_offset, last_persisted, boundary_info)
+            disk_streamer.(opts, min_offset, last_persisted, boundary_info)
             |> Stream.concat(upper_range)
         end
     end
@@ -1173,6 +1225,43 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  # Offset-preserving counterpart to `read_range_from_ets_cache/3`, yielding
+  # `{LogOffset.t(), item}` pairs. `last_offset` stays a tuple for comparison with
+  # `upper_read_bound_tuple` in `stream_main_log/4`.
+  defp read_range_from_ets_cache_with_offsets(nil, _min, _max), do: {[], nil}
+
+  defp read_range_from_ets_cache_with_offsets(ets, %LogOffset{} = min, %LogOffset{} = max) do
+    read_range_from_ets_cache_with_offsets(
+      ets,
+      LogOffset.to_tuple(min),
+      LogOffset.to_tuple(max),
+      [],
+      nil
+    )
+  end
+
+  defp read_range_from_ets_cache_with_offsets(ets, min, {max_tx, max_op} = max, acc, last_offset) do
+    case safe_next_lookup(ets, min) do
+      :ets_dead ->
+        {Enum.reverse(acc), last_offset}
+
+      :"$end_of_table" ->
+        {Enum.reverse(acc), last_offset}
+
+      {{min_tx, min_op}, _} when min_tx > max_tx or (min_tx == max_tx and min_op > max_op) ->
+        {Enum.reverse(acc), last_offset}
+
+      {new_min, [{_, item}]} ->
+        read_range_from_ets_cache_with_offsets(
+          ets,
+          new_min,
+          max,
+          [{LogOffset.new(new_min), item} | acc],
+          new_min
+        )
+    end
+  end
+
   # The owning Consumer's buffer ETS table may be destroyed during terminate.
   # Falling back is safe because terminate flushes to disk before deleting.
   defp safe_next_lookup(ets, min) do
@@ -1206,6 +1295,47 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
       {:ok, nil, {start_pos, nil}} ->
         LogFile.stream_jsons_until_offset(
+          opts,
+          json_file(opts, suffix),
+          start_pos,
+          min_offset,
+          max_offset
+        )
+
+      :error ->
+        []
+    end
+  end
+
+  # Offset-preserving counterpart to `stream_from_disk/4`, yielding
+  # `{LogOffset.t(), json}` pairs.
+  defp stream_from_disk_with_offsets(%__MODULE__{}, min_offset, max_offset, _)
+       when is_log_offset_lte(max_offset, min_offset),
+       do: []
+
+  defp stream_from_disk_with_offsets(
+         %__MODULE__{} = opts,
+         min_offset,
+         max_offset,
+         boundary_info
+       ) do
+    suffix = get_suffix(min_offset, boundary_info)
+
+    case fetch_chunk(min_offset, opts, boundary_info) do
+      {:ok, chunk_end_offset, {start_pos, end_pos}} when not is_nil(end_pos) ->
+        LogFile.stream_entries_with_offsets(
+          opts,
+          json_file(opts, suffix),
+          start_pos,
+          end_pos,
+          min_offset
+        )
+        |> Stream.concat(
+          stream_from_disk_with_offsets(opts, chunk_end_offset, max_offset, boundary_info)
+        )
+
+      {:ok, nil, {start_pos, nil}} ->
+        LogFile.stream_entries_until_offset_with_offsets(
           opts,
           json_file(opts, suffix),
           start_pos,

@@ -189,6 +189,22 @@ defmodule Electric.ShapeCache.Storage do
               log()
 
   @doc """
+  Like `get_log_stream/3` but yields `{LogOffset.t(), log_item_json}` pairs so the
+  caller gets each item's authoritative storage offset.
+
+  Data-change log items carry their offset in their headers, but control messages
+  (subquery move-in/move-out events) do not, so they cannot be positioned by
+  re-parsing the JSON alone. Materializer replay uses this to place control
+  messages in the correct transaction. Snapshot lines (which precede all real
+  offsets) are yielded with `LogOffset.before_all/0`.
+  """
+  @callback get_log_stream_with_offsets(
+              offset :: LogOffset.t(),
+              max_offset :: LogOffset.t(),
+              shape_opts()
+            ) :: Enumerable.t({LogOffset.t(), binary()})
+
+  @doc """
   Get the last exclusive offset of the chunk starting from the given offset.
 
   If chunk has not finished accumulating, `nil` is returned.
@@ -433,6 +449,19 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def get_log_stream(offset, max_offset, _storage) when is_log_offset_lt(max_offset, offset) do
+    []
+  end
+
+  @impl __MODULE__
+  def get_log_stream_with_offsets(offset, max_offset \\ @last_log_offset, storage)
+
+  def get_log_stream_with_offsets(offset, max_offset, {mod, shape_opts})
+      when max_offset == @last_log_offset or not is_log_offset_lt(max_offset, offset) do
+    mod.get_log_stream_with_offsets(offset, max_offset, shape_opts)
+  end
+
+  def get_log_stream_with_offsets(offset, max_offset, _storage)
+      when is_log_offset_lt(max_offset, offset) do
     []
   end
 

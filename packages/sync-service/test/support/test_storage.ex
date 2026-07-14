@@ -126,6 +126,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_log_stream_with_offsets(offset, max_offset, {parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :get_log_stream_with_offsets, shape_handle, offset, max_offset})
+    Storage.get_log_stream_with_offsets(offset, max_offset, storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def get_chunk_end_log_offset(offset, {parent, shape_handle, _, storage}) do
     send(parent, {__MODULE__, :get_chunk_end_log_offset, shape_handle, offset})
     Storage.get_chunk_end_log_offset(offset, storage)

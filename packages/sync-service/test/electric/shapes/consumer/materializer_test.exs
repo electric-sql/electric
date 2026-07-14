@@ -1309,8 +1309,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   end
 
   # Build a single main-log insert log item at `offset` introducing `value`,
-  # encoded the same way the source consumer would write it (headers carry the
-  # `lsn`/`op_position` used to reconstruct the offset during replay).
+  # encoded the same way the source consumer would write it.
   defp main_log_insert(offset, id, value) do
     change =
       %Changes.NewRecord{
@@ -1319,6 +1318,26 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         record: %{"id" => id, "value" => value},
         log_offset: offset,
         move_tags: []
+      }
+      |> Changes.fill_key(["id"])
+
+    change
+    |> then(&LogItems.from_change(&1, 1, ["id"], :default))
+    |> Enum.map(fn {item_offset, item} ->
+      {item_offset, change.key, :insert, Jason.encode!(item)}
+    end)
+  end
+
+  # Like `main_log_insert/3` but attaches move tags so the row is indexed under
+  # those tags (and can later be moved out by a control message targeting them).
+  defp tagged_main_log_insert(offset, id, value, tags) do
+    change =
+      %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        key: ~s|"public"."test_table"/"#{id}"|,
+        record: %{"id" => id, "value" => value},
+        log_offset: offset,
+        move_tags: tags
       }
       |> Changes.fill_key(["id"])
 
@@ -1643,6 +1662,90 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       # Caught up: seed is the current link values and nothing is replayed.
       assert seed == MapSet.new([10, 20, 30])
       refute_received {:materializer_changes, _handle, _payload}
+    end
+  end
+
+  describe "move replay on subscribe with control messages" do
+    # A dependency shape that is itself an optimized subquery has move-in/move-out
+    # *control messages* in its own log (rows moving in/out as its nested
+    # dependency toggles). Control messages carry no `lsn`/`op_position` in their
+    # headers, so their position comes from the storage offset rather than the
+    # JSON. On restart the materializer replays that log to catch up a behind
+    # subscriber, and a control-message move after `from_lsn` must be re-emitted
+    # just like a data-change move.
+    setup ctx do
+      shape_handle = "control-replay-#{System.unique_integer([:positive])}"
+
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+      Storage.start_link(storage)
+      writer = Storage.init_writer!(storage, @shape)
+      Storage.mark_snapshot_as_started(storage)
+      Storage.make_new_snapshot!([], storage)
+
+      # tx 100: value 10 enters the shape, tagged "tag1".
+      writer =
+        Storage.append_to_log!(
+          tagged_main_log_insert(LogOffset.new(100, 0), "1", "10", ["tag1"]),
+          writer
+        )
+
+      # tx 200: a second "tag1" row in a *later* transaction. Its only role is to
+      # open transaction 200 (so the control message below joins that transaction
+      # rather than tx 100); it shares value 10, so it emits no move of its own.
+      writer =
+        Storage.append_to_log!(
+          tagged_main_log_insert(LogOffset.new(200, 0), "2", "10", ["tag1"]),
+          writer
+        )
+
+      # (200,1): a move-out control message removing "tag1" — value 10 leaves the
+      # shape. Its source offset is only recoverable from storage, not the JSON.
+      {_range, writer} =
+        Storage.append_control_message!(
+          Jason.encode!(%{
+            headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}
+          }),
+          writer
+        )
+
+      Storage.hibernate(writer)
+
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+
+      {:ok, _pid} =
+        Materializer.start_link(%{
+          stack_id: ctx.stack_id,
+          shape_handle: shape_handle,
+          storage: ctx.storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      respond_to_call(:await_snapshot_start, :started)
+      respond_to_call(:subscribe_materializer, {:ok, LogOffset.new(200, 1)})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+      # Startup applied the whole history: value 10 entered, then left via the
+      # move-out control message, so nothing remains materialized.
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new()
+
+      Map.put(ctx, :mat_ctx, mat_ctx)
+    end
+
+    test "replays a move-out carried by a control message after from_lsn",
+         %{mat_ctx: mat_ctx} do
+      # Behind at (150,0): value 10 was still present then, and the move-out at
+      # (200,1) is after from_lsn, so replay must re-emit it.
+      assert {:ok, seed, applied_offset} =
+               Materializer.subscribe(mat_ctx, LogOffset.new(150, 0))
+
+      # Seed view is the link values as of (150,0): value 10 still present.
+      assert seed == MapSet.new([10])
+      assert applied_offset == LogOffset.new(200, 1)
+
+      assert_receive {:materializer_changes, _handle,
+                      %{move_out: [{10, "10"}], lsn: %LogOffset{tx_offset: 200}}}
     end
   end
 

@@ -233,7 +233,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
   changes after this offset will be delivered via new_changes messages
   from the Consumer.
   """
-  def read_history_up_to_subscribed(state, storage, apply_fun \\ &default_history_apply/2) do
+  def read_history_up_to_subscribed(
+        state,
+        storage,
+        apply_fun \\ &default_history_apply/2,
+        with_offsets? \\ false
+      ) do
     cond do
       is_nil(state.subscribed_offset) ->
         state
@@ -242,7 +247,13 @@ defmodule Electric.Shapes.Consumer.Materializer do
         state
 
       true ->
-        stream = Storage.get_log_stream(state.offset, state.subscribed_offset, storage)
+        stream =
+          if with_offsets? do
+            Storage.get_log_stream_with_offsets(state.offset, state.subscribed_offset, storage)
+          else
+            Storage.get_log_stream(state.offset, state.subscribed_offset, storage)
+          end
+
         state = apply_fun.(stream, state)
 
         # If the read just covered the main log (because either the
@@ -284,7 +295,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
               %{state | offset: state.subscribed_offset}
 
             true ->
-              read_history_up_to_subscribed(%{state | offset: next_offset}, storage, apply_fun)
+              read_history_up_to_subscribed(
+                %{state | offset: next_offset},
+                storage,
+                apply_fun,
+                with_offsets?
+              )
           end
         end
     end
@@ -332,9 +348,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
     }
 
     replay =
-      read_history_up_to_subscribed(replay0, storage, fn stream, acc ->
-        apply_replay_stream(stream, acc)
-      end)
+      read_history_up_to_subscribed(
+        replay0,
+        storage,
+        fn stream, acc -> apply_replay_stream(stream, acc) end,
+        true
+      )
 
     case replay.pending_events.seed do
       nil -> link_values_from_counts(replay.value_counts)
@@ -393,25 +412,21 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  # Decode a raw JSON log stream into `{log_offset, txids, change}` tuples,
-  # preserving the per-item source offset (reconstructed from the item headers)
-  # so replay can delimit transactions and tag emitted moves.
+  # Decode a `{log_offset, json}` log stream (from `get_log_stream_with_offsets/3`)
+  # into `{log_offset, txids, change}` tuples so replay can delimit transactions
+  # and tag emitted moves. Unlike the JSON headers, the storage offset is present
+  # for *every* item — including control messages, which carry no `lsn`/`op_position`
+  # in their headers and would otherwise collapse to `before_all/0`.
   defp decode_json_stream_with_offsets(stream) do
     stream
-    |> Stream.map(&Jason.decode!/1)
-    |> Stream.filter(fn decoded ->
+    |> Stream.map(fn {offset, json} -> {offset, Jason.decode!(json)} end)
+    |> Stream.filter(fn {_offset, decoded} ->
       Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
     end)
-    |> Stream.map(fn decoded ->
-      headers = decoded["headers"]
-      {decode_offset(headers), decode_txids(headers), decode_change(decoded)}
+    |> Stream.map(fn {offset, decoded} ->
+      {offset, decode_txids(decoded["headers"]), decode_change(decoded)}
     end)
   end
-
-  defp decode_offset(%{"lsn" => lsn, "op_position" => op}) when is_binary(lsn),
-    do: LogOffset.new(String.to_integer(lsn), op)
-
-  defp decode_offset(_headers), do: LogOffset.before_all()
 
   defp decode_txids(%{"txids" => txids}) when is_list(txids), do: txids
   defp decode_txids(_headers), do: []
