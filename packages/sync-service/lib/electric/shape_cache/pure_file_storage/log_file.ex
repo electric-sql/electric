@@ -174,6 +174,15 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     )
   end
 
+  # Read the log range lazily in bounded blocks rather than all at once.
+  #
+  # Every emitted json is a sub-binary of the block it was read from, and the
+  # response-streaming pipeline can hold an in-flight element (and everything
+  # it references) for the whole lifetime of a serve — including one stalled
+  # on a slow client. Bounding the read block bounds the memory each stalled
+  # connection can pin.
+  @read_block_bytes 64 * 1024
+
   def stream_jsons(
         %PFS{} = opts,
         log_file_path,
@@ -181,17 +190,36 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         end_position,
         exclusive_min_offset
       ) do
-    # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
-    case safely_open_file!(opts, log_file_path, [:read, :raw]) do
-      {:halt, :data_removed} ->
-        []
+    Stream.resource(
+      fn ->
+        case safely_open_file!(opts, log_file_path, [:read, :raw]) do
+          {:ok, file} -> {file, start_position, ""}
+          {:halt, :data_removed} -> :halt
+        end
+      end,
+      fn
+        :halt ->
+          {:halt, []}
 
-      {:ok, file} ->
-        try do
-          with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
-            {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
-            jsons
+        {file, position, binary_rest} when position >= end_position ->
+          if binary_rest == "" do
+            {:halt, {file, position, binary_rest}}
           else
+            # A partial entry at the end of the range means the file is
+            # shorter than the chunk index says it should be.
+            raise "unexpected end of file"
+          end
+
+        {file, position, binary_rest} ->
+          read_size = min(@read_block_bytes, end_position - position)
+
+          case :file.pread(file, position, read_size) do
+            {:ok, data} ->
+              {jsons, rest} =
+                extract_jsons_from_binary(binary_rest <> data, exclusive_min_offset, nil)
+
+              {jsons, {file, position + byte_size(data), rest}}
+
             :eof ->
               raise "unexpected end of file"
 
@@ -199,12 +227,14 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
               raise File.Error,
                 path: log_file_path,
                 reason: reason,
-                action: "pread(#{start_position}, #{end_position - start_position})"
+                action: "pread(#{position}, #{read_size})"
           end
-        after
-          File.close(file)
-        end
-    end
+      end,
+      fn
+        [] -> :ok
+        {file, _position, _rest} -> File.close(file)
+      end
+    )
   end
 
   def stream_jsons_until_offset(

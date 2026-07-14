@@ -66,13 +66,44 @@ defmodule Electric.Shapes.Api.Encoder.JSON do
   @json_list_end "]"
   @json_item_separator ","
 
+  # Batch stream items into iodata units bounded by BOTH item count and byte
+  # size. Each response body element is held in full by the request process
+  # and by the socket's driver queue while it is being written, so a serve to
+  # a slow or stalled client pins the whole unit for as long as the serve
+  # lives. Bounding the unit size bounds the memory pinned per connection.
+  @max_batch_items 500
+  @max_batch_bytes 256 * 1024
+
   defp to_json_stream(items) do
     Stream.concat([
       [@json_list_start],
       Stream.intersperse(items, @json_item_separator),
       [@json_list_end]
     ])
-    |> Stream.chunk_every(500)
+    |> chunk_by_count_and_bytes(@max_batch_items, @max_batch_bytes)
+  end
+
+  defp chunk_by_count_and_bytes(stream, max_items, max_bytes) do
+    Stream.transform(
+      stream,
+      fn -> {[], 0, 0} end,
+      fn item, {acc, count, bytes} ->
+        acc = [item | acc]
+        count = count + 1
+        bytes = bytes + IO.iodata_length(item)
+
+        if count >= max_items or bytes >= max_bytes do
+          {[Enum.reverse(acc)], {[], 0, 0}}
+        else
+          {[], {acc, count, bytes}}
+        end
+      end,
+      fn
+        {[], _count, _bytes} -> {[], nil}
+        {acc, _count, _bytes} -> {[Enum.reverse(acc)], nil}
+      end,
+      fn _acc -> :ok end
+    )
   end
 end
 
