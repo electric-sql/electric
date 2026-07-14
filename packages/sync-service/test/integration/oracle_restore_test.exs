@@ -7,7 +7,8 @@ defmodule Electric.Integration.OracleRestoreTest do
   These tests use a small, readable "issue tracker" domain schema rather than
   the abstract `level_N` hierarchy from `Support.OracleHarness.StandardSchema`:
 
-      projects (id, active)
+      teams (id, active)
+          └── projects (id, team_id, active)
           └── issues (id, project_id, title)
 
   The shape under test is "issues belonging to an active project", expressed
@@ -55,17 +56,26 @@ defmodule Electric.Integration.OracleRestoreTest do
     %{replication_opts_overrides: [slot_temporary?: false]}
   end
 
-  # A two-table "issue tracker": projects own issues. `projects.active` drives
-  # the subquery shape under test. Seeded so that p1, p3, p5 start active and
-  # p2, p4 start inactive; issues are spread round-robin across the projects
-  # so each project owns four (e.g. p1 owns i1, i6, i11, i16).
+  # A three-table "issue tracker": teams own projects, which own issues.
+  # `projects.active` drives the existing subquery shapes, while `teams.active`
+  # drives the nested-subquery regression below. Issues are spread round-robin
+  # across the projects so each project owns four (e.g. p1 owns i1, i6, i11,
+  # i16).
   defp setup_issue_tracker_schema(ctx) do
     OracleHarness.apply_sql(ctx, [
       "DROP TABLE IF EXISTS issues CASCADE",
       "DROP TABLE IF EXISTS projects CASCADE",
+      "DROP TABLE IF EXISTS teams CASCADE",
+      """
+      CREATE TABLE teams (
+        id TEXT PRIMARY KEY,
+        active BOOLEAN NOT NULL DEFAULT true
+      )
+      """,
       """
       CREATE TABLE projects (
         id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
         active BOOLEAN NOT NULL DEFAULT true
       )
       """,
@@ -78,12 +88,16 @@ defmodule Electric.Integration.OracleRestoreTest do
       """
     ])
 
+    team_values = "('t1', true), ('t2', false)"
     project_ids = for n <- 1..5, do: "p#{n}"
 
     project_values =
       project_ids
       |> Enum.with_index()
-      |> Enum.map_join(", ", fn {id, idx} -> "('#{id}', #{rem(idx, 2) == 0})" end)
+      |> Enum.map_join(", ", fn {id, idx} ->
+        team_id = if rem(idx, 2) == 0, do: "t1", else: "t2"
+        "('#{id}', '#{team_id}', #{rem(idx, 2) == 0})"
+      end)
 
     issue_values =
       for n <- 1..20 do
@@ -93,7 +107,8 @@ defmodule Electric.Integration.OracleRestoreTest do
       |> Enum.join(", ")
 
     OracleHarness.apply_sql(ctx, [
-      "INSERT INTO projects (id, active) VALUES #{project_values}",
+      "INSERT INTO teams (id, active) VALUES #{team_values}",
+      "INSERT INTO projects (id, team_id, active) VALUES #{project_values}",
       "INSERT INTO issues (id, project_id, title) VALUES #{issue_values}"
     ])
 
@@ -130,6 +145,35 @@ defmodule Electric.Integration.OracleRestoreTest do
       [
         [%{name: "reactivate_p1", sql: "UPDATE projects SET active = true WHERE id = 'p1'"}]
       ]
+    ]
+
+    OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)
+  end
+
+  @tag :oracle_restore_nested_subquery
+  test "nested subquery dependency moves replay across repeated server restarts", ctx do
+    shapes = [
+      %{
+        name: "issues_of_projects_in_active_teams",
+        table: "issues",
+        where:
+          "project_id IN (SELECT id FROM projects WHERE team_id IN " <>
+            "(SELECT id FROM teams WHERE active = true))",
+        columns: ["id", "project_id", "title"],
+        pk: ["id"],
+        optimized: true
+      }
+    ]
+
+    # Only dependency rows change: the projects and issues remain untouched.
+    # Restart after every batch so both move-out and move-in must be restored
+    # from the persisted nested dependency logs, twice, without duplication or
+    # shape rotation.
+    batches = [
+      [[%{name: "deactivate_t1", sql: "UPDATE teams SET active = false WHERE id = 't1'"}]],
+      [[%{name: "reactivate_t1", sql: "UPDATE teams SET active = true WHERE id = 't1'"}]],
+      [[%{name: "deactivate_t1_again", sql: "UPDATE teams SET active = false WHERE id = 't1'"}]],
+      [[%{name: "reactivate_t1_again", sql: "UPDATE teams SET active = true WHERE id = 't1'"}]]
     ]
 
     OracleHarness.test_against_oracle(ctx, shapes, batches, restart_server_every: 1)

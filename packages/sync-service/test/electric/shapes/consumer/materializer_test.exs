@@ -1644,6 +1644,140 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       assert seed == MapSet.new([10, 20, 30])
       refute_received {:materializer_changes, _handle, _payload}
     end
+
+    @tag chunk_size: 1
+    test "replays persisted move control messages at their authoritative log offsets", ctx do
+      shape_handle = "nested-replay-test-#{System.unique_integer([:positive])}"
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+      Storage.start_link(storage)
+      writer = Storage.init_writer!(storage, @shape)
+      Storage.mark_snapshot_as_started(storage)
+
+      Storage.make_new_snapshot!(
+        make_snapshot_data([
+          %Changes.NewRecord{
+            record: %{"id" => "1", "value" => "10"},
+            move_tags: ["nested-tag"],
+            active_conditions: [true]
+          }
+        ]),
+        storage
+      )
+
+      cursor = LogOffset.new(100, 0)
+      writer = Storage.append_to_log!(main_log_insert(cursor, "2", "20"), writer)
+
+      {{^cursor, ignored_offset}, writer} =
+        Storage.append_control_message!(
+          Jason.encode!(%{headers: %{control: "up_to_date"}}),
+          writer
+        )
+
+      {{^ignored_offset, control_offset}, writer} =
+        Storage.append_control_message!(
+          Jason.encode!(%{
+            headers: %{
+              event: "move-out",
+              patterns: [%{pos: 0, value: "nested-tag"}],
+              txids: [42]
+            }
+          }),
+          writer
+        )
+
+      Storage.hibernate(writer)
+
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+
+      {:ok, _pid} =
+        Materializer.start_link(%{
+          stack_id: ctx.stack_id,
+          shape_handle: shape_handle,
+          storage: ctx.storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      respond_to_call(:await_snapshot_start, :started)
+      respond_to_call(:subscribe_materializer, {:ok, control_offset})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new([20])
+
+      assert {:ok, seed, ^control_offset} = Materializer.subscribe(mat_ctx, cursor)
+      assert seed == MapSet.new([10, 20])
+
+      assert_receive {:materializer_changes, ^shape_handle,
+                      %{
+                        move_out: [{10, "10"}],
+                        lsn: ^control_offset,
+                        txids: [42]
+                      }}
+    end
+
+    @tag chunk_size: 1
+    test "replays persisted move-in rows at their authoritative log offsets", ctx do
+      shape_handle = "move-in-replay-test-#{System.unique_integer([:positive])}"
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+      Storage.start_link(storage)
+      writer = Storage.init_writer!(storage, @shape)
+      Storage.mark_snapshot_as_started(storage)
+
+      Storage.make_new_snapshot!(
+        make_snapshot_data([%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]),
+        storage
+      )
+
+      cursor = LogOffset.new(100, 0)
+      writer = Storage.append_to_log!(main_log_insert(cursor, "2", "20"), writer)
+
+      move_in_item =
+        Jason.encode!(%{
+          key: ~s|"public"."test_table"/"3"|,
+          value: %{"id" => "3", "value" => "30"},
+          headers: %{operation: "insert", tags: ["nested-tag"], active_conditions: [true]}
+        })
+
+      Storage.write_move_in_snapshot!(
+        [[~s|"public"."test_table"/"3"|, ["nested-tag"], move_in_item]],
+        "nested-move-in",
+        storage
+      )
+
+      {{^cursor, move_in_offset}, writer} =
+        Storage.append_move_in_snapshot_to_log!("nested-move-in", writer)
+
+      Storage.hibernate(writer)
+
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+
+      {:ok, _pid} =
+        Materializer.start_link(%{
+          stack_id: ctx.stack_id,
+          shape_handle: shape_handle,
+          storage: ctx.storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      respond_to_call(:await_snapshot_start, :started)
+      respond_to_call(:subscribe_materializer, {:ok, move_in_offset})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new([10, 20, 30])
+
+      assert {:ok, seed, ^move_in_offset} = Materializer.subscribe(mat_ctx, cursor)
+      assert seed == MapSet.new([10, 20])
+
+      assert_receive {:materializer_changes, ^shape_handle,
+                      %{
+                        move_in: [{30, "30"}],
+                        lsn: ^move_in_offset,
+                        txids: []
+                      }}
+    end
   end
 
   describe "startup race condition handling" do

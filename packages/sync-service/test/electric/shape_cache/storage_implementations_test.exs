@@ -14,6 +14,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   import Support.ComponentSetup
   import Support.TestUtils
 
+  defmodule StorageWithoutOffsetStream do
+  end
+
   @moduletag :tmp_dir
 
   @shape_handle "the-shape-handle"
@@ -48,6 +51,18 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
   setup [:with_stack_id_from_test, :with_async_deleter]
+
+  test "offset-preserving reads fail clearly for adapters without the optional capability" do
+    assert_raise Storage.Error,
+                 "Storage adapter #{inspect(StorageWithoutOffsetStream)} does not support offset-preserving log streams",
+                 fn ->
+                   Storage.get_log_stream_with_offsets(
+                     LogOffset.first(),
+                     LogOffset.last(),
+                     {StorageWithoutOffsetStream, :shape_opts}
+                   )
+                 end
+  end
 
   for module <- [InMemoryStorage, PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
@@ -436,6 +451,158 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [%{headers: %{operation: "update"}}] = entries
+      end
+    end
+
+    describe "#{module_name}.get_log_stream_with_offsets/3" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "pairs snapshot entries with nil offsets", %{storage: storage} do
+        Storage.mark_snapshot_as_started(storage)
+        Storage.make_new_snapshot!(@data_stream, storage)
+
+        entries =
+          Storage.get_log_stream_with_offsets(
+            LogOffset.before_all(),
+            LogOffset.last_before_real_offsets(),
+            storage
+          )
+          |> Enum.to_list()
+
+        assert [{nil, _}, {nil, _}] = entries
+      end
+
+      @tag chunk_size: 1
+      test "preserves exact main-log offsets and bounds across gaps, generated entries, and hibernate",
+           %{
+             storage: storage,
+             writer: writer
+           } do
+        Storage.mark_snapshot_as_started(storage)
+        Storage.make_new_snapshot!([], storage)
+
+        base_offset = LogOffset.new(1_000, 0)
+
+        writer =
+          Storage.append_to_log!(
+            [
+              {base_offset, "regular", :insert,
+               Jason.encode!(%{
+                 key: "regular",
+                 value: %{id: "regular"},
+                 headers: %{operation: "insert"}
+               })}
+            ],
+            writer
+          )
+
+        {{^base_offset, control_offset}, writer} =
+          Storage.append_control_message!(
+            %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag"}]}},
+            writer
+          )
+
+        Storage.write_move_in_snapshot!(
+          [
+            [
+              "move-in",
+              ["tag"],
+              Jason.encode!(%{
+                key: "move-in",
+                value: %{id: "move-in"},
+                headers: %{operation: "insert", is_move_in: true}
+              })
+            ]
+          ],
+          "move-in-snapshot",
+          storage
+        )
+
+        {{^control_offset, move_in_offset}, writer} =
+          Storage.append_move_in_snapshot_to_log!("move-in-snapshot", writer)
+
+        gapped_offset = LogOffset.new(2_000, 5)
+
+        writer =
+          Storage.append_to_log!(
+            [
+              {gapped_offset, "after-gap", :insert,
+               Jason.encode!(%{
+                 key: "after-gap",
+                 value: %{id: "after-gap"},
+                 headers: %{operation: "insert"}
+               })}
+            ],
+            writer
+          )
+
+        {{^gapped_offset, snapshot_end_offset}, writer} =
+          Storage.append_control_message!(
+            %{headers: %{control: "snapshot-end"}},
+            writer
+          )
+
+        expected_offsets = [
+          base_offset,
+          control_offset,
+          move_in_offset,
+          gapped_offset,
+          snapshot_end_offset
+        ]
+
+        read_entries = fn min_offset, max_offset ->
+          storage
+          |> then(
+            &Storage.get_log_stream_with_offsets(
+              min_offset,
+              max_offset,
+              &1
+            )
+          )
+          |> Enum.map(fn {offset, json} ->
+            label =
+              case Jason.decode!(json) do
+                %{"key" => key} -> key
+                %{"headers" => %{"event" => event}} -> event
+                %{"headers" => %{"control" => control}} -> control
+              end
+
+            {offset, label}
+          end)
+        end
+
+        expected_entries =
+          Enum.zip(expected_offsets, [
+            "regular",
+            "move-out",
+            "move-in",
+            "after-gap",
+            "snapshot-end"
+          ])
+
+        assert read_entries.(LogOffset.last_before_real_offsets(), LogOffset.last()) ==
+                 expected_entries
+
+        assert read_entries.(base_offset, LogOffset.new(1_500, 0)) ==
+                 Enum.slice(expected_entries, 1, 2)
+
+        assert read_entries.(control_offset, gapped_offset) ==
+                 Enum.slice(expected_entries, 2, 2)
+
+        _writer = Storage.hibernate(writer)
+
+        assert read_entries.(LogOffset.last_before_real_offsets(), LogOffset.last()) ==
+                 expected_entries
+
+        assert read_entries.(base_offset, LogOffset.new(1_500, 0)) ==
+                 Enum.slice(expected_entries, 1, 2)
+
+        assert read_entries.(control_offset, gapped_offset) ==
+                 Enum.slice(expected_entries, 2, 2)
       end
     end
 
@@ -957,6 +1124,75 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
     # FS is occasionally slow so we set a high timeout for compaction
     @default_compaction_timeout 2000
+
+    describe "#{module_name}.get_log_stream_with_offsets/3 disk and live tail bounds" do
+      @tag chunk_size: 1
+      setup :start_storage
+      setup :start_empty_snapshot
+
+      test "keeps sparse lower-exclusive and upper-inclusive bounds across disk and ETS", %{
+        storage: storage,
+        writer: writer
+      } do
+        entry = fn offset, label ->
+          {offset, label, :insert,
+           Jason.encode!(%{
+             key: label,
+             value: %{id: label},
+             headers: %{operation: "insert"}
+           })}
+        end
+
+        disk_first = LogOffset.new(100, 0)
+        disk_second = LogOffset.new(100, 10)
+        disk_last = LogOffset.new(200, 0)
+
+        writer =
+          Storage.append_to_log!(
+            [entry.(disk_first, "disk-first"), entry.(disk_second, "disk-second")],
+            writer
+          )
+
+        writer = Storage.append_to_log!([entry.(disk_last, "disk-last")], writer)
+        writer = Storage.hibernate(writer)
+
+        live_first = LogOffset.new(1_000, 0)
+        live_last = LogOffset.new(2_000, 0)
+        writer = Storage.append_to_log!([entry.(live_first, "live-first")], writer)
+        writer = Storage.append_to_log!([entry.(live_last, "live-last")], writer)
+
+        read = fn min_offset, max_offset ->
+          Storage.get_log_stream_with_offsets(min_offset, max_offset, storage)
+          |> Enum.map(fn {offset, json} -> {offset, Jason.decode!(json)["key"]} end)
+        end
+
+        # The upper bound falls in a deliberate offset gap inside a complete
+        # on-disk chunk. The later item from that chunk must not leak through.
+        assert read.(LogOffset.last_before_real_offsets(), LogOffset.new(100, 5)) == [
+                 {disk_first, "disk-first"}
+               ]
+
+        # The requested range crosses the persisted/live boundary and ends in
+        # another deliberate gap. Disk and ETS entries are joined once each.
+        assert read.(disk_first, LogOffset.new(1_500, 0)) == [
+                 {disk_second, "disk-second"},
+                 {disk_last, "disk-last"},
+                 {live_first, "live-first"}
+               ]
+
+        _writer = Storage.hibernate(writer)
+
+        assert read.(LogOffset.last_before_real_offsets(), LogOffset.new(100, 5)) == [
+                 {disk_first, "disk-first"}
+               ]
+
+        assert read.(disk_first, LogOffset.new(1_500, 0)) == [
+                 {disk_second, "disk-second"},
+                 {disk_last, "disk-last"},
+                 {live_first, "live-first"}
+               ]
+      end
+    end
 
     describe "#{module_name}.compact/1" do
       setup :start_storage
