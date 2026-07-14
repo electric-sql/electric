@@ -952,6 +952,42 @@ async fn e2e_recycled_first_segment_acked_records_survive_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `--io-uring on`: the WAL segment writes/fsync and the stream data-file
+/// appends go through io_uring (Linux; transparent syscall fallback elsewhere,
+/// so this test is meaningful on Linux and a fallback-path check on macOS).
+/// Byte-identical crash recovery must hold — the ring changes the submission
+/// mechanism, not the durability contract.
+#[tokio::test]
+async fn e2e_io_uring_wal_recovers_acked_records() {
+    let _guard = DurabilityGuard::wal();
+    crate::uring::set_requested(true);
+    const SEG: u64 = 4096;
+    let dir = tmp("io-uring");
+
+    let h = Harness::boot_with_segment_size(&dir, Some(1), 1, SEG).unwrap();
+    create_stream(&h.store, "u", OCTET).await;
+    let mut expected = Vec::new();
+    for i in 0..400usize {
+        let rec = format!("uring-{i:04}|").into_bytes();
+        append_acked(&h.store, "u", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+    h.walset.shards()[0].checkpoint().await.unwrap();
+    for i in 400..500usize {
+        let rec = format!("uring-{i:04}|").into_bytes();
+        append_acked(&h.store, "u", OCTET, &rec).await;
+        expected.extend_from_slice(&rec);
+    }
+    h.crash();
+
+    let h2 = Harness::boot_with_segment_size(&dir, None, 1, SEG).unwrap();
+    let got = stream_file_bytes(&h2.store, "u");
+    assert_eq!(got, expected, "io_uring WAL path recovers byte-identical");
+    h2.crash();
+    crate::uring::set_requested(false);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--stream-lanes N`: stream data files hash across `streams/<0..N>/` subdirs
 /// (one per device in the intended deployment — the ~1M-stream writeback-wall
 /// fix). Crash recovery must find every file in its lane dir, and the

@@ -735,7 +735,18 @@ async fn wait_durable_lsn(store: &Arc<Store>, st: &Arc<StreamState>, lsn: u64) {
 /// awaited in `wait_durable_lsn`.
 fn write_wire(st: &StreamState, ap: &mut Appender, wire: &Bytes) -> std::io::Result<u64> {
     use std::io::Write;
-    (&*ap.file).write_all(wire)?;
+    // io_uring path (--io-uring on, Linux): the data-file append goes through
+    // the calling thread's ring (O_APPEND semantics preserved via offset -1).
+    // This is BOTH modes' persistence write — memory mode's entire disk path.
+    if crate::uring::enabled() {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            crate::uring::append_all(ap.file.as_raw_fd(), wire)?;
+        }
+    } else {
+        (&*ap.file).write_all(wire)?;
+    }
     ap.written += wire.len() as u64;
     let tail = {
         let mut s = st.shared.write().unwrap();

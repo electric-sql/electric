@@ -78,3 +78,7 @@ codegen-units = 1
 # server the per-connection isolation is worth more than abort's small
 # binary-size / codegen win.
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# io_uring write paths (--io-uring on): WAL segment writes/fsync + stream
+# data-file appends. Runtime-probed, syscall fallback when unavailable.
+io-uring = "0.7"
