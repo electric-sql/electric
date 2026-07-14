@@ -447,7 +447,7 @@ defmodule Electric.Shapes.Api.Response do
             Map.put(sample_rate_attrs, "chunk_size", chunk_size),
             stack_id,
             fn ->
-              case write_in_bounded_pieces(conn, chunk, watchdog) do
+              case write_in_bounded_pieces(conn, chunk, chunk_size, watchdog) do
                 {:ok, conn} ->
                   {:cont, {conn, bytes_sent + chunk_size}}
 
@@ -475,12 +475,17 @@ defmodule Electric.Shapes.Api.Response do
   @stalled_serve_timeout_default :timer.seconds(60)
 
   # Socket writes are split into pieces of at most this size. Bounding the
-  # write unit bounds both the response data queued in the socket's driver
-  # queue at any moment and — because a bounded write to a live client
-  # completes quickly once the transport buffers are full — gives the stall
-  # watchdog below a rate-independent progress signal: each completed piece
-  # is proof the client accepted data.
-  @socket_write_bytes 16 * 1024
+  # write unit bounds the response data queued in the socket's driver queue
+  # at any moment and — because a bounded write to a live client completes
+  # once the transport buffers drain — gives the stall watchdog below a
+  # progress signal: each completed piece is proof the client accepted data.
+  #
+  # The size matches the encoder's batch byte cap, so ordinary body elements
+  # are written as-is (no flattening or splitting); only oversized single
+  # items (e.g. one very large row) are split. Making pieces smaller would
+  # not sharpen the watchdog: write completion is quantized by the OS at up
+  # to a kernel send buffer of drain, which dwarfs the piece size.
+  @socket_write_bytes 256 * 1024
 
   # A serve whose client stops accepting data blocks inside the socket write
   # and cannot recover on its own: the TCP send timeout only catches a write
@@ -560,8 +565,15 @@ defmodule Electric.Shapes.Api.Response do
   defp watchdog_wait(:idle, _timeout), do: :infinity
 
   # Write one response body element as a sequence of bounded socket writes,
-  # notifying the watchdog around each one.
-  defp write_in_bounded_pieces(conn, chunk, watchdog) do
+  # notifying the watchdog around each one. Elements within the bound — the
+  # common case, since the encoder caps batches at the same size — are
+  # written directly without flattening.
+  defp write_in_bounded_pieces(conn, chunk, chunk_size, watchdog)
+       when chunk_size <= @socket_write_bytes do
+    guarded_chunk(conn, chunk, watchdog)
+  end
+
+  defp write_in_bounded_pieces(conn, chunk, _chunk_size, watchdog) do
     chunk
     |> IO.iodata_to_binary()
     |> write_pieces(conn, watchdog)
