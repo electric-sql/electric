@@ -9,6 +9,7 @@ mod sse_reactor;
 mod store;
 mod telemetry;
 mod tier;
+mod uring;
 mod wal;
 
 use std::net::SocketAddr;
@@ -245,6 +246,20 @@ fn main() {
                     std::process::exit(2);
                 }
                 server_stats_secs = Some(n);
+            }
+            // io_uring write paths (WAL segment I/O + stream data-file appends,
+            // both durability modes). Linux-only; probed at first use with a
+            // transparent syscall fallback. Default off.
+            "--io-uring" => {
+                let v = val(args.next(), "--io-uring");
+                match v.as_str() {
+                    "on" => uring::set_requested(true),
+                    "off" => uring::set_requested(false),
+                    _ => {
+                        eprintln!("--io-uring must be on|off");
+                        std::process::exit(2);
+                    }
+                }
             }
             // Checkpoint time trigger: per-shard cadence in ms (default 3000).
             "--wal-checkpoint-interval-ms" => {

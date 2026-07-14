@@ -179,6 +179,11 @@ fn macos_full_fsync(fd: libc::c_int) -> io::Result<()> {
 impl SegmentWriter for FileSegment {
     fn write_at(&self, off: u64, bytes: &[u8]) -> io::Result<()> {
         let fd = self.file.as_raw_fd();
+        // io_uring path (--io-uring on, Linux): same positioned-write semantics
+        // through the ring; falls back to pwrite below when off/unavailable.
+        if crate::uring::enabled() {
+            return crate::uring::pwrite_all(fd, off, bytes);
+        }
         let mut written: usize = 0;
         // pwrite may return a short count; loop until the whole slice lands.
         while written < bytes.len() {
@@ -209,6 +214,10 @@ impl SegmentWriter for FileSegment {
 
     fn fdatasync(&self) -> io::Result<()> {
         let fd = self.file.as_raw_fd();
+        // io_uring path: IORING_FSYNC_DATASYNC, same durability contract.
+        if crate::uring::enabled() {
+            return crate::uring::fdatasync(fd);
+        }
         // Mirror `store::barrier_fsync`: macOS has no fdatasync, so use
         // F_FULLFSYNC for a true flush-to-platter (power-loss durable); Linux
         // uses fdatasync.
