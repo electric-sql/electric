@@ -491,7 +491,7 @@ defmodule Electric.Shapes.Api.Response do
   # trickle — or a proxy buffering for a vanished client — can hold the
   # serve, everything it pins, and its file descriptor forever. Such serves
   # never complete, so they emit no telemetry, and they accumulate with
-  # connection count (see the 2026-07-01 OOM reproduced in
+  # connection count (reproduced in
   # test/integration/stalled_serve_memory_test.exs).
   #
   # The watchdog is a small companion process that terminates the serve when

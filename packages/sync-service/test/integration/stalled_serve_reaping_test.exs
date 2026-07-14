@@ -4,7 +4,7 @@ defmodule Electric.Integration.StalledServeReapingTest do
   it has made no progress for `:stalled_serve_timeout`, releasing the
   connection and everything the serve pins.
 
-  Defense in depth for the 2026-07-01 production OOM: bounded write units
+  Defense in depth for the production OOM addressed by #4708: bounded write units
   (#4708) cap what each stalled serve pins, but nothing reaps the serves
   themselves — a population of stalled connections still accumulates memory
   and file descriptors proportional to connection count, invisibly (stalled
