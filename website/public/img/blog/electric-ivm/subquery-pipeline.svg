@@ -1,0 +1,79 @@
+<svg viewBox="0 0 760 760" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#0ea5e9"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="760" height="760" fill="#ffffff"/>
+
+  <!-- Inputs -->
+  <rect x="40" y="20" width="280" height="46" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="180" y="48" text-anchor="middle" font-size="14" fill="#0f172a">someone joins/leaves a project</text>
+
+  <rect x="520" y="20" width="160" height="46" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="600" y="48" text-anchor="middle" font-size="14" fill="#0f172a">an issue changes</text>
+
+  <!-- Host: which user does this affect -->
+  <line x1="180" y1="66" x2="180" y2="100" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="40" y="100" width="280" height="46" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="180" y="120" text-anchor="middle" font-size="13" fill="#0f172a">which user does this</text>
+  <text x="180" y="136" text-anchor="middle" font-size="13" fill="#0f172a">change affect?</text>
+
+  <!-- DBSP circuit region -->
+  <line x1="180" y1="146" x2="180" y2="204" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="25" y="180" width="310" height="200" rx="12" fill="#f0f9ff" stroke="#0369a1" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="40" y="200" font-size="11" letter-spacing="1.5" fill="#0369a1">DBSP CIRCUIT</text>
+
+  <rect x="55" y="204" width="250" height="46" rx="6" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+  <text x="180" y="223" text-anchor="middle" font-size="12.5" fill="#0369a1">which projects can</text>
+  <text x="180" y="239" text-anchor="middle" font-size="12.5" fill="#0369a1">each user see?</text>
+
+  <line x1="180" y1="250" x2="180" y2="262" stroke="#0369a1" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="55" y="262" width="250" height="46" rx="6" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+  <text x="180" y="290" text-anchor="middle" font-size="12.5" fill="#0369a1">did that just change?</text>
+
+  <!-- read tap: the direct issue path just checks current membership -->
+  <path d="M 335 285 C 460 285, 460 300, 596 300" fill="none" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+  <text x="470" y="277" text-anchor="middle" font-size="11" fill="#64748b">can this user see it already?</text>
+
+  <!-- flip exits the circuit -->
+  <line x1="180" y1="308" x2="180" y2="420" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrBlue)"/>
+  <text x="196" y="368" font-size="12" fill="#0ea5e9">yes: a project just</text>
+  <text x="196" y="384" font-size="12" fill="#0ea5e9">entered or left view</text>
+
+  <!-- Host: fetch + check -->
+  <rect x="40" y="420" width="280" height="46" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="180" y="440" text-anchor="middle" font-size="12.5" fill="#0f172a">fetch that project's</text>
+  <text x="180" y="456" text-anchor="middle" font-size="12.5" fill="#0f172a">issues from Postgres</text>
+
+  <line x1="180" y1="466" x2="180" y2="500" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="40" y="500" width="280" height="46" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="180" y="520" text-anchor="middle" font-size="12.5" fill="#0f172a">check each one against</text>
+  <text x="180" y="536" text-anchor="middle" font-size="12.5" fill="#0f172a">the shape's filter</text>
+
+  <!-- Right column: issue write goes straight down, no circuit -->
+  <line x1="600" y1="66" x2="600" y2="590" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Converge into the per-shape memory -->
+  <line x1="180" y1="546" x2="180" y2="590" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="40" y="590" width="640" height="46" rx="8" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+  <text x="360" y="610" text-anchor="middle" font-size="13" fill="#b45309">only send what actually changed</text>
+  <text x="360" y="626" text-anchor="middle" font-size="12" fill="#b45309">(remembers what this shape already sent)</text>
+
+  <line x1="360" y1="636" x2="360" y2="670" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="200" y="670" width="320" height="46" rx="8" fill="#f8fafc" stroke="#334155" stroke-width="1.5"/>
+  <text x="360" y="698" text-anchor="middle" font-size="14" fill="#0f172a">shape's Durable Stream</text>
+
+  <!-- Legend -->
+  <rect x="40" y="736" width="14" height="14" rx="3" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.2"/>
+  <text x="60" y="747" font-size="11" fill="#334155">DBSP circuit</text>
+  <rect x="180" y="736" width="14" height="14" rx="3" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+  <text x="200" y="747" font-size="11" fill="#334155">regular code</text>
+  <rect x="360" y="736" width="14" height="14" rx="3" fill="#fef3c7" stroke="#b45309" stroke-width="1.2"/>
+  <text x="380" y="747" font-size="11" fill="#334155">per-shape memory</text>
+</svg>
