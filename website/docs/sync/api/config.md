@@ -291,7 +291,7 @@ This environment variable increases this timeout.
     name="ELECTRIC_TCP_READ_TIMEOUT"
     defaultValue="60s"
     example="180s">
-Socket read timeout, which doubles as the HTTP keep-alive idle timeout: Electric closes a connection that has been waiting this long for its next request. Defaults to 60 seconds.
+Socket read timeout, which doubles as the HTTP keep-alive idle timeout: Electric closes a connection that has been waiting this long for its next request. When unset, the HTTP server's default applies (60 seconds, ThousandIsland's current default).
 
 When Electric runs behind a connection-pooling reverse proxy or load balancer (AWS ALB, nginx, etc.), set this **above** the proxy's idle timeout. If the proxy's timeout is longer, the proxy can reuse a pooled connection at the same moment Electric closes it, and the resulting TCP reset surfaces to clients as an intermittent `502 Bad Gateway`. For example, behind an AWS ALB with the default 60-second idle timeout, set `ELECTRIC_TCP_READ_TIMEOUT=120s`.
 
