@@ -208,3 +208,11 @@ To learn more, see:
 ## Support
 
 Reach out on the [Electric Discord](https://discord.electric-sql.com) if you need help or have any questions.
+
+## Deployment
+
+The production demo runs on ECS via SST (`sst.config.ts`) and is deployed
+by the `Deploy Examples` workflow when changes under `examples/burn` land
+on `main`. It requires a valid `ANTHROPIC_KEY` (GitHub Actions secret) and
+uses `claude-haiku-4-5-20251001` — the only model alias resolvable in
+production (see `config/config.exs`).
