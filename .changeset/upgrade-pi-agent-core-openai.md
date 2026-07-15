@@ -5,6 +5,7 @@
 '@electric-ax/agents-server-conformance-tests': patch
 '@electric-ax/agents-server-ui': patch
 '@electric-ax/agents-desktop': patch
+'@electric-ax/agents-mobile': patch
 'electric-ax': patch
 ---
 
