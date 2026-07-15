@@ -1820,8 +1820,8 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.3.6)
       '@durable-streams/client':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: https://pkg.pr.new/@durable-streams/client@293
+        version: https://pkg.pr.new/@durable-streams/client@293
       '@durable-streams/state':
         specifier: ^0.3.1
         version: 0.3.1(@tanstack/db@0.6.7(typescript@5.9.3))
@@ -1926,8 +1926,8 @@ importers:
         specifier: ^0.78.0
         version: 0.78.0(zod@4.4.3)
       '@durable-streams/client':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: https://pkg.pr.new/@durable-streams/client@293
+        version: https://pkg.pr.new/@durable-streams/client@293
       '@durable-streams/server':
         specifier: ^0.3.7
         version: 0.3.7(@tanstack/db@0.6.7(typescript@5.8.3))
@@ -1949,6 +1949,12 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.48
         version: 0.34.49
+      '@tanstack/db':
+        specifier: ^0.6.7
+        version: 0.6.7(typescript@5.8.3)
+      '@tanstack/electric-db-collection':
+        specifier: ^0.3.5
+        version: 0.3.5(typescript@5.8.3)
       '@whatwg-node/server':
         specifier: ^0.10.18
         version: 0.10.18
@@ -2020,10 +2026,10 @@ importers:
   packages/agents-server-conformance-tests:
     dependencies:
       '@durable-streams/client':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: https://pkg.pr.new/@durable-streams/client@293
+        version: https://pkg.pr.new/@durable-streams/client@293
       '@electric-sql/client':
-        specifier: ^1.5.22
+        specifier: ^1.5.21
         version: link:../typescript-client
       fast-check:
         specifier: ^4.6.0
@@ -2051,8 +2057,8 @@ importers:
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(date-fns@4.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@durable-streams/client':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: https://pkg.pr.new/@durable-streams/client@293
+        version: https://pkg.pr.new/@durable-streams/client@293
       '@durable-streams/state':
         specifier: ^0.3.1
         version: 0.3.1(@tanstack/db@0.6.7(typescript@5.9.3))
@@ -2169,8 +2175,8 @@ importers:
   packages/electric-ax:
     dependencies:
       '@durable-streams/client':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: https://pkg.pr.new/@durable-streams/client@293
+        version: https://pkg.pr.new/@durable-streams/client@293
       '@durable-streams/state':
         specifier: ^0.3.1
         version: 0.3.1(@tanstack/db@0.6.7(typescript@5.9.3))
@@ -4709,6 +4715,12 @@ packages:
 
   '@durable-streams/client@0.2.6':
     resolution: {integrity: sha512-uHKKbWpsKLhFMeGjG0PgM6LXE3oEIi7FHKlJZkmYGxcqd4Yjjd/QEvnQnDzteRP4Av1uJVM8qjTL7kfKsgeS/w==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+
+  '@durable-streams/client@https://pkg.pr.new/@durable-streams/client@293':
+    resolution: {tarball: https://pkg.pr.new/@durable-streams/client@293}
+    version: 0.2.6
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -24957,6 +24969,11 @@ snapshots:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
       fastq: 1.20.1
 
+  '@durable-streams/client@https://pkg.pr.new/@durable-streams/client@293':
+    dependencies:
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      fastq: 1.20.1
+
   '@durable-streams/server-conformance-tests@0.3.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))':
     dependencies:
       '@durable-streams/client': 0.2.6
@@ -30800,6 +30817,17 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@tanstack/db': 0.5.8(typescript@5.7.2)
       '@tanstack/store': 0.8.0
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
+  '@tanstack/electric-db-collection@0.3.5(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/client': 1.5.20
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.6.7(typescript@5.8.3)
+      '@tanstack/store': 0.9.3
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
