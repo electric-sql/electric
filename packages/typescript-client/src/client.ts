@@ -1554,11 +1554,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     if (hasUpToDateMessage) {
       this.#refreshCatchUpWatchdogActive = false
-      if (transition.suppressBatch) {
-        return
-      }
-
-      if (this.#currentFetchUrl) {
+      if (!transition.suppressUpToDate && this.#currentFetchUrl) {
         const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
         upToDateTracker.recordUpToDate(
           shapeKey,
@@ -1570,11 +1566,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // Filter messages using snapshot tracker
     const messagesToProcess = batch.filter((message) => {
+      if (transition.suppressUpToDate && isUpToDateMessage(message)) {
+        return false
+      }
       if (isChangeMessage(message)) {
         return !this.#snapshotTracker.shouldRejectMessage(message)
       }
       return true // Always process control messages
     })
+
+    if (messagesToProcess.length === 0) return
 
     await this.#publish(messagesToProcess, {
       allowReentrantBypass: opts.allowReentrantPublishBypass,

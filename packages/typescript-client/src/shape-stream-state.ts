@@ -90,7 +90,7 @@ export interface MessageBatchInput {
 
 export interface MessageBatchTransition {
   state: ShapeStreamState
-  suppressBatch: boolean
+  suppressUpToDate: boolean
   becameUpToDate: boolean
 }
 
@@ -196,7 +196,7 @@ export abstract class ShapeStreamState {
   }
 
   handleMessageBatch(_input: MessageBatchInput): MessageBatchTransition {
-    return { state: this, suppressBatch: false, becameUpToDate: false }
+    return { state: this, suppressUpToDate: false, becameUpToDate: false }
   }
 
   // --- Universal transitions ---
@@ -323,7 +323,7 @@ abstract class ActiveState extends ShapeStreamState {
 
   handleMessageBatch(input: MessageBatchInput): MessageBatchTransition {
     if (!input.hasMessages || !input.hasUpToDateMessage) {
-      return { state: this, suppressBatch: false, becameUpToDate: false }
+      return { state: this, suppressUpToDate: false, becameUpToDate: false }
     }
 
     // Has up-to-date message — compute shared fields for the transition
@@ -350,7 +350,7 @@ abstract class ActiveState extends ShapeStreamState {
   ): MessageBatchTransition {
     return {
       state: new LiveState(shared),
-      suppressBatch: false,
+      suppressUpToDate: false,
       becameUpToDate: true,
     }
   }
@@ -546,7 +546,7 @@ export class LiveState extends ActiveState {
   ): MessageBatchTransition {
     return {
       state: new LiveState(shared, this.sseState),
-      suppressBatch: false,
+      suppressUpToDate: false,
       becameUpToDate: true,
     }
   }
@@ -638,13 +638,13 @@ export class ReplayingState extends ActiveState {
     shared: SharedStateFields,
     input: MessageBatchInput
   ): MessageBatchTransition {
-    // Suppress replayed cache data when cursor has not moved since
+    // Suppress the replayed up-to-date notification when the cursor has not moved since
     // the previous session (non-SSE only).
-    const suppressBatch =
+    const suppressUpToDate =
       !input.isSse && this.#replayCursor === input.currentCursor
     return {
       state: new LiveState(shared),
-      suppressBatch,
+      suppressUpToDate,
       becameUpToDate: true,
     }
   }
