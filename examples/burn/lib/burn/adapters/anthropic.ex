@@ -6,7 +6,7 @@ defmodule Burn.Adapters.Anthropic do
   support multiple `tools`.
   """
 
-  @default_model :sonnet
+  @default_model :haiku
 
   @doc """
   Builds the `params` for the initial prompt.

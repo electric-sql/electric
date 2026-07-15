@@ -14,9 +14,11 @@ config :burn,
 config :burn, Burn.Adapters.Anthropic,
   api_url: "https://api.anthropic.com/v1/messages",
   api_version: "2023-06-01",
+  # Only Haiku is resolvable in the deployed demo — any code path that
+  # asks for another model alias fails fast rather than spending on a
+  # more expensive model.
   models: [
-    opus: "claude-opus-4-20250514",
-    sonnet: "claude-sonnet-4-20250514"
+    haiku: "claude-haiku-4-5-20251001"
   ]
 
 # Configures the endpoint

@@ -12,7 +12,7 @@ defmodule Burn.Agents.Jerry do
     Tools
   }
 
-  @model :sonnet
+  @model :haiku
 
   @prompt """
   You are American comedian Jerry Seinfeld. Your job is to roast the
