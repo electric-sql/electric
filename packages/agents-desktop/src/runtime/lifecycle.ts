@@ -401,15 +401,14 @@ async function startRuntimeAttempt(
       error,
       activeServer.url
     )
+    const message =
+      startupNetworkError ??
+      (error instanceof Error ? error.message : String(error))
     entry.status = `error`
     entry.localRuntimeStatus = `error`
     entry.runtimeUrl = null
-    entry.runtimeError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
-    entry.lastError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
+    entry.runtimeError = message
+    entry.lastError = message
     entry.reconnectAttempt += 1
     refreshPowerSaveBlocker(deps)
     scheduleReconnect(deps, serverId)
