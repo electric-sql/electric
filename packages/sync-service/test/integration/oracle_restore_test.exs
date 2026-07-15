@@ -138,10 +138,10 @@ defmodule Electric.Integration.OracleRestoreTest do
   test "optimized subquery shapes stay consistent when the slot replays a backlog after restart",
        ctx do
     # Two `optimized: true` subquery shapes over the same `projects` source. After
-    # the restart the persistent slot re-delivers batch_1's already-applied changes
-    # to the subquery materializer; the materializer must ignore ranges it already
-    # applied during its startup history replay so the shapes stay consistent and
-    # the polling client is not sent a 409 must-refetch.
+    # the restart the persistent slot replays batch_1's already-applied
+    # transactions; the source consumer skips those (at/below its restored
+    # `latest_offset`) before re-notifying the subquery materializer, so the shapes
+    # stay consistent and the polling client is not sent a 409 must-refetch.
     shapes = [
       %{
         name: "issues_of_active_projects",

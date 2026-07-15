@@ -501,20 +501,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call(
-        {:new_changes, {_range_start, range_end}, _xid, _commit?},
-        _from,
-        %{applied_offset: applied_offset} = state
-      )
-      when is_log_offset_lte(range_end, applied_offset) do
-    # This range has already been applied — either during the startup history
-    # replay (`read_history_up_to_subscribed`) or a previous `new_changes` call.
-    # This happens on restart when the persistent replication slot re-delivers
-    # already-persisted transactions. Re-applying them would raise
-    # "Key already exists" in `apply_changes/2`, so skip the range entirely.
-    {:reply, :ok, state}
-  end
-
   def handle_call({:new_changes, {range_start, range_end}, xid, commit?}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
