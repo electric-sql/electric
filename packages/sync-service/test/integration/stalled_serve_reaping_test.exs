@@ -4,21 +4,27 @@ defmodule Electric.Integration.StalledServeReapingTest do
   it has made no progress for `:stalled_serve_timeout`, releasing the
   connection and everything the serve pins.
 
-  Defense in depth for the production OOM addressed by #4708: bounded write units
-  (#4708) cap what each stalled serve pins, but nothing reaps the serves
+  Defense in depth for the production OOM addressed by #4708: bounded write
+  units cap what each stalled serve pins, but nothing reaps the serves
   themselves — a population of stalled connections still accumulates memory
   and file descriptors proportional to connection count, invisibly (stalled
   serves never complete, so they emit no spans and increment no request
-  counters). The TCP send timeout only catches a *fully blocked* write; a
-  client draining at a trickle — or a proxy buffering for a vanished client —
-  evades it indefinitely.
+  counters).
 
-  The reaping deadline is distinct from a slow-but-healthy client: progress
-  is a completed bounded socket write, so a client sustaining a modest
-  throughput (roughly one OS send buffer per timeout window, worst case)
-  keeps resetting the deadline. A serve whose client accepts nothing for the
-  full window is terminated; the client can reconnect and resume from its
-  offset.
+  The kernel-level TCP send timeout does not reliably catch these: it fires
+  only when a single driver-level send sees no kernel acceptance for its
+  whole window, which a few stray bytes keep resetting — empirically,
+  stalled serves routinely outlive it. The watchdog times a different
+  quantity: the full completion of a bounded application-level write. That
+  turns the contract from "not perfectly frozen" into a minimum sustained
+  throughput, which a trickle cannot satisfy indefinitely. An intermediary
+  buffering on behalf of a vanished client only defers the same outcome:
+  while its buffer absorbs writes the serve completes and releases
+  everything anyway, and once it stops accepting, the deadline runs.
+
+  The deadline never fires for a slow-but-healthy client: any client
+  sustaining roughly one write unit per timeout window keeps resetting it,
+  and a terminated client can reconnect and resume from its offset.
   """
   use ExUnit.Case, async: false
 
