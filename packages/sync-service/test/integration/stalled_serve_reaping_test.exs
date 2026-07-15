@@ -55,7 +55,7 @@ defmodule Electric.Integration.StalledServeReapingTest do
       [handle] = Plug.Conn.get_resp_header(snapshot, "electric-handle")
 
       # Park live long-pollers over raw sockets that will never be read from.
-      socks =
+      _socks =
         for _ <- 1..@stalled_clients do
           {:ok, s} =
             :gen_tcp.connect({127, 0, 0, 1}, port, [
@@ -74,8 +74,6 @@ defmodule Electric.Integration.StalledServeReapingTest do
 
           s
         end
-
-      on_exit(fn -> Enum.each(socks, &:gen_tcp.close/1) end)
 
       wait_for_subscribers(registry, handle, @stalled_clients)
       {:ok, handlers} = ThousandIsland.connection_pids(server_pid)
@@ -96,7 +94,7 @@ defmodule Electric.Integration.StalledServeReapingTest do
       # (plus slack). Without reaping they live — and pin memory and a file
       # descriptor each — until the client goes away, which may be never.
       for {ref, pid} <- monitors do
-        assert_receive {:DOWN, ^ref, :process, ^pid, _reason},
+        assert_receive {:DOWN, ^ref, :process, ^pid, :killed},
                        @reap_deadline_ms,
                        "stalled serve #{inspect(pid)} was not terminated within " <>
                          "#{@stalled_serve_timeout}ms stall timeout (+ slack): nothing reaps " <>
@@ -129,8 +127,6 @@ defmodule Electric.Integration.StalledServeReapingTest do
           recbuf: 65536,
           buffer: 65536
         ])
-
-      on_exit(fn -> :gen_tcp.close(sock) end)
 
       :ok =
         :gen_tcp.send(
