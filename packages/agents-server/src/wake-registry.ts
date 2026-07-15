@@ -3,7 +3,7 @@ import {
   isChangeMessage,
   isControlMessage,
 } from '@electric-sql/client'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './utils/log.js'
 import { electricUrlWithPath } from './utils/electric-url.js'
@@ -344,9 +344,48 @@ export class WakeRegistry {
       .returning({ id: wakeRegistrations.id })
 
     if (result.length === 0) {
-      // Another path (e.g. manifest-sync) may have created the row first.
-      // Refresh the cache so this process still sees the effective registration.
-      await this.loadRegistrations()
+      // Another path (e.g. manifest-sync) created the row first. Re-read only
+      // the conflicting row and cache just that entry. A full loadRegistrations()
+      // here clears and rebuilds the entire cache from a snapshot taken across an
+      // await; when several register() calls conflict concurrently (parallel
+      // sub-agent spawn), a stale snapshot landing last can evict a sibling's
+      // newer registration, silently dropping its wake. See uq_wake_registration.
+      const existing = await this.db
+        .select()
+        .from(wakeRegistrations)
+        .where(
+          and(
+            eq(wakeRegistrations.tenantId, tenantId),
+            eq(wakeRegistrations.subscriberUrl, reg.subscriberUrl),
+            eq(wakeRegistrations.sourceUrl, reg.sourceUrl),
+            eq(wakeRegistrations.oneShot, reg.oneShot),
+            eq(wakeRegistrations.debounceMs, reg.debounceMs ?? 0),
+            eq(wakeRegistrations.timeoutMs, reg.timeoutMs ?? 0),
+            eq(wakeRegistrations.condition, reg.condition),
+            reg.manifestKey == null
+              ? isNull(wakeRegistrations.manifestKey)
+              : eq(wakeRegistrations.manifestKey, reg.manifestKey)
+          )
+        )
+        .limit(1)
+
+      const row = existing[0]
+      if (row) {
+        this.upsertCachedRegistration({
+          tenantId: row.tenantId,
+          subscriberUrl: row.subscriberUrl,
+          sourceUrl: row.sourceUrl,
+          condition: row.condition as WakeRegistration[`condition`],
+          debounceMs: row.debounceMs || undefined,
+          timeoutMs: row.timeoutMs || undefined,
+          oneShot: row.oneShot,
+          includeResponse: row.includeResponse === false ? false : undefined,
+          manifestKey: row.manifestKey ?? undefined,
+          dbId: row.id,
+          createdAt: row.createdAt,
+          timeoutConsumed: row.timeoutConsumed,
+        })
+      }
       return
     }
 
