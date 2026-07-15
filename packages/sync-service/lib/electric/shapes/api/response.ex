@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Api.Response do
   alias Electric.Plug.Utils
   alias Electric.Shapes.Api
+  alias Electric.Shapes.Api.ServeWatchdog
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -434,7 +435,7 @@ defmodule Electric.Shapes.Api.Response do
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
 
     conn = Plug.Conn.send_chunked(conn, status)
-    watchdog = start_write_watchdog(stack_id, response)
+    watchdog = watchdog_context(stack_id, response)
 
     {conn, bytes_sent} =
       try do
@@ -466,7 +467,7 @@ defmodule Electric.Shapes.Api.Response do
           )
         end)
       after
-        watchdog && Kernel.send(watchdog, :stop)
+        watchdog && ServeWatchdog.write_finished(stack_id)
       end
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
@@ -485,88 +486,23 @@ defmodule Electric.Shapes.Api.Response do
   # to a kernel send buffer of drain, which dwarfs the piece size.
   @socket_write_bytes Electric.Shapes.Api.Encoder.JSON.max_batch_bytes()
 
-  # A serve whose client stops accepting data blocks inside the socket write
-  # and cannot recover on its own: the TCP send timeout only catches a write
-  # that is *fully* blocked for its whole window, so a client draining at a
-  # trickle — or a proxy buffering for a vanished client — can hold the
-  # serve, everything it pins, and its file descriptor forever. Such serves
-  # never complete, so they emit no telemetry, and they accumulate with
-  # connection count (reproduced in
-  # test/integration/stalled_serve_memory_test.exs).
-  #
-  # The watchdog is a small companion process that terminates the serve when
-  # a single bounded socket write (≤ @socket_write_bytes) fails to complete
-  # within `:stalled_serve_timeout`. Write completion is quantized by the OS:
-  # a blocked write may only complete after the kernel send buffer frees a
-  # substantial fraction of its capacity, so the effective contract is that a
-  # healthy client must drain roughly one OS send buffer per timeout window
-  # (e.g. ~10 KB/s for a megabyte-class buffer and a 60-second window, and
-  # far less on stacks that signal writability at finer granularity). The
-  # timer is armed only while a write is in flight, so a serve idling between
-  # body elements (a live long-poll hold, an SSE stream waiting for changes)
-  # is never at risk. The terminated client can reconnect and resume from its
-  # last offset.
-  defp start_write_watchdog(stack_id, response) do
+  # See Electric.Shapes.Api.ServeWatchdog for the design rationale. The
+  # context carries what each per-piece registration needs; `nil` (timeout
+  # not positive) disables reaping for this serve.
+  defp watchdog_context(stack_id, response) do
     # Fallback for stacks whose seed config omits the key (e.g. minimal
     # unit-test stacks); Electric.Config is the single source of truth.
-    case Electric.StackConfig.lookup(
-           stack_id,
-           :stalled_serve_timeout,
-           Electric.Config.default(:stalled_serve_timeout)
-         ) do
-      timeout when is_integer(timeout) and timeout > 0 ->
-        handler = self()
-        shape_handle = response.handle
+    timeout =
+      Electric.StackConfig.lookup(
+        stack_id,
+        :stalled_serve_timeout,
+        Electric.Config.default(:stalled_serve_timeout)
+      )
 
-        {:ok, watchdog} =
-          Task.start(fn ->
-            # The label groups these processes under a low-cardinality
-            # process_type in the per-process telemetry, rather than leaving
-            # them anonymous — serves and their guards should be visible.
-            # Logger metadata is set explicitly: this process does not inherit
-            # the handler's, and the reap warning below is the primary signal
-            # an otherwise-invisible stalled serve emits, so it must carry
-            # enough to correlate (which stack, which shape).
-            Process.set_label({:serve_watchdog, shape_handle})
-            Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
-            ref = Process.monitor(handler)
-            write_watchdog_loop(handler, ref, timeout, :idle)
-          end)
-
-        watchdog
-
-      # 0 (or any non-positive value) disables reaping.
-      _disabled ->
-        nil
+    if is_integer(timeout) and timeout > 0 do
+      {stack_id, response.handle, timeout}
     end
   end
-
-  defp write_watchdog_loop(handler, ref, timeout, writing?) do
-    receive do
-      :write_start ->
-        write_watchdog_loop(handler, ref, timeout, :writing)
-
-      :write_done ->
-        write_watchdog_loop(handler, ref, timeout, :idle)
-
-      :stop ->
-        :ok
-
-      {:DOWN, ^ref, :process, ^handler, _reason} ->
-        :ok
-    after
-      watchdog_wait(writing?, timeout) ->
-        Logger.warning(
-          "Terminating stalled shape response serve: client accepted no data " <>
-            "for #{timeout}ms"
-        )
-
-        Process.exit(handler, :kill)
-    end
-  end
-
-  defp watchdog_wait(:writing, timeout), do: timeout
-  defp watchdog_wait(:idle, _timeout), do: :infinity
 
   # Write one response body element as a sequence of bounded socket writes,
   # notifying the watchdog around each one. Elements within the bound — the
@@ -595,10 +531,14 @@ defmodule Electric.Shapes.Api.Response do
     guarded_chunk(conn, piece, watchdog)
   end
 
-  defp guarded_chunk(conn, data, watchdog) do
-    watchdog && Kernel.send(watchdog, :write_start)
+  defp guarded_chunk(conn, data, nil) do
+    Plug.Conn.chunk(conn, data)
+  end
+
+  defp guarded_chunk(conn, data, {stack_id, shape_handle, timeout}) do
+    ServeWatchdog.write_started(stack_id, shape_handle, timeout)
     result = Plug.Conn.chunk(conn, data)
-    watchdog && Kernel.send(watchdog, :write_done)
+    ServeWatchdog.write_finished(stack_id)
     result
   end
 

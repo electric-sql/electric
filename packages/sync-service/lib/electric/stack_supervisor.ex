@@ -421,6 +421,7 @@ defmodule Electric.StackSupervisor do
            stalled_serve_timeout: stalled_serve_timeout,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},
+        {Electric.Shapes.Api.ServeWatchdog, stack_id: stack_id},
         {Electric.AsyncDeleter,
          stack_id: stack_id,
          storage_dir: config.storage_dir,
