@@ -2,8 +2,6 @@ import Config
 
 config :burn, Burn.Adapters.Anthropic,
   models: [
-    opus: "claude-3-5-haiku-20241022",
-    sonnet: "claude-3-5-haiku-20241022",
     haiku: "claude-3-5-haiku-20241022"
   ]
 
