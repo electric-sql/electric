@@ -92,7 +92,7 @@ app.put(`/api/update`, async (c: Context) => {
 app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
   const url = new URL(c.req.url)
   const electricUrl = process.env.ELECTRIC_URL || `http://localhost:3000`
-  const originUrl = new URL(`${electricUrl}/v1/shape/`)
+  const originUrl = new URL(`${electricUrl}/v1/shape`)
 
   // Forward all query parameters
   url.searchParams.forEach((value, key) => {
