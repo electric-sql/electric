@@ -1328,6 +1328,26 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end)
   end
 
+  # Build a single main-log delete log item at `offset` for row `id` (value only
+  # needs to match the corresponding insert so the materializer decrements it).
+  defp main_log_delete(offset, id, value) do
+    change =
+      %Changes.DeletedRecord{
+        relation: {"public", "test_table"},
+        key: ~s|"public"."test_table"/"#{id}"|,
+        old_record: %{"id" => id, "value" => value},
+        log_offset: offset,
+        move_tags: []
+      }
+      |> Changes.fill_key(["id"])
+
+    change
+    |> then(&LogItems.from_change(&1, 1, ["id"], :default))
+    |> Enum.map(fn {item_offset, item} ->
+      {item_offset, change.key, :delete, Jason.encode!(item)}
+    end)
+  end
+
   # Like `main_log_insert/3` but attaches move tags so the row is indexed under
   # those tags (and can later be moved out by a control message targeting them).
   defp tagged_main_log_insert(offset, id, value, tags) do
@@ -1746,6 +1766,81 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert_receive {:materializer_changes, _handle,
                       %{move_out: [{10, "10"}], lsn: %LogOffset{tx_offset: 200}}}
+    end
+  end
+
+  describe "move replay of a value toggled multiple times within one transaction" do
+    # A value can cross the 0↔1 boundary several times inside a single source
+    # transaction (op_offsets sharing one tx_offset). Replay batches each op
+    # separately, so these are re-emitted as separate sequential payloads in
+    # offset order — never a single payload carrying both a move_in and a
+    # move_out for the same value (the case `cancel_matching_move_events/1`
+    # guards against, where the consumer's move-in query would race its own
+    # moved-out tag). Sequential single-value payloads are just the normal
+    # per-transaction flow applied in order.
+    setup ctx do
+      shape_handle = "toggle-replay-#{System.unique_integer([:positive])}"
+
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+      Storage.start_link(storage)
+      writer = Storage.init_writer!(storage, @shape)
+      Storage.mark_snapshot_as_started(storage)
+      Storage.make_new_snapshot!([], storage)
+
+      # One transaction (tx 100) toggles value 10: in (row "a"), out (row "a"),
+      # in (row "b"). It ends present on "b", so startup materializes {10}.
+      writer = Storage.append_to_log!(main_log_insert(LogOffset.new(100, 0), "a", "10"), writer)
+      writer = Storage.append_to_log!(main_log_delete(LogOffset.new(100, 1), "a", "10"), writer)
+      writer = Storage.append_to_log!(main_log_insert(LogOffset.new(100, 2), "b", "10"), writer)
+      Storage.hibernate(writer)
+
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
+
+      {:ok, _pid} =
+        Materializer.start_link(%{
+          stack_id: ctx.stack_id,
+          shape_handle: shape_handle,
+          storage: ctx.storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      respond_to_call(:await_snapshot_start, :started)
+      respond_to_call(:subscribe_materializer, {:ok, LogOffset.new(100, 2)})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new([10])
+
+      Map.put(ctx, :mat_ctx, mat_ctx)
+    end
+
+    test "re-emits each toggle as its own payload, in offset order", %{mat_ctx: mat_ctx} do
+      # Behind before the transaction: the whole toggle sequence is replayed.
+      assert {:ok, seed, applied_offset} =
+               Materializer.subscribe(mat_ctx, LogOffset.new(50, 0))
+
+      # As of (50,0) value 10 is not yet present.
+      assert seed == MapSet.new([])
+      assert applied_offset == LogOffset.new(100, 2)
+
+      # Collect the payloads in the order they arrive (replay sends are
+      # sequential from the subscribe call, so mailbox order is emit order) and
+      # assert the full sequence: three distinct payloads, one per op, in offset
+      # order — not a single netted payload.
+      payloads =
+        for _ <- 1..3 do
+          assert_receive {:materializer_changes, _h, payload}
+          payload
+        end
+
+      assert [
+               %{move_in: [{10, "10"}], lsn: %LogOffset{tx_offset: 100, op_offset: 0}},
+               %{move_out: [{10, "10"}], lsn: %LogOffset{tx_offset: 100, op_offset: 1}},
+               %{move_in: [{10, "10"}], lsn: %LogOffset{tx_offset: 100, op_offset: 2}}
+             ] = payloads
+
+      refute_received {:materializer_changes, _h, _payload}
     end
   end
 
