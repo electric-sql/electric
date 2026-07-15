@@ -37,7 +37,8 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
+    sweep_interval_ms = Keyword.get(opts, :sweep_interval_ms, @sweep_interval_ms)
+    GenServer.start_link(__MODULE__, {stack_id, sweep_interval_ms}, name: name(stack_id))
   end
 
   def name(stack_id) do
@@ -61,11 +62,11 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
   end
 
   @impl GenServer
-  def init(stack_id) do
+  def init({stack_id, sweep_interval_ms}) do
     Process.set_label({:serve_watchdog, stack_id})
     Logger.metadata(stack_id: stack_id)
-    schedule_sweep()
-    {:ok, %{stack_id: stack_id, writes: %{}}}
+    schedule_sweep(sweep_interval_ms)
+    {:ok, %{stack_id: stack_id, sweep_interval_ms: sweep_interval_ms, writes: %{}}}
   end
 
   @impl GenServer
@@ -89,7 +90,7 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
         entry
       end
 
-    schedule_sweep()
+    schedule_sweep(state.sweep_interval_ms)
     {:noreply, %{state | writes: writes}}
   end
 
@@ -116,7 +117,7 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
     end
   end
 
-  defp schedule_sweep do
-    Process.send_after(self(), :sweep, @sweep_interval_ms)
+  defp schedule_sweep(interval_ms) do
+    Process.send_after(self(), :sweep, interval_ms)
   end
 end
