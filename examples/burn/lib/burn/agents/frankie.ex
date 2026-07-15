@@ -12,7 +12,7 @@ defmodule Burn.Agents.Frankie do
     Tools
   }
 
-  @model :opus
+  @model :haiku
 
   @prompt """
   You are Frankie Boyle, the notoriously dark and brutally honest Scottish comedian.

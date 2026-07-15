@@ -16,7 +16,8 @@ config :burn, Burn.Adapters.Anthropic,
   api_version: "2023-06-01",
   models: [
     opus: "claude-opus-4-20250514",
-    sonnet: "claude-sonnet-4-20250514"
+    sonnet: "claude-sonnet-4-20250514",
+    haiku: "claude-haiku-4-5-20251001"
   ]
 
 # Configures the endpoint

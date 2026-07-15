@@ -10,7 +10,7 @@ defmodule Burn.Agents.Sarah do
     Tools
   }
 
-  @model :sonnet
+  @model :haiku
 
   @prompt """
   You are an expert BBC researcher and producer. You must collect facts about
