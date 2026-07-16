@@ -61,6 +61,14 @@ defmodule Support.TransactionConsumer do
     GenServer.cast(pid, {:stop, reason})
   end
 
+  @doc """
+  Make the consumer die with `reason` without running its `terminate/2` callback,
+  like a crash that aborts terminate would.
+  """
+  def crash(pid, reason) do
+    GenServer.cast(pid, {:crash, reason})
+  end
+
   def init(opts) do
     Process.flag(:trap_exit, true)
     {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
@@ -104,6 +112,14 @@ defmodule Support.TransactionConsumer do
 
   def handle_cast({:stop, reason}, state) do
     {:stop, reason, state}
+  end
+
+  def handle_cast({:crash, reason}, state) do
+    # Stop trapping exits and take an exit signal from a linked process: the
+    # process dies with `reason` and terminate/2 never runs.
+    Process.flag(:trap_exit, false)
+    spawn_link(fn -> exit(reason) end)
+    {:noreply, state}
   end
 
   # we no longer monitor consumer processes in the ShapeLogCollector

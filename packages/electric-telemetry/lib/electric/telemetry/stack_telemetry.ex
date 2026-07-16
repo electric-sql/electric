@@ -135,7 +135,9 @@ defmodule ElectricTelemetry.StackTelemetry do
       last_value("electric.admission_control.acquire.limit", tags: [:kind]),
       sum("electric.admission_control.reject.count", tags: [:kind]),
       last_value("electric.admission_control.reject.limit", tags: [:kind]),
-      distribution("electric.shape_log_collector.transaction.affected_shape_count")
+      distribution("electric.shape_log_collector.transaction.affected_shape_count"),
+      counter("electric.flush_tracker.writer_down.count", tags: [:reason_class]),
+      sum("electric.flush_tracker.stall_detected.count")
       | additional_metrics(telemetry_opts)
     ]
     |> ElectricTelemetry.keep_for_stack(telemetry_opts.stack_id)

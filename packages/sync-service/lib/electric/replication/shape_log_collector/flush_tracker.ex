@@ -103,6 +103,14 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
 
+  @doc """
+  Check whether the shape has an incomplete flush entry (completed entries are deleted).
+  """
+  @spec tracked?(t(), shape_id()) :: boolean()
+  def tracked?(%__MODULE__{last_flushed: last_flushed}, shape_id) do
+    is_map_key(last_flushed, shape_id)
+  end
+
   @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id()), integer()) ::
           {t(), newly_tracked :: MapSet.t(shape_id())}
 

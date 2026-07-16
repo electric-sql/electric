@@ -46,6 +46,12 @@ defmodule Electric.Replication.ShapeLogCollector do
             consumer_registry_opts: [type: :any]
           )
 
+  @consumer_cleanup_reason Electric.ShapeCache.ShapeCleaner.consumer_cleanup_reason()
+
+  # How often to scan the FlushTracker for entries that have made no flush progress
+  # past the grace period (see the :flush_stall_grace_period stack config value).
+  @stall_check_interval 10_000
+
   defguardp is_ready_to_process(state)
             when is_map_key(state, :last_processed_offset) and
                    not is_nil(state.last_processed_offset)
@@ -240,7 +246,10 @@ defmodule Electric.Replication.ShapeLogCollector do
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
-        pids_by_shape_handle: %{},
+        # An incomplete FlushTracker entry always has a live monitor watching the
+        # writer pid responsible for completing it, kept in two mirrored maps.
+        writer_monitors: %{},
+        writer_monitor_refs: %{},
         event_router:
           opts
           |> Keyword.new()
@@ -256,6 +265,8 @@ defmodule Electric.Replication.ShapeLogCollector do
           ),
         registry_state: registry_state
       })
+
+    Process.send_after(self(), :check_stalled_flushes, @stall_check_interval)
 
     {:ok, state, {:continue, :restore_shapes}}
   end
@@ -415,12 +426,21 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
     now = System.monotonic_time(:millisecond)
 
-    {:noreply,
-     state
-     |> Map.update!(
-       :flush_tracker,
-       &FlushTracker.handle_flush_notification(&1, shape_id, offset, now)
-     )}
+    state =
+      Map.update!(
+        state,
+        :flush_tracker,
+        &FlushTracker.handle_flush_notification(&1, shape_id, offset, now)
+      )
+
+    # A flush that completes the entry removes it from the tracker; its writer no
+    # longer needs watching.
+    state =
+      if FlushTracker.tracked?(state.flush_tracker, shape_id),
+        do: state,
+        else: demonitor_writer(state, shape_id)
+
+    {:noreply, state}
   end
 
   def handle_cast(
@@ -491,6 +511,155 @@ defmodule Electric.Replication.ShapeLogCollector do
         {:noreply, state}
       end
     )
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
+      when is_map_key(state.writer_monitor_refs, ref) do
+    shape_handle = Map.fetch!(state.writer_monitor_refs, ref)
+
+    state =
+      state
+      |> forget_writer_monitor(shape_handle, ref)
+      |> handle_writer_down(shape_handle, reason)
+
+    {:noreply, state}
+  end
+
+  def handle_info(:check_stalled_flushes, state) do
+    Process.send_after(self(), :check_stalled_flushes, @stall_check_interval)
+
+    now = System.monotonic_time(:millisecond)
+
+    grace_period =
+      Electric.StackConfig.lookup(
+        state.stack_id,
+        :flush_stall_grace_period,
+        Electric.Config.default(:flush_stall_grace_period)
+      )
+
+    case FlushTracker.stalled_shapes(state.flush_tracker, now, grace_period) do
+      [] ->
+        {:noreply, state}
+
+      stalled ->
+        Logger.warning(
+          "Writers for shapes #{inspect(stalled)} have made no flush progress in over " <>
+            "#{grace_period}ms, removing the shapes to unpin the flush boundary"
+        )
+
+        OpenTelemetry.execute(
+          [:electric, :flush_tracker, :stall_detected],
+          %{count: length(stalled)},
+          %{stack_id: state.stack_id}
+        )
+
+        Electric.ShapeCache.ShapeCleaner.remove_shapes_async(state.stack_id, stalled)
+
+        # Touching re-arms the grace period: the unpinning happens via the removal
+        # chain, and if that chain is lost the stall simply re-fires one grace
+        # period later (shape removal is idempotent).
+        flush_tracker =
+          Enum.reduce(stalled, state.flush_tracker, &FlushTracker.touch(&2, &1, now))
+
+        {:noreply, %{state | flush_tracker: flush_tracker}}
+    end
+  end
+
+  # Preserve the default GenServer behaviour for unexpected messages.
+  def handle_info(msg, state) do
+    Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  # ShapeCleaner is driving this removal: shape invalidation is already in flight,
+  # so just unpin the flush entry.
+  defp handle_writer_down(state, shape_handle, @consumer_cleanup_reason) do
+    emit_writer_down_telemetry(state, :cleanup)
+    Map.update!(state, :flush_tracker, &FlushTracker.handle_shape_removed(&1, shape_handle))
+  end
+
+  # Assume supervisor teardown (deploy/stack shutdown): leave the entry pinned on
+  # purpose so a mass shutdown never mass-invalidates shapes. :noproc belongs here
+  # because it masks the real exit reason of a writer that died before we could
+  # monitor it — a deploy-time :shutdown as easily as a crash. If the assumption
+  # is wrong, the stall check self-heals one grace period later.
+  defp handle_writer_down(state, _shape_handle, reason)
+       when reason in [:shutdown, :killed, :noproc] do
+    emit_writer_down_telemetry(state, :shutdown)
+    state
+  end
+
+  # Anything else is a crash ({:shutdown, :suspend} included: a suspending consumer
+  # must have no incomplete flush entry, so a monitored suspend is a contract
+  # violation). Unpin immediately and make sure the shape is invalidated — it must
+  # not resume from storage that is behind the acked WAL.
+  defp handle_writer_down(state, shape_handle, reason) do
+    Logger.warning(
+      "Writer for shape #{shape_handle} exited with #{inspect(reason)} before completing " <>
+        "its flush, removing the shape"
+    )
+
+    emit_writer_down_telemetry(state, :crash)
+    Electric.ShapeCache.ShapeCleaner.remove_shapes_async(state.stack_id, [shape_handle])
+    Map.update!(state, :flush_tracker, &FlushTracker.handle_shape_removed(&1, shape_handle))
+  end
+
+  # An undeliverable reason from the registry is either a publish-level failure —
+  # the shape is gone from ShapeStatus or was removed after failing to resume, so
+  # removal is already in flight, same as a cleanup DOWN — or the exit reason the
+  # broadcast's own monitor observed for the writer.
+  defp undeliverable_down_reason({:publish, _}), do: @consumer_cleanup_reason
+  defp undeliverable_down_reason(reason), do: reason
+
+  defp emit_writer_down_telemetry(state, reason_class) do
+    OpenTelemetry.execute(
+      [:electric, :flush_tracker, :writer_down],
+      %{count: 1},
+      %{stack_id: state.stack_id, reason_class: reason_class}
+    )
+  end
+
+  defp monitor_writer(state, shape_handle, pid) do
+    case Map.fetch(state.writer_monitors, shape_handle) do
+      {:ok, {^pid, _ref}} ->
+        state
+
+      {:ok, {_old_pid, _old_ref}} ->
+        # A different pid now owns this shape's entry (resumed consumer): swap the
+        # monitor over to it.
+        state |> demonitor_writer(shape_handle) |> monitor_writer(shape_handle, pid)
+
+      :error ->
+        # Monitoring an already-dead pid yields an immediate :noproc DOWN, so a
+        # writer that dies before this call is never lost: the DOWN is classified
+        # as teardown and the stall check picks the entry up if that was wrong.
+        ref = Process.monitor(pid)
+
+        %{
+          state
+          | writer_monitors: Map.put(state.writer_monitors, shape_handle, {pid, ref}),
+            writer_monitor_refs: Map.put(state.writer_monitor_refs, ref, shape_handle)
+        }
+    end
+  end
+
+  defp demonitor_writer(state, shape_handle) do
+    case Map.fetch(state.writer_monitors, shape_handle) do
+      {:ok, {_pid, ref}} ->
+        Process.demonitor(ref, [:flush])
+        forget_writer_monitor(state, shape_handle, ref)
+
+      :error ->
+        state
+    end
+  end
+
+  defp forget_writer_monitor(state, shape_handle, ref) do
+    %{
+      state
+      | writer_monitors: Map.delete(state.writer_monitors, shape_handle),
+        writer_monitor_refs: Map.delete(state.writer_monitor_refs, ref)
+    }
   end
 
   defp do_handle_event(%Relation{} = rel, state) do
@@ -660,54 +829,69 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
-    undeliverable_set =
+    {undeliverable, delivered_pids} =
       for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes),
-          reduce: MapSet.new() do
-        acc ->
+          reduce: {%{}, %{}} do
+        {undeliverable_acc, delivered_acc} ->
           # Each publish is synchronous, so layers will be processed in order
           layer_events =
             Map.new(layer, fn handle ->
               {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
             end)
 
-          layer_undeliverable = ConsumerRegistry.publish(layer_events, state.registry_state)
-          layer_undeliverable |> Map.keys() |> Enum.into(acc)
+          {layer_undeliverable, layer_delivered} =
+            ConsumerRegistry.publish(layer_events, state.registry_state)
+
+          {Map.merge(undeliverable_acc, layer_undeliverable),
+           Map.merge(delivered_acc, layer_delivered)}
       end
 
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
-    delivered_shapes = MapSet.difference(affected_shapes, undeliverable_set)
 
-    # Remove shapes from FlushTracker that were already tracked in earlier
-    # fragments but are now undeliverable. This prevents stuck flush when
-    # a consumer processes fragment 1 but crashes on fragment 2.
-    flush_tracker =
-      Enum.reduce(undeliverable_set, state.flush_tracker, fn shape_handle, tracker ->
-        FlushTracker.handle_shape_removed(tracker, shape_handle)
+    delivered_shapes =
+      MapSet.difference(affected_shapes, undeliverable |> Map.keys() |> MapSet.new())
+
+    # An undeliverable shape may still hold an incomplete flush entry from an
+    # earlier commit. Run the failure through the same classification as a
+    # writer DOWN instead of blindly unpinning: a crash still invalidates the
+    # shape, and an ambiguous reason leaves the entry pinned for the stall
+    # check rather than disarming that backstop.
+    state =
+      Enum.reduce(undeliverable, state, fn {shape_handle, reason}, state ->
+        state = demonitor_writer(state, shape_handle)
+
+        if FlushTracker.tracked?(state.flush_tracker, shape_handle) do
+          handle_writer_down(state, shape_handle, undeliverable_down_reason(reason))
+        else
+          state
+        end
       end)
 
-    flush_tracker =
-      case event do
-        %TransactionFragment{commit: commit} when not is_nil(commit) ->
-          LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
+    case event do
+      %TransactionFragment{commit: commit} when not is_nil(commit) ->
+        LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
-          {flush_tracker, _newly_tracked} =
-            FlushTracker.handle_txn_fragment(
-              flush_tracker,
-              event,
-              delivered_shapes,
-              System.monotonic_time(:millisecond)
-            )
+        {flush_tracker, newly_tracked} =
+          FlushTracker.handle_txn_fragment(
+            state.flush_tracker,
+            event,
+            delivered_shapes,
+            System.monotonic_time(:millisecond)
+          )
 
-          flush_tracker
+        # Shapes newly tracked by this commit get a monitor on the pid responsible
+        # for completing their entry (every newly tracked shape was delivered to).
+        Enum.reduce(newly_tracked, %{state | flush_tracker: flush_tracker}, fn shape_handle,
+                                                                               state ->
+          monitor_writer(state, shape_handle, Map.fetch!(delivered_pids, shape_handle))
+        end)
 
-        _ ->
-          flush_tracker
-      end
-
-    %{state | flush_tracker: flush_tracker}
+      _ ->
+        state
+    end
   end
 
   defp handle_relation(state, rel) do
@@ -801,11 +985,8 @@ defmodule Electric.Replication.ShapeLogCollector do
           OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_partitions.duration_µs")
           partitions = Partitions.remove_shape(state.partitions, shape_handle)
 
-          OpenTelemetry.start_interval(
-            :"unsubscribe_shape.remove_pids_by_shape_handle.duration_µs"
-          )
-
-          pids_by_shape_handle = Map.delete(state.pids_by_shape_handle, shape_handle)
+          OpenTelemetry.start_interval(:"unsubscribe_shape.demonitor_writer.duration_µs")
+          state = demonitor_writer(state, shape_handle)
 
           OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_flush_tracker.duration_µs")
           flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
@@ -829,7 +1010,6 @@ defmodule Electric.Replication.ShapeLogCollector do
              | subscriptions: count - 1,
                event_router: event_router,
                partitions: partitions,
-               pids_by_shape_handle: pids_by_shape_handle,
                dependency_layers: dependency_layers,
                flush_tracker: flush_tracker
            }

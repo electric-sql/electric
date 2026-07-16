@@ -140,6 +140,10 @@ defmodule Electric.StackSupervisor do
                        type: :non_neg_integer,
                        default: Electric.Config.default(:shape_suspend_after)
                      ],
+                     flush_stall_grace_period: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:flush_stall_grace_period)
+                     ],
                      snapshot_timeout_to_first_data: [
                        type: :pos_integer,
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
@@ -360,6 +364,7 @@ defmodule Electric.StackSupervisor do
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
     shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
     shape_suspend_after = Keyword.fetch!(config.tweaks, :shape_suspend_after)
+    flush_stall_grace_period = Keyword.fetch!(config.tweaks, :flush_stall_grace_period)
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
     consumer_gc_heap_threshold = Keyword.fetch!(config.tweaks, :consumer_gc_heap_threshold)
 
@@ -411,6 +416,7 @@ defmodule Electric.StackSupervisor do
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?,
            shape_suspend_after: shape_suspend_after,
+           flush_stall_grace_period: flush_stall_grace_period,
            process_spawn_opts: process_spawn_opts,
            consumer_gc_heap_threshold: consumer_gc_heap_threshold,
            feature_flags: Map.get(config, :feature_flags, [])
