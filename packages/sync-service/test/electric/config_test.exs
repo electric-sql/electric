@@ -54,8 +54,6 @@ defmodule Electric.ConfigTest do
     test "api_server/1 maps tcp_read_timeout to a top-level ThousandIsland option" do
       [{Bandit, bandit_opts}] = Electric.Application.api_server(tcp_read_timeout: 180_000)
 
-      # read_timeout is a top-level ThousandIsland option — placing it inside
-      # transport_options (like send_timeout) would silently no-op it.
       assert bandit_opts[:thousand_island_options][:read_timeout] == 180_000
 
       [{Bandit, default_opts}] = Electric.Application.api_server([])
