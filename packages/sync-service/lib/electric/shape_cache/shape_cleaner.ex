@@ -173,6 +173,11 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         end
 
       {:error, _reason} ->
+        # The shape is already gone from ShapeStatus, but an earlier removal chain may
+        # have died between the ShapeStatus removal and the ShapeLogCollector removal,
+        # leaving the shape's flush entry pinned. The SLC removal is idempotent, so
+        # re-issue it instead of assuming it ever completed.
+        :ok = Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle)
         {:error, :data_removed}
     end
   end

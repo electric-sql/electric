@@ -461,6 +461,23 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, state, :hibernate}
   end
 
+  # Periodic tick armed by maybe_schedule_flush_defer_notify/1: while the deferral
+  # phase lasts, tell the ShapeLogCollector the writer is alive and deliberately
+  # not flushing yet; once the phase is over, let the timer lapse.
+  def handle_info(:notify_flush_deferred, state) do
+    state = %{state | flush_defer_timer: nil}
+
+    state =
+      if deferring_flush_notifications?(state) do
+        ShapeLogCollector.notify_flush_deferred(state.stack_id, state.shape_handle)
+        maybe_schedule_flush_defer_notify(state)
+      else
+        state
+      end
+
+    {:noreply, state, state.hibernate_after}
+  end
+
   defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
     Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true)
   end
@@ -485,6 +502,38 @@ defmodule Electric.Shapes.Consumer do
     :erlang.cancel_timer(ref)
     %{state | suspend_timer: nil}
   end
+
+  # The two phases in which the consumer deliberately sits on delivered
+  # transactions without producing flush notifications: buffering ahead of PG
+  # snapshot info, and a subquery move-in waiting to be spliced.
+  defp deferring_flush_notifications?(%State{buffering?: true}), do: true
+
+  defp deferring_flush_notifications?(%State{event_handler: event_handler}),
+    do: is_struct(event_handler, EventHandler.Subqueries.Buffering)
+
+  # While the consumer defers flush notifications, any commit the SLC delivered to
+  # it sits in the FlushTracker with no flush progress, so a deferral outlasting
+  # the stall grace period would be misread as a wedged writer. Arm a periodic
+  # tick that keeps re-arming the grace period for as long as the deferral phase
+  # lasts (see the :notify_flush_deferred handler). The interval divides the grace
+  # period so a touch always lands within any grace window.
+  defp maybe_schedule_flush_defer_notify(%State{flush_defer_timer: nil} = state) do
+    if deferring_flush_notifications?(state) do
+      grace_period =
+        Electric.StackConfig.lookup(
+          state.stack_id,
+          :flush_stall_grace_period,
+          Electric.Config.default(:flush_stall_grace_period)
+        )
+
+      interval = max(div(grace_period, 3), 1)
+      %{state | flush_defer_timer: Process.send_after(self(), :notify_flush_deferred, interval)}
+    else
+      state
+    end
+  end
+
+  defp maybe_schedule_flush_defer_notify(state), do: state
 
   @impl GenServer
   def terminate(reason, state) do
@@ -607,7 +656,9 @@ defmodule Electric.Shapes.Consumer do
          %TransactionFragment{} = txn_fragment,
          %State{buffering?: true} = state
        ) do
-    State.add_to_buffer(state, txn_fragment)
+    state
+    |> State.add_to_buffer(txn_fragment)
+    |> maybe_schedule_flush_defer_notify()
   end
 
   # Skip transactions already applied and persisted (e.g. replayed from the persistent
@@ -1011,7 +1062,11 @@ defmodule Electric.Shapes.Consumer do
             {{previous_offset, result.state.latest_offset}, result.state.latest_offset}
           end
 
-        {result.state, notification, result.num_changes, result.total_size}
+        # The event may have transitioned the handler into a move-in buffering
+        # phase, which defers flush notifications until splice.
+        state = maybe_schedule_flush_defer_notify(result.state)
+
+        {state, notification, result.num_changes, result.total_size}
     end
   end
 

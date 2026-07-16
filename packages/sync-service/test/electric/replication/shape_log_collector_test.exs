@@ -1858,6 +1858,27 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert_receive {:remove_shapes_async, ["shape-doomed"]}
     end
 
+    test "flush-deferred notification re-arms the grace period", ctx do
+      stub_shape_cleaner(ctx)
+
+      seed_pinned_flush_entry(ctx)
+
+      Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 100)
+
+      # A writer that is deliberately deferring its flushes (e.g. buffering a
+      # move-in) keeps touching its entry, so the stall check leaves it alone...
+      Process.sleep(70)
+      ShapeLogCollector.notify_flush_deferred(ctx.stack_id, "shape-doomed")
+      Process.sleep(70)
+      trigger_stall_check(ctx.stack_id)
+      refute_receive {:remove_shapes_async, _}
+
+      # ...until the touches stop and a full grace period elapses.
+      Process.sleep(120)
+      trigger_stall_check(ctx.stack_id)
+      assert_receive {:remove_shapes_async, ["shape-doomed"]}
+    end
+
     test "completed entry is demonitored so later writer death has no effect", ctx do
       stub_shape_cleaner(ctx)
       attach_writer_down_telemetry(ctx)

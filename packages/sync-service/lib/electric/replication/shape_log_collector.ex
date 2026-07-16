@@ -169,6 +169,19 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
+  Notifies the ShapeLogCollector that a shape's writer is alive and
+  deliberately deferring its flush notifications (e.g. buffering transactions
+  ahead of PG snapshot info or during a subquery move-in awaiting splice).
+
+  Grants the shape's flush entry a fresh stall grace period so a healthy
+  deferral is not mistaken for a wedged writer.
+  """
+  @spec notify_flush_deferred(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def notify_flush_deferred(stack_id, shape_handle) do
+    GenServer.cast(name(stack_id), {:writer_flush_deferred, shape_handle})
+  end
+
+  @doc """
   Returns the list of currently active shapes being tracked
   in the shape matching filters.
   """
@@ -441,6 +454,12 @@ defmodule Electric.Replication.ShapeLogCollector do
         else: demonitor_writer(state, shape_id)
 
     {:noreply, state}
+  end
+
+  def handle_cast({:writer_flush_deferred, shape_handle}, state) do
+    now = System.monotonic_time(:millisecond)
+
+    {:noreply, Map.update!(state, :flush_tracker, &FlushTracker.touch(&1, shape_handle, now))}
   end
 
   def handle_cast(
