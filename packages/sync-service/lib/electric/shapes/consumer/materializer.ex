@@ -103,9 +103,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe)
+  # A materializer cannot answer any call until `handle_continue(:start_materializer)`
+  # returns, and that blocks on `await_snapshot_start(:infinity)` until its own snapshot
+  # starts. A cold dependency snapshot can take longer than the default 5s `GenServer.call`
+  # timeout, so we wait with `:infinity` (consistent with `wait_until_ready/1` and
+  # `new_changes/3`). Liveness is handled by the caller monitoring the materializer, so a
+  # dead materializer surfaces as a call exit rather than being masked by a short timeout.
+  def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe, :infinity)
 
-  def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe)
+  def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe, :infinity)
 
   def subscribe(stack_id, shape_handle),
     do: subscribe(%{stack_id: stack_id, shape_handle: shape_handle})
