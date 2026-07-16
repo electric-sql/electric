@@ -3,7 +3,7 @@ import {
   isChangeMessage,
   isControlMessage,
 } from '@electric-sql/client'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, ne } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './utils/log.js'
 import { electricUrlWithPath } from './utils/electric-url.js'
@@ -325,7 +325,15 @@ export class WakeRegistry {
     return this.syncRecoveryPromise
   }
 
-  async register(reg: WakeRegistration): Promise<void> {
+  /**
+   * Register a wake subscription. Returns the dbId of the row now backing the
+   * cached registration — the freshly-inserted row, or (on unique-constraint
+   * conflict) the pre-existing row that was re-read and re-cached. Returns -1
+   * only in the pathological case where the conflicting row could not be
+   * re-read. Callers reconciling a set of registrations use the returned id to
+   * prune siblings unambiguously (see reconcileManifestRegistration).
+   */
+  async register(reg: WakeRegistration): Promise<number> {
     const tenantId = this.resolveTenantId(reg.tenantId)
     const result = await this.db
       .insert(wakeRegistrations)
@@ -385,8 +393,9 @@ export class WakeRegistry {
           createdAt: row.createdAt,
           timeoutConsumed: row.timeoutConsumed,
         })
+        return row.id
       }
-      return
+      return -1
     }
 
     const dbId = result[0]!.id
@@ -397,6 +406,7 @@ export class WakeRegistry {
       createdAt: new Date(),
       timeoutConsumed: false,
     })
+    return dbId
   }
 
   private startTimeoutTimer(reg: CachedWakeRegistration, dbId: number): void {
@@ -448,6 +458,76 @@ export class WakeRegistry {
     )
 
     for (const dbId of toRemove) {
+      this.removeCachedRegistrationByDbId(dbId)
+    }
+  }
+
+  /**
+   * Idempotently reconcile the single wake registration anchored to a manifest
+   * entry, without ever leaving a delivery gap.
+   *
+   * The obvious sequence — `unregisterByManifestKey()` then `register()` — drops
+   * the registration from the cache and only re-adds it after an async DB
+   * round-trip. A source whose run finishes inside that window evaluates against
+   * an empty cache and its wake is silently lost. Parallel sub-agent spawn hits
+   * this constantly: every child's manifest entry re-syncs a registration that
+   * is *identical* to the one the spawn already created, so each child gets a
+   * remove→re-add churn, and any sibling that finishes mid-churn is dropped.
+   *
+   * Instead we register the desired registration FIRST — register() returns the
+   * id of the row it left in the cache (a fresh insert, or the pre-existing row
+   * re-read on conflict), so an equivalent registration is continuously present
+   * — THEN delete only the rows for this manifest key that differ from it.
+   * Pruning by that exact id (never by a re-derived field key, which can diverge
+   * from what register() actually cached) guarantees we never delete the row we
+   * just kept. `desired == null` (a manifest delete, or an entry carrying no
+   * wake) prunes them all, matching the previous unregister-only behaviour.
+   */
+  async reconcileManifestRegistration(
+    subscriberUrl: string,
+    manifestKey: string,
+    desired: WakeRegistration | null,
+    tenantId?: string
+  ): Promise<void> {
+    const resolvedTenantId = this.resolveTenantId(tenantId)
+
+    let keptDbId = -1
+    if (desired) {
+      keptDbId = await this.register({
+        ...desired,
+        tenantId: resolvedTenantId,
+        manifestKey,
+      })
+    }
+
+    // Delete every other row anchored to this manifest key in one predicate —
+    // covering rows that are not currently cached, so a later loadRegistrations()
+    // can't resurrect them. `keptDbId === -1` (a delete/no-wake reconcile)
+    // matches all rows for the key, preserving the old unregister-only delete.
+    await this.db
+      .delete(wakeRegistrations)
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, resolvedTenantId),
+          eq(wakeRegistrations.subscriberUrl, subscriberUrl),
+          eq(wakeRegistrations.manifestKey, manifestKey),
+          ne(wakeRegistrations.id, keptDbId)
+        )
+      )
+
+    const staleDbIds = Array.from(this.registrationCache.values()).flatMap(
+      (regs) =>
+        regs
+          .filter(
+            (r) =>
+              r.tenantId === resolvedTenantId &&
+              r.subscriberUrl === subscriberUrl &&
+              r.manifestKey === manifestKey &&
+              r.dbId !== keptDbId
+          )
+          .map((r) => r.dbId)
+    )
+    for (const dbId of staleDbIds) {
       this.removeCachedRegistrationByDbId(dbId)
     }
   }

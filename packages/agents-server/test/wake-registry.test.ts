@@ -947,6 +947,131 @@ describe(`Wake Registry`, () => {
       result.wakeMessage.changes[result.wakeMessage.changes.length - 1]!
     expect(lastChange.key).toBe(`run-2`)
   })
+
+  it(`reconcileManifestRegistration keeps an equivalent registration without a churn gap`, async () => {
+    // Regression for the parallel sub-agent spawn dropped-wake race. A child's
+    // spawn creates a runFinished registration; its manifest entry then re-syncs
+    // the SAME registration. The old syncManifestWakes did unregister→register,
+    // leaving the cache empty across an await — a sibling finishing there lost
+    // its wake. reconcileManifestRegistration must register-first and prune only
+    // OTHER rows, so the equivalent registration is never removed.
+    const seededRow = {
+      id: 7,
+      tenantId: `default`,
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/worker/c1`,
+      condition: `runFinished`,
+      debounceMs: 0,
+      timeoutMs: 0,
+      oneShot: false,
+      timeoutConsumed: false,
+      includeResponse: true,
+      manifestKey: `child:worker:c1`,
+      createdAt: new Date(),
+    }
+    let insertConflicts = false
+    const db: any = {
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: () => ({
+            returning: () =>
+              insertConflicts
+                ? Promise.resolve([])
+                : Promise.resolve([{ id: seededRow.id }]),
+          }),
+        }),
+      }),
+      delete: () => ({ where: () => Promise.resolve() }),
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+      select: () => ({
+        from: () =>
+          Object.assign(Promise.resolve([seededRow]), {
+            where: () =>
+              Object.assign(Promise.resolve([seededRow]), {
+                limit: () => Promise.resolve([seededRow]),
+                orderBy: () => Promise.resolve([]),
+              }),
+          }),
+      }),
+    }
+
+    const registry = new WakeRegistry(db)
+    const removeSpy = vi.spyOn(
+      registry as any,
+      `removeCachedRegistrationByDbId`
+    )
+
+    // Spawn-path registration (fresh insert → dbId 7 cached).
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/worker/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      includeResponse: true,
+      manifestKey: `child:worker:c1`,
+    })
+
+    // Manifest re-sync of the identical registration now conflicts on insert.
+    insertConflicts = true
+    await registry.reconcileManifestRegistration(
+      `/parent/p1`,
+      `child:worker:c1`,
+      {
+        subscriberUrl: `/parent/p1`,
+        sourceUrl: `/worker/c1`,
+        condition: `runFinished`,
+        oneShot: false,
+        includeResponse: true,
+        manifestKey: `child:worker:c1`,
+      }
+    )
+
+    // The registration survived the reconcile — evaluate still delivers, and the
+    // kept row (dbId 7) was never removed.
+    const results = registry.evaluate(`/worker/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    expect(results).toHaveLength(1)
+    expect(results[0]!.registrationDbId).toBe(7)
+    expect(removeSpy).not.toHaveBeenCalledWith(7)
+  })
+
+  it(`reconcileManifestRegistration with null desired removes the anchored registration`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/worker/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      manifestKey: `child:worker:c1`,
+    })
+    expect(
+      registry.evaluate(`/worker/c1`, {
+        type: `run`,
+        key: `run-1`,
+        value: { status: `completed` },
+        headers: { operation: `update` },
+      })
+    ).toHaveLength(1)
+
+    await registry.reconcileManifestRegistration(
+      `/parent/p1`,
+      `child:worker:c1`,
+      null
+    )
+
+    expect(
+      registry.evaluate(`/worker/c1`, {
+        type: `run`,
+        key: `run-2`,
+        value: { status: `completed` },
+        headers: { operation: `update` },
+      })
+    ).toHaveLength(0)
+  })
 })
 
 // ============================================================================
