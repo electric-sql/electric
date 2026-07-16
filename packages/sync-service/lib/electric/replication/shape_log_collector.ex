@@ -413,9 +413,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
+    now = System.monotonic_time(:millisecond)
+
     {:noreply,
      state
-     |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
+     |> Map.update!(
+       :flush_tracker,
+       &FlushTracker.handle_flush_notification(&1, shape_id, offset, now)
+     )}
   end
 
   def handle_cast(
@@ -565,7 +570,15 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       if txn_fragment.commit do
-        FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [])
+        {flush_tracker, _newly_tracked} =
+          FlushTracker.handle_txn_fragment(
+            state.flush_tracker,
+            txn_fragment,
+            [],
+            System.monotonic_time(:millisecond)
+          )
+
+        flush_tracker
       else
         state.flush_tracker
       end
@@ -679,7 +692,16 @@ defmodule Electric.Replication.ShapeLogCollector do
       case event do
         %TransactionFragment{commit: commit} when not is_nil(commit) ->
           LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
-          FlushTracker.handle_txn_fragment(flush_tracker, event, delivered_shapes)
+
+          {flush_tracker, _newly_tracked} =
+            FlushTracker.handle_txn_fragment(
+              flush_tracker,
+              event,
+              delivered_shapes,
+              System.monotonic_time(:millisecond)
+            )
+
+          flush_tracker
 
         _ ->
           flush_tracker
