@@ -4,7 +4,7 @@ description: >-
   Linear-style issue tracker synced through an experimental DBSP-based Electric
   engine, paired with a live pipeline visualizer.
 source_url: https://github.com/balegas/electric-ivm
-blog_post_url: /blog/2026/07/14/electric-ivm
+blog_post_url: /blog/2026/07/17/electric-circuits
 listing_image: /img/demos/electric-ivm-linearlite-placeholder.png
 image: /img/demos/electric-ivm-linearlite-placeholder.png
 demo: true
@@ -14,7 +14,7 @@ demo: true
 
 <!-- TODO: replace listing_image/image above with a real screenshot before publishing. -->
 
-The [LinearLite](https://linear.app)-style issue tracker, running on an experimental version of Electric [built on DBSP](/blog/2026/07/14/electric-ivm) — an incremental view maintenance engine. Every write to Postgres is shown flowing through the DBSP circuit, live, in the pipeline visualizer alongside the app.
+The [LinearLite](https://linear.app)-style issue tracker, running on an experimental version of Electric [built on DBSP](/blog/2026/07/17/electric-circuits) — an incremental view maintenance engine. Every write to Postgres is shown flowing through the DBSP circuit, live, in the pipeline visualizer alongside the app.
 
 <DemoCTAs :demo="$frontmatter" />
 
