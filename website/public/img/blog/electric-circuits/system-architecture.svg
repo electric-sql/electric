@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" viewBox="0 0 1180 560" role="img" aria-labelledby="title desc">
+  <title id="title">Electric Circuit system architecture</title>
+  <desc id="desc">Left to right: WAL changes feed a DBSP circuit that performs shared incremental computation. The circuit fans three outputs into the durable stream service, which exposes three append-only, URL-addressable, resumable streams.</desc>
+
+  <defs>
+    <style>
+      text { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+      .title { font-size: 22px; font-weight: 600; letter-spacing: 1.5px; fill: #ffffff; }
+      .subtitle { font-size: 15px; font-weight: 400; fill: #aab2c0; }
+      .section { font-size: 14px; font-weight: 600; letter-spacing: 1.2px; fill: #ffffff; }
+      .small { font-size: 13px; font-weight: 400; fill: #aab2c0; }
+      .cat { font-size: 11px; font-weight: 600; letter-spacing: 1px; fill: #aab2c0; }
+      .name { font-size: 16px; font-weight: 500; fill: #ffffff; }
+      .symbol { font-family: "STIX Two Math","Cambria Math","Times New Roman",serif; font-size: 20px; fill: #ffffff; text-anchor: middle; }
+      .container { fill: none; stroke: #75fbfd; stroke-width: 1.5; }
+      .container-accent { fill: none; stroke: #75fbfd; stroke-width: 2; }
+      .node { fill: none; stroke: #75fbfd; stroke-width: 2; }
+      .stream { fill: #75fbfd; fill-opacity: 0.1; stroke: #75fbfd; stroke-width: 2; }
+      .bar { fill: #aab2c0; fill-opacity: 0.3; }
+      .edge { fill: none; stroke: #aab2c0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#aab2c0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text class="title" x="40" y="46">ELECTRIC CIRCUIT</text>
+  <text class="subtitle" x="40" y="74">WAL changes &#8594; shared incremental computation &#8594; durable streams</text>
+
+  <!-- Section labels -->
+  <text class="section" x="250" y="150">DBSP CIRCUIT</text>
+  <text class="small" x="250" y="170">shared incremental computation</text>
+  <text class="section" x="770" y="150">DURABLE STREAM SERVICE</text>
+  <text class="small" x="770" y="170">append-only &#183; URL-addressable &#183; resumable</text>
+
+  <!-- Containers -->
+  <rect class="container" x="250" y="184" width="470" height="312" rx="3"/>
+  <rect class="container-accent" x="770" y="184" width="380" height="312" rx="3"/>
+
+  <!-- WAL changes (left) -->
+  <rect class="node" x="40" y="250" width="150" height="180" rx="3"/>
+  <text class="name" x="58" y="286">WAL</text>
+  <text class="small" x="58" y="306">changes</text>
+  <rect class="bar" x="60" y="326" width="110" height="18" rx="3"/>
+  <rect class="bar" x="60" y="356" width="110" height="18" rx="3"/>
+  <rect class="bar" x="60" y="386" width="110" height="18" rx="3"/>
+
+  <!-- WAL -> DBSP -->
+  <path class="edge" d="M190 340 H250" marker-end="url(#ah)"/>
+
+  <!-- Input manifold inside DBSP -->
+  <path class="edge" d="M264 340 H280"/>
+  <path class="edge" d="M280 256 V424"/>
+  <path class="edge" d="M280 256 H300" marker-end="url(#ah)"/>
+  <path class="edge" d="M280 340 H300" marker-end="url(#ah)"/>
+  <path class="edge" d="M280 424 H300" marker-end="url(#ah)"/>
+
+  <!-- Input change nodes -->
+  <rect class="node" x="300" y="240" width="32" height="32" rx="3"/>
+  <circle cx="316" cy="256" r="5" fill="#aab2c0"/>
+  <rect class="node" x="300" y="324" width="32" height="32" rx="3"/>
+  <circle cx="316" cy="340" r="5" fill="#aab2c0"/>
+  <rect class="node" x="300" y="408" width="32" height="32" rx="3"/>
+  <circle cx="316" cy="424" r="5" fill="#aab2c0"/>
+
+  <!-- Inputs fan into the shared join -->
+  <path class="edge" d="M332 256 H410 Q446 256 446 300 V326" marker-end="url(#ah)"/>
+  <path class="edge" d="M332 340 H446" marker-end="url(#ah)"/>
+  <path class="edge" d="M332 424 H410 Q446 424 446 380 V354" marker-end="url(#ah)"/>
+
+  <!-- Shared join (incremental computation) -->
+  <rect class="node" x="446" y="316" width="48" height="48" rx="3"/>
+  <text class="symbol" x="470" y="340" dominant-baseline="central">&#8904;</text>
+
+  <!-- Output manifold fanning out -->
+  <path class="edge" d="M494 340 H560"/>
+  <path class="edge" d="M560 256 V424"/>
+  <path class="edge" d="M560 256 H620" marker-end="url(#ah)"/>
+  <path class="edge" d="M560 340 H620" marker-end="url(#ah)"/>
+  <path class="edge" d="M560 424 H620" marker-end="url(#ah)"/>
+
+  <!-- Output nodes -->
+  <rect class="node" x="620" y="240" width="32" height="32" rx="3"/>
+  <circle cx="636" cy="256" r="5" fill="#aab2c0"/>
+  <rect class="node" x="620" y="324" width="32" height="32" rx="3"/>
+  <circle cx="636" cy="340" r="5" fill="#aab2c0"/>
+  <rect class="node" x="620" y="408" width="32" height="32" rx="3"/>
+  <circle cx="636" cy="424" r="5" fill="#aab2c0"/>
+
+  <!-- Outputs -> streams -->
+  <path class="edge" d="M652 256 H790" marker-end="url(#ah)"/>
+  <path class="edge" d="M652 340 H790" marker-end="url(#ah)"/>
+  <path class="edge" d="M652 424 H790" marker-end="url(#ah)"/>
+
+  <!-- Streams (cyan destination emphasis: cyan outline + subtle cyan fill) -->
+  <rect class="stream" x="790" y="224" width="340" height="64" rx="3"/>
+  <text class="cat" x="810" y="250">STREAM 01</text>
+  <text class="name" x="810" y="272">/streams/query-1</text>
+
+  <rect class="stream" x="790" y="308" width="340" height="64" rx="3"/>
+  <text class="cat" x="810" y="334">STREAM 02</text>
+  <text class="name" x="810" y="356">/streams/query-2</text>
+
+  <rect class="stream" x="790" y="392" width="340" height="64" rx="3"/>
+  <text class="cat" x="810" y="418">STREAM 03</text>
+  <text class="name" x="810" y="440">/streams/query-3</text>
+</svg>

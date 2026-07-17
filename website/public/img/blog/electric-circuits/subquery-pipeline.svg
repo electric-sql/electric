@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2212" height="460" viewBox="0 0 2212 460" role="img" aria-labelledby="title desc">
+  <title id="title">Subquery operator pipeline</title>
+  <desc id="desc">A left-to-right incremental dataflow of node cards. The bottom branch takes project_members through filter and distinct; the distinct box maintains the inner set and feeds the membership join as a dashed state edge. The top branch takes issues into the same join. The join result is projected and delivered to the sink stream.</desc>
+
+  <defs>
+    <style>
+      text { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,"STIX Two Math","Cambria Math",serif; }
+      .main { font-family: "SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace,"STIX Two Math","Cambria Math",serif; font-size: 28px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+      .main-on { font-family: "SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace,"STIX Two Math","Cambria Math",serif; font-size: 28px; font-weight: 700; fill: #0a2a2b; text-anchor: middle; }
+      .box { fill: none; stroke: #75fbfd; stroke-width: 2; }
+      .accent { fill: #75fbfd; stroke: #75fbfd; stroke-width: 2; }
+      .edge { fill: none; stroke: #aab2c0; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+      .edge-state { fill: none; stroke: #aab2c0; stroke-width: 2.4; stroke-dasharray: 7 7; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#aab2c0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- ===== Edges ===== -->
+  <!-- Top branch: issues -> join -->
+  <path class="edge" d="M360 70 H1190 Q1210 70 1210 90 V195 Q1210 215 1244 215" marker-end="url(#ah)"/>
+  <!-- Bottom branch: project_members -> filter -> distinct -->
+  <path class="edge" d="M360 390 H416" marker-end="url(#ah)"/>
+  <path class="edge" d="M704 390 H760" marker-end="url(#ah)"/>
+  <!-- Maintained inner set: state feed into the join (dashed) -->
+  <path class="edge-state" d="M1148 390 H1176 Q1196 390 1196 370 V265 Q1196 245 1244 245" marker-end="url(#ah)"/>
+  <!-- Tail: join -> project -> sink -->
+  <path class="edge" d="M1516 230 H1572" marker-end="url(#ah)"/>
+  <path class="edge" d="M1892 230 H1948" marker-end="url(#ah)"/>
+
+  <!-- ===== Top branch: issues ===== -->
+  <rect class="box" x="40" y="30" width="320" height="80" rx="12"/>
+  <text class="main" x="200" y="70" dominant-baseline="central">issues</text>
+
+  <!-- ===== Bottom branch ===== -->
+  <rect class="box" x="40" y="350" width="320" height="80" rx="12"/>
+  <text class="main" x="200" y="390" dominant-baseline="central">project_members</text>
+
+  <rect class="box" x="416" y="350" width="288" height="80" rx="12"/>
+  <text class="main" x="560" y="390" dominant-baseline="central">&#963; inner where</text>
+
+  <rect class="box" x="760" y="350" width="388" height="80" rx="12"/>
+  <text class="main" x="954" y="390" dominant-baseline="central">distinct project_id</text>
+
+  <!-- ===== Join + tail ===== -->
+  <rect class="box" x="1244" y="190" width="272" height="80" rx="12"/>
+  <text class="main" x="1380" y="230" dominant-baseline="central">&#8904; membership</text>
+
+  <rect class="box" x="1572" y="190" width="320" height="80" rx="12"/>
+  <text class="main" x="1732" y="230" dominant-baseline="central">&#960; pk &#8594; envelope</text>
+
+  <!-- SINK (cyan-filled destination accent) -->
+  <rect class="accent" x="1948" y="190" width="224" height="80" rx="12"/>
+  <text class="main-on" x="2060" y="230" dominant-baseline="central">shape/s16</text>
+</svg>
