@@ -308,6 +308,49 @@ defmodule Electric.ShapeCleanerTest do
     end
   end
 
+  describe "handle_writer_termination/3" do
+    test "an untagged {:shutdown, term} reason triggers shape removal", ctx do
+      parent = self()
+
+      patch_calls(Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
+        perform_async: fn _stack_id, _fun ->
+          send(parent, :removal_scheduled)
+          :ok
+        end
+      )
+
+      log =
+        capture_log(fn ->
+          assert :removed =
+                   ShapeCleaner.handle_writer_termination(
+                     ctx.stack_id,
+                     "some-handle",
+                     {:shutdown, :arbitrary}
+                   )
+        end)
+
+      assert log =~ "abnormal shutdown"
+      assert_receive :removal_scheduled
+    end
+
+    test "benign termination reasons do not trigger removal", ctx do
+      parent = self()
+
+      patch_calls(Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
+        perform_async: fn _stack_id, _fun ->
+          send(parent, :removal_scheduled)
+          :ok
+        end
+      )
+
+      for reason <- [:normal, :killed, :shutdown] do
+        assert :ok = ShapeCleaner.handle_writer_termination(ctx.stack_id, "some-handle", reason)
+      end
+
+      refute_receive :removal_scheduled, 100
+    end
+  end
+
   defp assert_shape_log_collector_active_shapes(ctx, shape_handles_active, timeout \\ 500) do
     assert shape_handles_active ==
              Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)

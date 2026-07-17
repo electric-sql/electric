@@ -112,9 +112,10 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, stack_id)
   end
 
+  # Any `{:shutdown, x}` other than the two Electric-tagged reasons above is
+  # not a deliberate stop and falls through to the abnormal-shutdown clause.
   def handle_writer_termination(_stack_id, _shape_handle, reason)
-      when reason in [:normal, :killed, :shutdown] or
-             (is_tuple(reason) and elem(reason, 0) == :shutdown) do
+      when reason in [:normal, :killed, :shutdown] do
     :ok
   end
 
