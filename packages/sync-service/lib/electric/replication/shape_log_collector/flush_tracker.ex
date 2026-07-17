@@ -112,7 +112,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   end
 
   @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id()), integer()) ::
-          {t(), newly_tracked :: MapSet.t(shape_id())}
+          t()
 
   # Commit fragment: track all shapes affected by all fragments of the transaction and update last_seen_offset.
   def handle_txn_fragment(
@@ -121,21 +121,18 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         affected_shapes,
         now
       ) do
-    {state, newly_tracked} = track_shapes(state, last_log_offset, affected_shapes, now)
+    state = track_shapes(state, last_log_offset, affected_shapes, now)
 
     state = %{state | last_seen_offset: last_log_offset}
 
-    state =
-      if state.last_flushed == %{} do
-        update_global_offset(state)
-      else
-        state
-      end
-
-    {state, newly_tracked}
+    if state.last_flushed == %{} do
+      update_global_offset(state)
+    else
+      state
+    end
   end
 
-  defp track_shapes(state, _last_log_offset, [], _now), do: {state, MapSet.new()}
+  defp track_shapes(state, _last_log_offset, [], _now), do: state
 
   defp track_shapes(
          %__MODULE__{
@@ -173,11 +170,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         do: min_incomplete_flush_tree,
         else: add_to_tree(min_incomplete_flush_tree, prev_log_offset, new_shape_ids)
 
-    {%{
-       state
-       | last_flushed: last_flushed,
-         min_incomplete_flush_tree: min_incomplete_flush_tree
-     }, new_shape_ids}
+    %{
+      state
+      | last_flushed: last_flushed,
+        min_incomplete_flush_tree: min_incomplete_flush_tree
+    }
   end
 
   @spec handle_flush_notification(t(), shape_id(), LogOffset.t(), integer()) :: t()

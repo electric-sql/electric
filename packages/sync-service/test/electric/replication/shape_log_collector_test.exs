@@ -1897,6 +1897,91 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       refute_receive {:remove_shapes_async, _}
       refute_receive {:flush_boundary_updated, _}
     end
+
+    test "monitor follows the writer when a commit is redelivered to a fresh pid", ctx do
+      stub_shape_cleaner(ctx)
+      attach_writer_down_telemetry(ctx)
+
+      seed_pinned_flush_entry(ctx)
+
+      # Simulate the suspend-retry hand-over: the registry entry for the
+      # still-incomplete shape is replaced by a fresh consumer before the old
+      # one's exit is observed by the SLC.
+      Electric.Shapes.ConsumerRegistry.remove_consumer("shape-doomed", ctx.stack_id)
+
+      consumer_fresh =
+        start_supervised!(
+          {Support.TransactionConsumer,
+           id: :doomed_fresh,
+           stack_id: ctx.stack_id,
+           parent: self(),
+           shape: @quiet_shape,
+           shape_handle: "shape-doomed",
+           action: :restore},
+          id: {:consumer, :doomed_fresh}
+        )
+
+      lsn = Lsn.from_integer(50)
+
+      txn =
+        complete_txn_fragment(101, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert_receive {Support.TransactionConsumer, {:doomed_fresh, _}, [_]}
+
+      # The predecessor's late exit — e.g. its deferred {:shutdown, :suspend} —
+      # is no longer this shape's business: no crash classification, no
+      # invalidation. Without the monitor swap this reads as a contract
+      # violation and spuriously invalidates a healthy shape.
+      Support.TransactionConsumer.crash(ctx.consumer_doomed, {:shutdown, :suspend})
+      refute_receive {:writer_down_telemetry, _, _}
+      refute_receive {:remove_shapes_async, _}
+
+      # The monitor followed the fresh pid: its crash unpins and invalidates.
+      Support.TransactionConsumer.crash(consumer_fresh, {:error, :simulated_disk_failure})
+      assert_receive {:writer_down_telemetry, %{count: 1}, %{reason_class: :crash}}
+      assert_receive {:remove_shapes_async, ["shape-doomed"]}
+      assert_receive {:flush_boundary_updated, 50}
+    end
+
+    test "writer crashing during publish is classified as a crash for its tracked entry", ctx do
+      stub_shape_cleaner(ctx)
+      attach_writer_down_telemetry(ctx)
+
+      seed_pinned_flush_entry(ctx)
+
+      # The doomed consumer exits with a real crash reason while handling the
+      # next commit: the publish-time exit observation must classify it exactly
+      # like a monitor DOWN — immediate unpin plus invalidation, with the
+      # writer monitor's own queued DOWN flushed rather than double-handled.
+      lsn = Lsn.from_integer(50)
+
+      txn =
+        complete_txn_fragment(101, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{
+              "id" => "stop-with-reason",
+              "handle" => "shape-doomed",
+              "reason" => {:error, :simulated_disk_failure}
+            },
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      assert_receive {:writer_down_telemetry, %{count: 1}, %{reason_class: :crash}}
+      assert_receive {:remove_shapes_async, ["shape-doomed"]}
+      assert_receive {:flush_boundary_updated, 42}
+      assert_receive {:flush_boundary_updated, 50}
+    end
   end
 
   # Publish a txn (lsn 42) touching both test_table (shape-alive) and other_table

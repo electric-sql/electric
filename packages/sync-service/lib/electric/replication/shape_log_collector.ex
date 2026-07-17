@@ -51,6 +51,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # How often to scan the FlushTracker for entries that have made no flush progress
   # past the grace period (see the :flush_stall_grace_period stack config value).
   @stall_check_interval 10_000
+  @stall_check_interval_floor 1_000
 
   defguardp is_ready_to_process(state)
             when is_map_key(state, :last_processed_offset) and
@@ -545,8 +546,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_info(:check_stalled_flushes, state) do
-    Process.send_after(self(), :check_stalled_flushes, @stall_check_interval)
-
     now = System.monotonic_time(:millisecond)
 
     grace_period =
@@ -555,6 +554,14 @@ defmodule Electric.Replication.ShapeLogCollector do
         :flush_stall_grace_period,
         Electric.Config.default(:flush_stall_grace_period)
       )
+
+    # Re-arm at the configured grace period when it is shorter than the default
+    # interval, so a small grace period is enforced at matching granularity
+    # (clamped below so a tiny value cannot turn the check into a busy loop).
+    grace_period
+    |> min(@stall_check_interval)
+    |> max(@stall_check_interval_floor)
+    |> then(&Process.send_after(self(), :check_stalled_flushes, &1))
 
     case FlushTracker.stalled_shapes(state.flush_tracker, now, grace_period) do
       [] ->
@@ -758,15 +765,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       if txn_fragment.commit do
-        {flush_tracker, _newly_tracked} =
-          FlushTracker.handle_txn_fragment(
-            state.flush_tracker,
-            txn_fragment,
-            [],
-            System.monotonic_time(:millisecond)
-          )
-
-        flush_tracker
+        FlushTracker.handle_txn_fragment(
+          state.flush_tracker,
+          txn_fragment,
+          [],
+          System.monotonic_time(:millisecond)
+        )
       else
         state.flush_tracker
       end
@@ -893,7 +897,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       %TransactionFragment{commit: commit} when not is_nil(commit) ->
         LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
-        {flush_tracker, newly_tracked} =
+        flush_tracker =
           FlushTracker.handle_txn_fragment(
             state.flush_tracker,
             event,
@@ -901,11 +905,20 @@ defmodule Electric.Replication.ShapeLogCollector do
             System.monotonic_time(:millisecond)
           )
 
-        # Shapes newly tracked by this commit get a monitor on the pid responsible
-        # for completing their entry (every newly tracked shape was delivered to).
-        Enum.reduce(newly_tracked, %{state | flush_tracker: flush_tracker}, fn shape_handle,
-                                                                               state ->
-          monitor_writer(state, shape_handle, Map.fetch!(delivered_pids, shape_handle))
+        # Every delivered shape still tracked after this commit gets a monitor on
+        # the pid that actually received it — not just newly tracked shapes. The
+        # suspend-retry path in ConsumerRegistry.publish/2 can deliver a commit
+        # for an already-tracked shape to a fresh consumer pid while the previous
+        # pid's completing flush cast is still in our mailbox; monitor_writer
+        # swaps the monitor over and flushes the old pid's queued DOWN, so the
+        # suspended predecessor's exit is never misread as a crash.
+        Enum.reduce(delivered_shapes, %{state | flush_tracker: flush_tracker}, fn shape_handle,
+                                                                                  state ->
+          if FlushTracker.tracked?(state.flush_tracker, shape_handle) do
+            monitor_writer(state, shape_handle, Map.fetch!(delivered_pids, shape_handle))
+          else
+            state
+          end
         end)
 
       _ ->

@@ -57,14 +57,14 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       end
     end
 
-    test "returns shapes newly tracked by this call", %{tracker: tracker} do
-      {tracker, newly_tracked} =
+    test "tracks affected shapes until their flushes catch up", %{tracker: tracker} do
+      tracker =
         FlushTracker.handle_txn_fragment(tracker, batch(lsn: 1, last_offset: 10), ["shape1"], 0)
 
-      assert newly_tracked == MapSet.new(["shape1"])
+      assert FlushTracker.tracked?(tracker, "shape1")
+      refute FlushTracker.tracked?(tracker, "shape2")
 
-      # An already-tracked shape is not reported again; a new one is
-      {tracker, newly_tracked} =
+      tracker =
         FlushTracker.handle_txn_fragment(
           tracker,
           batch(lsn: 2, last_offset: 10),
@@ -72,13 +72,8 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
           0
         )
 
-      assert newly_tracked == MapSet.new(["shape2"])
-
-      # No affected shapes → nothing newly tracked
-      {_tracker, newly_tracked} =
-        FlushTracker.handle_txn_fragment(tracker, batch(lsn: 3, last_offset: 10), [], 0)
-
-      assert newly_tracked == MapSet.new()
+      assert FlushTracker.tracked?(tracker, "shape1")
+      assert FlushTracker.tracked?(tracker, "shape2")
     end
   end
 
@@ -377,13 +372,9 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
   end
 
   # Helper: calls handle_txn_fragment with shapes_with_changes defaulting to
-  # all affected shapes (the common case for single-fragment transactions),
-  # discarding the newly-tracked shape set.
+  # all affected shapes (the common case for single-fragment transactions).
   defp handle_txn(tracker, fragment, affected_shapes, now \\ 0) do
-    {tracker, _newly_tracked} =
-      FlushTracker.handle_txn_fragment(tracker, fragment, affected_shapes, now)
-
-    tracker
+    FlushTracker.handle_txn_fragment(tracker, fragment, affected_shapes, now)
   end
 
   defp batch(opts) do
