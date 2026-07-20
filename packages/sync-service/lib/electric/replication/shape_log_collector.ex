@@ -284,7 +284,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         registry_state: registry_state
       })
 
-    Process.send_after(self(), :check_stalled_flushes, @stall_check_interval)
+    schedule_stall_check(stall_grace_period(stack_id))
 
     {:ok, state, {:continue, :restore_shapes}}
   end
@@ -554,20 +554,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_info(:check_stalled_flushes, state) do
     now = System.monotonic_time(:millisecond)
 
-    grace_period =
-      Electric.StackConfig.lookup(
-        state.stack_id,
-        :flush_stall_grace_period,
-        Electric.Config.default(:flush_stall_grace_period)
-      )
-
-    # Re-arm at the configured grace period when it is shorter than the default
-    # interval, so a small grace period is enforced at matching granularity
-    # (clamped below so a tiny value cannot turn the check into a busy loop).
-    grace_period
-    |> min(@stall_check_interval)
-    |> max(@stall_check_interval_floor)
-    |> then(&Process.send_after(self(), :check_stalled_flushes, &1))
+    grace_period = stall_grace_period(state.stack_id)
+    schedule_stall_check(grace_period)
 
     stalled = FlushTracker.stalled_shapes(state.flush_tracker, now, grace_period)
 
@@ -724,6 +712,24 @@ defmodule Electric.Replication.ShapeLogCollector do
   # again before the next check despite having answered in between.)
   defp clear_stall_suspect(state, shape_handle) do
     %{state | stall_suspects: MapSet.delete(state.stall_suspects, shape_handle)}
+  end
+
+  defp stall_grace_period(stack_id) do
+    Electric.StackConfig.lookup(
+      stack_id,
+      :flush_stall_grace_period,
+      Electric.Config.default(:flush_stall_grace_period)
+    )
+  end
+
+  # Check at the configured grace period when it is shorter than the default
+  # interval, so a small grace period is enforced at matching granularity
+  # (clamped below so a tiny value cannot turn the check into a busy loop).
+  defp schedule_stall_check(grace_period) do
+    grace_period
+    |> min(@stall_check_interval)
+    |> max(@stall_check_interval_floor)
+    |> then(&Process.send_after(self(), :check_stalled_flushes, &1))
   end
 
   defp do_handle_event(%Relation{} = rel, state) do
