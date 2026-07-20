@@ -666,7 +666,7 @@ defmodule Support.ComponentSetup do
         flunk("stack #{stack_id} did not fully terminate after brutal kill")
 
       true ->
-        Process.sleep(10)
+        Process.sleep(100)
         wait_for_stack_processes_down(stack_id, deadline)
     end
   end
