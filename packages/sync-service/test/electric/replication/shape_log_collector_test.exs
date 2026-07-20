@@ -1835,15 +1835,21 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert_receive {:remove_shapes_async, ["shape-doomed"]}
     end
 
-    test "stall check invalidates a wedged-alive consumer and touch re-arms the grace", ctx do
+    test "stall check challenges a wedged-alive consumer, then invalidates it", ctx do
       stub_shape_cleaner(ctx)
 
       seed_pinned_flush_entry(ctx)
 
-      # The doomed consumer is alive but never flushes. Once its entry exceeds the
-      # grace period, the stall check schedules its removal.
+      # The doomed consumer is alive but never flushes. Once its entry exceeds
+      # the grace period, the stall check first challenges the writer rather
+      # than removing the shape outright.
       Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 20)
       Process.sleep(50)
+      trigger_stall_check(ctx.stack_id)
+      assert_receive {:flush_progress_challenged, _pid}
+      refute_receive {:remove_shapes_async, _}
+
+      # The wedged consumer never answers: the next check invalidates it.
       trigger_stall_check(ctx.stack_id)
       assert_receive {:remove_shapes_async, ["shape-doomed"]}
 
@@ -1852,29 +1858,48 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       refute_receive {:remove_shapes_async, _}
 
       # If the removal chain is lost (our stub drops it), the stall re-fires one
-      # grace period later.
+      # grace period later — again as a challenge first, then invalidation.
       Process.sleep(50)
+      trigger_stall_check(ctx.stack_id)
+      assert_receive {:flush_progress_challenged, _pid}
+      refute_receive {:remove_shapes_async, _}
       trigger_stall_check(ctx.stack_id)
       assert_receive {:remove_shapes_async, ["shape-doomed"]}
     end
 
-    test "flush-deferred notification re-arms the grace period", ctx do
+    test "a challenged deferring writer answers and re-arms the grace period", ctx do
       stub_shape_cleaner(ctx)
 
       seed_pinned_flush_entry(ctx)
 
-      Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 100)
+      Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 20)
+      Process.sleep(50)
 
-      # A writer that is deliberately deferring its flushes (e.g. buffering a
-      # move-in) keeps touching its entry, so the stall check leaves it alone...
-      Process.sleep(70)
-      ShapeLogCollector.notify_flush_deferred(ctx.stack_id, "shape-doomed")
-      Process.sleep(70)
+      # The stalled entry's writer is challenged; answering with
+      # notify_flush_deferred (as a deliberately deferring consumer would)
+      # touches the entry, so an immediate re-check finds nothing stalled.
       trigger_stall_check(ctx.stack_id)
+      assert_receive {:flush_progress_challenged, _pid}
+      ShapeLogCollector.notify_flush_deferred(ctx.stack_id, "shape-doomed")
+      trigger_stall_check(ctx.stack_id)
+      refute_receive {:flush_progress_challenged, _pid}
       refute_receive {:remove_shapes_async, _}
 
-      # ...until the touches stop and a full grace period elapses.
-      Process.sleep(120)
+      # A challenge answered without any stall check in between: the answer must
+      # clear the suspicion, so when the entry stalls again a full grace period
+      # later the writer is challenged afresh instead of being invalidated as an
+      # unresponsive suspect...
+      Process.sleep(50)
+      trigger_stall_check(ctx.stack_id)
+      assert_receive {:flush_progress_challenged, _pid}
+      refute_receive {:remove_shapes_async, _}
+      ShapeLogCollector.notify_flush_deferred(ctx.stack_id, "shape-doomed")
+      Process.sleep(50)
+      trigger_stall_check(ctx.stack_id)
+      assert_receive {:flush_progress_challenged, _pid}
+      refute_receive {:remove_shapes_async, _}
+
+      # ...and only an unanswered challenge invalidates the shape.
       trigger_stall_check(ctx.stack_id)
       assert_receive {:remove_shapes_async, ["shape-doomed"]}
     end

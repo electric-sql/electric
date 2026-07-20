@@ -174,8 +174,9 @@ defmodule Electric.Replication.ShapeLogCollector do
   deliberately deferring its flush notifications (e.g. buffering transactions
   ahead of PG snapshot info or during a subquery move-in awaiting splice).
 
-  Grants the shape's flush entry a fresh stall grace period so a healthy
-  deferral is not mistaken for a wedged writer.
+  Sent by a writer in answer to a `:verify_flush_progress` challenge from the
+  stall check. Grants the shape's flush entry a fresh stall grace period so a
+  healthy deferral is not mistaken for a wedged writer.
   """
   @spec notify_flush_deferred(Electric.stack_id(), Electric.shape_handle()) :: :ok
   def notify_flush_deferred(stack_id, shape_handle) do
@@ -264,6 +265,9 @@ defmodule Electric.Replication.ShapeLogCollector do
         # writer pid responsible for completing it, kept in two mirrored maps.
         writer_monitors: %{},
         writer_monitor_refs: %{},
+        # Shapes whose writer was challenged by the last stall check and has not
+        # shown flush progress since (see :check_stalled_flushes).
+        stall_suspects: MapSet.new(),
         event_router:
           opts
           |> Keyword.new()
@@ -454,13 +458,15 @@ defmodule Electric.Replication.ShapeLogCollector do
         do: state,
         else: demonitor_writer(state, shape_id)
 
-    {:noreply, state}
+    {:noreply, clear_stall_suspect(state, shape_id)}
   end
 
   def handle_cast({:writer_flush_deferred, shape_handle}, state) do
     now = System.monotonic_time(:millisecond)
 
-    {:noreply, Map.update!(state, :flush_tracker, &FlushTracker.touch(&1, shape_handle, now))}
+    state = Map.update!(state, :flush_tracker, &FlushTracker.touch(&1, shape_handle, now))
+
+    {:noreply, clear_stall_suspect(state, shape_handle)}
   end
 
   def handle_cast(
@@ -563,7 +569,30 @@ defmodule Electric.Replication.ShapeLogCollector do
     |> max(@stall_check_interval_floor)
     |> then(&Process.send_after(self(), :check_stalled_flushes, &1))
 
-    case FlushTracker.stalled_shapes(state.flush_tracker, now, grace_period) do
+    stalled = FlushTracker.stalled_shapes(state.flush_tracker, now, grace_period)
+
+    # Challenge-response: a stalled entry whose writer is still alive gets one
+    # chance to prove it is deliberately deferring its flushes. First time a
+    # shape shows up stalled, its monitored writer pid is sent a challenge; a
+    # healthy deferring consumer answers with a notify_flush_deferred cast,
+    # which touches the entry and clears the suspicion. Invalidated are only
+    # the suspects still stalled with no progress since the previous check's
+    # challenge, and shapes with no monitored writer left to challenge (their
+    # writer is already dead — e.g. a :killed DOWN left the entry pinned).
+    {challengeable, orphaned} =
+      Enum.split_with(stalled, &is_map_key(state.writer_monitors, &1))
+
+    {repeat_suspects, fresh_suspects} =
+      Enum.split_with(challengeable, &MapSet.member?(state.stall_suspects, &1))
+
+    Enum.each(fresh_suspects, fn shape_handle ->
+      {pid, _ref} = Map.fetch!(state.writer_monitors, shape_handle)
+      send(pid, :verify_flush_progress)
+    end)
+
+    state = %{state | stall_suspects: MapSet.new(fresh_suspects)}
+
+    case orphaned ++ repeat_suspects do
       [] ->
         {:noreply, state}
 
@@ -686,6 +715,15 @@ defmodule Electric.Replication.ShapeLogCollector do
       | writer_monitors: Map.delete(state.writer_monitors, shape_handle),
         writer_monitor_refs: Map.delete(state.writer_monitor_refs, ref)
     }
+  end
+
+  # Any flush progress answers an outstanding stall challenge: if the shape's
+  # entry stalls again later, its writer must be challenged afresh rather than
+  # invalidated as an unresponsive suspect. (The check interval is clamped to at
+  # least 1s, so with a sub-second grace period a suspect could otherwise stall
+  # again before the next check despite having answered in between.)
+  defp clear_stall_suspect(state, shape_handle) do
+    %{state | stall_suspects: MapSet.delete(state.stall_suspects, shape_handle)}
   end
 
   defp do_handle_event(%Relation{} = rel, state) do

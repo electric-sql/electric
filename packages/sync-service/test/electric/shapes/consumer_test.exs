@@ -3168,7 +3168,7 @@ defmodule Electric.Shapes.ConsumerTest do
     end
   end
 
-  describe "deferred flush notifications" do
+  describe "stall challenge response" do
     # with_stack_id_from_test (line 87) already starts ProcessRegistry + StackConfig
     # for ctx.stack_id; the GenServer callbacks are invoked directly with a synthetic
     # state, with the test process registered under the ShapeLogCollector's name to
@@ -3180,24 +3180,16 @@ defmodule Electric.Shapes.ConsumerTest do
       :ok
     end
 
-    test "tick notifies the SLC and re-arms while buffering ahead of PG snapshot info", ctx do
-      Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 30)
-
+    test "challenge is answered while buffering ahead of PG snapshot info", ctx do
       state = Consumer.State.new(ctx.stack_id, "deferring-shape")
       assert state.buffering?
 
-      assert {:noreply, state, _} = Consumer.handle_info(:notify_flush_deferred, state)
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
 
       assert_receive {:"$gen_cast", {:writer_flush_deferred, "deferring-shape"}}
-      assert is_reference(state.flush_defer_timer)
-
-      # The re-armed timer fires again within a fraction of the grace period.
-      assert_receive :notify_flush_deferred, 100
     end
 
     test "a subquery move-in buffering phase counts as deferring", ctx do
-      Electric.StackConfig.put(ctx.stack_id, :flush_stall_grace_period, 30)
-
       handler = %Consumer.EventHandler.Subqueries.Buffering{
         shape_info: nil,
         queue: nil,
@@ -3210,18 +3202,16 @@ defmodule Electric.Shapes.ConsumerTest do
           event_handler: handler
       }
 
-      assert {:noreply, state, _} = Consumer.handle_info(:notify_flush_deferred, state)
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
 
       assert_receive {:"$gen_cast", {:writer_flush_deferred, "move-in-shape"}}
-      assert is_reference(state.flush_defer_timer)
     end
 
-    test "tick lapses once the consumer is no longer deferring", ctx do
+    test "challenge is left unanswered when the consumer is not deferring", ctx do
       state = %{Consumer.State.new(ctx.stack_id, "steady-shape") | buffering?: false}
 
-      assert {:noreply, state, _} = Consumer.handle_info(:notify_flush_deferred, state)
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
 
-      assert is_nil(state.flush_defer_timer)
       refute_receive {:"$gen_cast", _}, 100
     end
   end

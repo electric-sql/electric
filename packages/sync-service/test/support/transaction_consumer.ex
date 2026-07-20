@@ -129,5 +129,12 @@ defmodule Support.TransactionConsumer do
     Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle)
   end
 
+  # Forward stall challenges from the ShapeLogCollector so tests can observe
+  # them; answering (or not) is up to the test.
+  def handle_info(:verify_flush_progress, state) do
+    send(state.parent, {:flush_progress_challenged, self()})
+    {:noreply, state}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 end
