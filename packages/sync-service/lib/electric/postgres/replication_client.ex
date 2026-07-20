@@ -57,6 +57,7 @@ defmodule Electric.Postgres.ReplicationClient do
       pending_event: nil,
       received_wal: 0,
       flushed_wal: 0,
+      last_confirmed_flush_lsn: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
       last_seen_txn_timestamp: nil,
       flush_up_to_date?: true
@@ -83,6 +84,7 @@ defmodule Electric.Postgres.ReplicationClient do
             pending_event: {reference(), term(), non_neg_integer(), integer()} | nil,
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
+            last_confirmed_flush_lsn: non_neg_integer(),
             last_seen_txn_lsn: Lsn.t(),
             last_seen_txn_timestamp: integer(),
             flush_up_to_date?: boolean()
@@ -287,15 +289,18 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   def handle_info({:flush_boundary_updated, lsn}, state) do
     state =
-      if Lsn.from_integer(lsn) == state.last_seen_txn_lsn do
+      %{state | last_confirmed_flush_lsn: max(lsn, state.last_confirmed_flush_lsn)}
+      |> update_flush_up_to_date()
+
+    state =
+      if state.flush_up_to_date? do
         %{
           state
-          | flush_up_to_date?: true,
-            flushed_wal: state.received_wal,
+          | flushed_wal: state.received_wal,
             received_wal: max(lsn, state.received_wal)
         }
       else
-        %{state | flushed_wal: max(lsn, state.flushed_wal), received_wal: state.received_wal}
+        %{state | flushed_wal: max(lsn, state.flushed_wal)}
       end
 
     {:noreply, [encode_standby_status_update(state)], state}
@@ -362,8 +367,8 @@ defmodule Electric.Postgres.ReplicationClient do
       when is_reference(ref) do
     Process.demonitor(ref, [:flush])
     state = %{state | pending_event: nil}
-    state = maybe_update_flush_up_to_date(state)
     {acks, state} = acknowledge_transaction(event, state)
+    state = update_flush_up_to_date(state)
     {:noreply_and_resume, acks, state}
   end
 
@@ -515,9 +520,9 @@ defmodule Electric.Postgres.ReplicationClient do
   # responsive to handle_info messages (keepalive timer, flush_boundary_updated,
   # EXIT signals) while providing backpressure to the replication stream.
   #
-  # maybe_update_flush_up_to_date and acknowledge_transaction are intentionally
-  # deferred to apply_event's success path, preserving the original semantics
-  # where they only ran after handle_event succeeded.
+  # acknowledge_transaction and the flush_up_to_date? recompute are
+  # intentionally deferred to apply_event's success path, preserving the
+  # original semantics where they only ran after handle_event succeeded.
   defp dispatch_event(event, state) do
     send(self(), {:process_event, event, @max_event_retry_time})
     {:noreply_and_pause, [], state}
@@ -602,12 +607,21 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp acknowledge_transaction(%Relation{}, state), do: {[], state}
 
-  defp maybe_update_flush_up_to_date(state) do
-    if MessageConverter.in_transaction?(state.message_converter) do
-      %{state | flush_up_to_date?: false}
-    else
+  # flush_up_to_date? is derived state: the client is up to speed exactly when
+  # the flush tracker has confirmed the last seen transaction. Recomputed
+  # whenever either side moves — after acknowledge_transaction/2 advances
+  # last_seen_txn_lsn and when a :flush_boundary_updated notification advances
+  # last_confirmed_flush_lsn.
+  #
+  # Both call sites matter: for a transaction that affects no shapes, the tracker's
+  # confirmation is emitted during event processing and reaches this process before the
+  # handler's reply that updates last_seen_txn_lsn.
+  defp update_flush_up_to_date(state) do
+    %{
       state
-    end
+      | flush_up_to_date?:
+          Lsn.from_integer(state.last_confirmed_flush_lsn) == state.last_seen_txn_lsn
+    }
   end
 
   defp encode_standby_status_update(state) do

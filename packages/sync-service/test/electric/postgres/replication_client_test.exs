@@ -629,6 +629,54 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert Lsn.compare(confirmed, lsn2) != :gt,
              "confirmed_flush_lsn #{confirmed} advanced past the unflushed txn at #{lsn2}"
     end
+
+    @tag with_empty_publication?: true
+    @tag database_settings: ["wal_sender_timeout='3s'"]
+    test "keepalives keep advancing acks past txns that are confirmed during processing",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      # The confirming handler notifies the flush boundary from within event
+      # processing, before the reply — like the ShapeLogCollector does for a
+      # transaction that affects no shapes. Such transactions must not stall
+      # the keepalive-driven slot advance. No further notifications arrive
+      # after the reply, so the up-to-date state must be recomputed once the
+      # transaction is acknowledged; the acks reach PG via the client's
+      # periodic status updates (wal_sender_timeout/3, hence the 3s setting).
+      replication_opts =
+        Keyword.put(
+          ctx.replication_opts,
+          :handle_event,
+          {__MODULE__, :test_handle_event_confirming_async, [self()]}
+        )
+
+      start_client(ctx, replication_opts: replication_opts)
+
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+      assert {lsn1, %NewRecord{record: %{"id" => "1"}}} = receive_tx_change_with_lsn()
+
+      # WAL produced outside the publication arrives as keepalives and must
+      # keep being acknowledged past the already-confirmed transaction.
+      for _ <- 1..10, do: insert_item(conn, "test value")
+
+      confirmed =
+        Enum.reduce_while(1..40, nil, fn _, _ ->
+          Process.sleep(100)
+
+          confirmed = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+          if Lsn.to_integer(confirmed) > Lsn.to_integer(lsn1) + 1 do
+            {:halt, confirmed}
+          else
+            {:cont, confirmed}
+          end
+        end)
+
+      # If the up-to-date state were only recomputed when the notification
+      # arrives, the ack would stall at exactly lsn1 + 1.
+      assert Lsn.to_integer(confirmed) > Lsn.to_integer(lsn1) + 1,
+             "confirmed_flush_lsn #{confirmed} stalled at the confirmed txn at #{lsn1}"
+    end
   end
 
   defp get_confirmed_flush_lsn(conn, slot_name) do
@@ -884,6 +932,23 @@ defmodule Electric.Postgres.ReplicationClientTest do
   # Async variant for the $gen_call-based apply_event. Runs the handler inline
   # (in the gen_statem process) and queues the result as a {ref, result} message.
   # Since these test handlers are fast (no delay), this doesn't block keepalives.
+  # Like test_handle_event_async, but confirms a committed transaction's flush
+  # boundary from within event processing, before replying — mirroring the
+  # ShapeLogCollector's behaviour for a transaction that affects no shapes.
+  # Runs inside the replication client process, so send(self(), ...) puts the
+  # notification in the client's mailbox ahead of the handler's reply.
+  def test_handle_event_confirming_async(
+        %TransactionFragment{commit: commit, lsn: lsn} = event,
+        test_pid
+      )
+      when not is_nil(commit) do
+    send(self(), {:flush_boundary_updated, Lsn.to_integer(lsn)})
+    test_handle_event_async(event, test_pid)
+  end
+
+  def test_handle_event_confirming_async(event, test_pid),
+    do: test_handle_event_async(event, test_pid)
+
   def test_handle_event_async(event, test_pid) do
     ref = make_ref()
 
