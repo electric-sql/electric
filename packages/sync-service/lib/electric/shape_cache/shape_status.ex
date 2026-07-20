@@ -147,6 +147,64 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @doc """
+  Given a list of `{handle, shape}` pairs (e.g. from `list_shapes/1`), return the
+  set of handles for every shape involved in a subquery: each shape with a
+  non-empty `shape_dependencies` plus all of its dependency handles.
+
+  This is the transitive closure of the subquery hierarchy — a nested dependency
+  that itself has a subquery matches the same filter and contributes its own
+  dependencies — so it covers outer shapes, intermediate dependencies and leaf
+  materializers. Used by `prune_subquery_shapes/1`.
+  """
+  @spec subquery_shape_handles([{shape_handle(), Shape.t()}]) :: MapSet.t(shape_handle())
+  def subquery_shape_handles(handles_and_shapes) do
+    for {handle, %Shape{shape_dependencies: [_ | _]} = shape} <- handles_and_shapes,
+        h <- [handle | shape.shape_dependencies_handles],
+        into: MapSet.new(),
+        do: h
+  end
+
+  @doc """
+  Remove every shape involved in a subquery (the outer shape plus its dependency
+  materializers) from shape metadata and on-disk storage.
+
+  Correctly restoring a subquery shape's on-disk view together with its
+  dependency materializer across a restart is not yet implemented, so for now we
+  drop every subquery shape on restart and let clients re-request them from
+  scratch. This is called once at the start of the shape subsystem's restore —
+  from `ShapeLogCollector`'s `restore_shapes`, before it (or the shape consumers)
+  rebuild any state from `list_shapes/1` — so no restore path ever reinstates a
+  subquery shape. At that point no consumer or routing entry exists for these
+  shapes yet, so a direct metadata + storage delete is sufficient; there is no
+  consumer to stop or routing entry to clear.
+  """
+  @spec prune_subquery_shapes(stack_id()) :: :ok
+  def prune_subquery_shapes(stack_id) when is_stack_id(stack_id) do
+    handles =
+      stack_id
+      |> list_shapes()
+      |> subquery_shape_handles()
+
+    unless Enum.empty?(handles) do
+      Logger.notice(
+        "Dropping #{MapSet.size(handles)} shape(s) involved in subqueries on restart; " <>
+          "clients will re-request them from scratch"
+      )
+
+      stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
+
+      for handle <- handles do
+        case remove_shape(stack_id, handle) do
+          :ok -> Electric.ShapeCache.Storage.cleanup!(stack_storage, handle)
+          {:error, _reason} -> :ok
+        end
+      end
+    end
+
+    :ok
+  end
+
   @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
   defp topological_sort(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
   defp topological_sort([], acc, _visited), do: Enum.reverse(acc) |> List.flatten()

@@ -296,6 +296,14 @@ defmodule Electric.Replication.ShapeLogCollector do
       fn ->
         start = System.monotonic_time()
 
+        # Restoring subquery shapes consistently across a restart is not yet
+        # implemented, so for now they are dropped rather than restored and
+        # clients re-request them. This is the first restore path in the shape
+        # subsystem to read from ShapeStatus, so pruning them here — before we
+        # build routing and before the shape consumers start — is the single
+        # point that keeps every restore path from reinstating a subquery shape.
+        :ok = Electric.ShapeCache.ShapeStatus.prune_subquery_shapes(state.stack_id)
+
         {partitions, event_router, layers, count} =
           state.stack_id
           |> Electric.ShapeCache.ShapeStatus.list_shapes()
