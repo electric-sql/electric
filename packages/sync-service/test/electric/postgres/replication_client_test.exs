@@ -577,6 +577,58 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert Lsn.to_integer(get_confirmed_flush_lsn(conn, ctx.slot_name)) >=
                Lsn.to_integer(Lsn.increment(lsn2, 1))
     end
+
+    @tag with_empty_publication?: true
+    test "keepalives don't ack WAL past an unflushed txn on an already-streamed table",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      pid = start_client(ctx)
+
+      # First insert into serial_ids in this walsender session. The txn carries
+      # a Relation message which is dispatched as a standalone mid-transaction
+      # event, so this txn incidentally clears flush_up_to_date?.
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+      assert {lsn1, %NewRecord{record: %{"id" => "1"}}} = receive_tx_change_with_lsn()
+
+      # Confirm txn1 as flushed: lsn1 is the last seen txn, so the client
+      # becomes fully caught up and flush_up_to_date? is re-armed.
+      send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn1)})
+
+      # A second small insert into the now already-streamed table: no Relation
+      # message and fewer changes than max_batch_size, so the whole txn is
+      # decoded into a single commit-carrying fragment with no mid-transaction
+      # event dispatch. Its flush is never confirmed.
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (2)", [])
+      assert {lsn2, %NewRecord{record: %{"id" => "2"}}} = receive_tx_change_with_lsn()
+
+      # Writes to a table outside the publication make the walsender skip
+      # transactions and send keepalives with an advancing wal_end.
+      for _ <- 1..10, do: insert_item(conn, "test value")
+
+      # Wait long enough for those keepalives to arrive (their timing is up to
+      # PG), then make the client report its ack state: re-notifying an
+      # already-confirmed boundary — as happens whenever any shape reports a
+      # flush — sends a standby status update carrying the current flushed_wal.
+      confirmed =
+        Enum.reduce_while(1..20, nil, fn _, _ ->
+          Process.sleep(50)
+          send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn1)})
+
+          confirmed = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+          if Lsn.compare(confirmed, lsn2) == :gt do
+            {:halt, confirmed}
+          else
+            {:cont, confirmed}
+          end
+        end)
+
+      # The unconfirmed txn2 must hold the flush boundary back: acknowledging
+      # WAL past it means PG can drop WAL that no shape has durably stored.
+      assert Lsn.compare(confirmed, lsn2) != :gt,
+             "confirmed_flush_lsn #{confirmed} advanced past the unflushed txn at #{lsn2}"
+    end
   end
 
   defp get_confirmed_flush_lsn(conn, slot_name) do
