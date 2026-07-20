@@ -3478,6 +3478,71 @@ defmodule Electric.Plug.RouterTest do
                _ -> false
              end)
     end
+
+    # Reproduces electric-sql/electric#4715.
+    #
+    # The outer consumer subscribes to each of its dependency materializers
+    # with a hardcoded 5s `GenServer.call` timeout
+    # (`Consumer.all_materializers_alive?/1` -> `Materializer.subscribe/1`).
+    # A dependency materializer stays blocked in
+    # `handle_continue(:start_materializer)` on
+    # `Consumer.await_snapshot_start(..., :infinity)` until its own snapshot
+    # starts. If the dependency snapshot takes longer than 5s, the subscribe
+    # times out, Electric removes the outer shape, and the client's first
+    # request returns 500. A later retry succeeds once the dependency snapshot
+    # has finished.
+    #
+    # We reproduce that window deterministically by stalling only the
+    # dependency (`parent`) shape's snapshot past the 5s subscribe timeout,
+    # while leaving every other shape's snapshot untouched.
+    @tag :slow
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "cold dependency shape whose materializer is slow to snapshot does not surface a 500",
+         %{opts: opts, stack_id: stack_id} do
+      test_pid = self()
+
+      # Stall the dependency (`parent`) shape's snapshot past the 5s subscribe
+      # timeout, keeping its materializer blocked in start-up. Every other
+      # shape (including the outer `child` shape) snapshots normally.
+      Electric.StackConfig.put(
+        stack_id,
+        :create_snapshot_fn,
+        fn task_parent, consumer, shape_handle, shape, snapshot_ctx ->
+          if shape.root_table == {"public", "parent"} do
+            send(test_pid, :stalling_dependency_snapshot)
+            Process.sleep(6_000)
+          end
+
+          Electric.Shapes.Consumer.Snapshotter.stream_snapshot_from_db(
+            task_parent,
+            consumer,
+            shape_handle,
+            shape,
+            snapshot_ctx
+          )
+        end
+      )
+
+      where = "parent_id IN (SELECT id FROM parent WHERE value = 1)"
+
+      conn =
+        conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
+        |> Router.call(opts)
+
+      # Confirm we actually exercised the stalled-dependency path.
+      assert_received :stalling_dependency_snapshot
+
+      # A cold nested shape should wait for its dependency materializers and
+      # complete successfully rather than exposing the internal subscribe
+      # timeout as a 500 to the client.
+      assert %{status: 200} = conn
+      assert [%{"value" => %{"id" => "1"}}, _] = Jason.decode!(conn.resp_body)
+    end
   end
 
   describe "/v1/shapes - subset snapshots" do
