@@ -327,9 +327,8 @@ defmodule Electric.ShapeCache do
     handles =
       state.stack_id
       |> ShapeStatus.list_shapes()
-      |> Enum.filter(&match?({_handle, %Shape{shape_dependencies: [_ | _]}}, &1))
-      |> Enum.flat_map(fn {handle, shape} -> [handle | shape.shape_dependencies_handles] end)
-      |> Enum.uniq()
+      |> ShapeStatus.subquery_shape_handles()
+      |> MapSet.to_list()
 
     case handles do
       [] ->

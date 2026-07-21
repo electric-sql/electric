@@ -1323,6 +1323,14 @@ defmodule Electric.ShapeCacheTest do
       # dependency materializers) and let clients re-request them from scratch.
       # The drop runs asynchronously in handle_continue(:wait_for_restore).
       assert wait_until(fn -> ShapeCache.list_shapes(ctx.stack_id) == [] end, 500)
+
+      # The ShapeLogCollector rebuilds its routing indexes independently from
+      # ShapeStatus, so the dropped hierarchy must be absent there too — not just
+      # from ShapeCache.list_shapes/1 — otherwise events could still be routed to
+      # the dropped handles after mark_as_ready.
+      active = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+      refute shape_handle in active
+      refute dep_handle in active
     end
 
     test "drops shapes with subqueries on restart even when backup missing", ctx do
@@ -1343,6 +1351,26 @@ defmodule Electric.ShapeCacheTest do
       restart_shape_cache(ctx)
 
       assert wait_until(fn -> ShapeCache.list_shapes(ctx.stack_id) == [] end, 500)
+    end
+
+    test "ShapeLogCollector restore skips the subquery hierarchy", ctx do
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
+
+      # Restart ONLY the collector, leaving ShapeStatus (and the shapes) intact so
+      # the async ShapeCache drop is not involved. The collector restores its
+      # routing indexes independently from ShapeStatus, and must skip the subquery
+      # hierarchy rather than reinstate it — otherwise those handles would receive
+      # events before the drop's asynchronous cleanup lands after a real restart.
+      :ok = stop_supervised(ctx.shape_log_collector)
+      _ = with_shape_log_collector(ctx)
+
+      active = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+      refute shape_handle in active
+      refute dep_handle in active
     end
 
     defp restart_shape_cache(ctx, opts \\ []) do
