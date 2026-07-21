@@ -43,8 +43,15 @@ defmodule Support.OracleHarness.ShapeChecker do
     poll_state: nil,
     rows: %{},
     # Cached oracle state from previous check (used as "before" for next check)
-    oracle_before: nil
+    oracle_before: nil,
+    # When true, transient poll errors (5xx / connection errors) are retried
+    # within timeout_ms instead of failing immediately. Opt-in via
+    # RETRY_TRANSIENT_ERRORS; see do_await/3.
+    retry_transient_errors?: false
   ]
+
+  # Backoff between retries of a transient poll error.
+  @transient_retry_backoff_ms 50
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -101,7 +108,8 @@ defmodule Support.OracleHarness.ShapeChecker do
       shape_def: shape_def,
       oracle_pool: oracle_pool,
       timeout_ms: timeout_ms,
-      poll_state: ShapeState.new()
+      poll_state: ShapeState.new(),
+      retry_transient_errors?: retry_transient_errors?()
     }
 
     {:ok, state}
@@ -148,14 +156,27 @@ defmodule Support.OracleHarness.ShapeChecker do
   # ---------------------------------------------------------------------------
 
   defp await_up_to_date(state) do
-    do_await(state, System.monotonic_time(:millisecond))
+    # polled_ok? tracks whether at least one poll completed (vs only transient
+    # errors) in this window, so a persistently-down server can't pass silently.
+    do_await(state, System.monotonic_time(:millisecond), false)
   end
 
-  defp do_await(state, start_ms) do
+  defp do_await(state, start_ms, polled_ok?) do
     elapsed = System.monotonic_time(:millisecond) - start_ms
 
     if elapsed >= state.timeout_ms do
-      # Timed out — return state and let assert_consistent! report the mismatch
+      # When retrying transient errors, a window that timed out without a single
+      # successful poll means the server was unreachable the whole time. Returning
+      # stale state would let a genuinely-down server pass if the oracle happens to
+      # be unchanged for this check, so fail explicitly instead. Otherwise return
+      # state and let assert_consistent! report any data mismatch.
+      if state.retry_transient_errors? and not polled_ok? do
+        flunk(
+          "shape=#{state.name}: no successful poll within #{state.timeout_ms}ms " <>
+            "(server unreachable for the whole window)"
+        )
+      end
+
       state
     else
       case Client.poll(state.client, state.shape_def, state.poll_state, replica: :full) do
@@ -166,7 +187,7 @@ defmodule Support.OracleHarness.ShapeChecker do
           if new_state.up_to_date? do
             handle_up_to_date(state, start_ms)
           else
-            do_await(state, start_ms)
+            do_await(state, start_ms, true)
           end
 
         {:must_refetch, messages, new_state} ->
@@ -178,11 +199,39 @@ defmodule Support.OracleHarness.ShapeChecker do
 
           state = %{state | poll_state: new_state, rows: %{}}
           state = apply_messages(state, messages)
-          do_await(state, start_ms)
+          do_await(state, start_ms, true)
 
         {:error, error} ->
-          flunk("Poll error for shape=#{state.name} where=#{state.where}: #{inspect(error)}")
+          # A 5xx or a connection error is an availability signal, never a
+          # data-consistency one. Production hides restart/deploy windows from
+          # clients (HTTP drains before teardown; the LB switches after the new
+          # instance is ready), so a transient error here does not reflect a
+          # production bug. When opted in, retry within timeout_ms; a genuine
+          # persistent error still fails via the no-successful-poll guard above
+          # (or, once some poll succeeded, as a consistency mismatch). 409s are
+          # handled separately (:must_refetch) and 4xx errors fail immediately.
+          if state.retry_transient_errors? and transient_error?(error) do
+            Process.sleep(@transient_retry_backoff_ms)
+            do_await(state, start_ms, polled_ok?)
+          else
+            flunk("Poll error for shape=#{state.name} where=#{state.where}: #{inspect(error)}")
+          end
       end
+    end
+  end
+
+  # A 5xx response or a transport-level failure (no HTTP status) is transient.
+  # Any other HTTP status (e.g. 4xx) is treated as a real error.
+  defp transient_error?(%Client.Error{resp: %{status: status}}) when is_integer(status),
+    do: status in 500..599
+
+  defp transient_error?(%Client.Error{}), do: true
+  defp transient_error?(_), do: false
+
+  defp retry_transient_errors? do
+    case System.get_env("RETRY_TRANSIENT_ERRORS") do
+      value when value in ["1", "true", "TRUE", "yes", "YES"] -> true
+      _ -> false
     end
   end
 
@@ -194,7 +243,7 @@ defmodule Support.OracleHarness.ShapeChecker do
       state
     else
       # Electric reported up_to_date but data doesn't match yet - keep polling
-      do_await(state, start_ms)
+      do_await(state, start_ms, true)
     end
   end
 
