@@ -26,7 +26,7 @@ Electric Circuits builds on the [theory of incremental view maintenance](https:/
 Electric Circuits provides end-to-end fine-grained reactivity at the precision of what's being rendered on screen. It is built on well-established open-source libraries, and is fully compatible with the Electric protocol.
 
 > [!Warning] ✨ Research preview
-> Electric Circuits is a research preview, functional end to end — everything in this post is runnable today. [Clone the repo](https://github.com/balegas/electric-ivm) and watch your own writes ripple through the circuit in the visualizer.
+> Electric Circuits is a research preview, functional end to end — everything in this post is runnable today. [Clone the repo](https://github.com/balegas/electric-ivm) and watch your own writes ripple through the circuit in the circuit visualizer.
 
 ## From static to live queries
 
@@ -138,7 +138,7 @@ The queries above only register. A second run goes further: each session's visib
 
 <MemoryMatrixChart
   title="Materialized live queries"
-  subtitle="Engine memory usage with visibility queries materialized, including the visible-row key sets; one bar per deployment size"
+  subtitle="Engine memory usage with materialized live queries, including the visible-row key sets; one bar per deployment size"
   :data="[
     { label: '1k rows', data: [24.5, 34.1, 39.6, 55.3, 98.0], color: '#75fbfd' },
     { label: '10k rows', data: [24.6, 43.2, 48.8, 68.9, 121.7], color: '#f59e0b' },
@@ -164,7 +164,9 @@ Dynamic and expressive queries are essential characteristics of an API for agent
 
 ## Try it now
 
-Electric Circuits is open source. Clone the repo and start the LinearLite demo — a real issue tracker running on live queries, with the circuit visualizer alongside. One command boots the whole stack, Postgres included:
+Applications and agents need live queries for greater user experience. Reduce the gap between the state that you expose in your app and the state that you render on screen. Electric circuits is the next generation of live queries: fine-grained, durable and scalable. Clone the repo, checkout the demo app with the circuit visualizer alongside.
+
+One command boots the whole stack:
 
 ```sh
 git clone https://github.com/balegas/electric-ivm
@@ -173,5 +175,5 @@ pnpm install
 pnpm demo:linearlite
 ```
 
-Create a live query, write to Postgres, and watch the change propagate through the circuit down to its stream. Then go break it — it's a research preview, and that's what it's for. Star the [repo](https://github.com/balegas/electric-ivm), work through the [getting started guide](https://github.com/balegas/electric-ivm/blob/main/docs/getting-started.md), and tell us what you find on [Discord](https://discord.electric-sql.com).
+
 
