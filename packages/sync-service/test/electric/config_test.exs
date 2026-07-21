@@ -51,6 +51,15 @@ defmodule Electric.ConfigTest do
       Electric.Application.api_server()
     end
 
+    test "api_server/1 maps tcp_read_timeout to a top-level ThousandIsland option" do
+      [{Bandit, bandit_opts}] = Electric.Application.api_server(tcp_read_timeout: 180_000)
+
+      assert bandit_opts[:thousand_island_options][:read_timeout] == 180_000
+
+      [{Bandit, default_opts}] = Electric.Application.api_server([])
+      refute Keyword.has_key?(default_opts[:thousand_island_options], :read_timeout)
+    end
+
     test "configuration/1", ctx do
       Electric.Application.configuration(
         Keyword.take(ctx.initial_config, [:replication_connection_opts])

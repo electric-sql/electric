@@ -59,6 +59,13 @@ defmodule Electric.Config do
     long_poll_timeout: 20_000,
     http_api_num_acceptors: nil,
     tcp_send_timeout: :timer.seconds(30),
+    # Socket read/keep-alive timeout (ThousandIsland's read_timeout). Bandit reaps
+    # keep-alive connections that have been idle for this long. When Electric runs
+    # behind a connection-pooling proxy (ALB, nginx, etc.), this MUST exceed the
+    # proxy's idle timeout — otherwise the proxy races Bandit's unannounced close
+    # when reusing a pooled connection and surfaces the reset as a 502.
+    # nil keeps ThousandIsland's default (60s).
+    tcp_read_timeout: nil,
     cache_max_age: 60,
     cache_stale_age: 60 * 5,
     chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
