@@ -4,6 +4,8 @@ defmodule Electric.StatusMonitor do
 
   require Logger
 
+  alias Electric.PollWait
+
   @type status() :: %{
           conn: :waiting_on_lock | :starting | :up | :sleeping,
           shape: :starting | :read_only | :up
@@ -23,6 +25,8 @@ defmodule Electric.StatusMonitor do
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
   @db_state_key :db_state
+  @congested_key :waiters_congested
+  @congested_threshold 1000
   @spin_prevention_delay 10
 
   def start_link(opts) do
@@ -56,6 +60,25 @@ defmodule Electric.StatusMonitor do
       _ -> :starting
     end
   end
+
+  @doc """
+  Returns true once the StatusMonitor process has accumulated `congested_threshold/0` waiters
+  The flag is cleared once the set of waiters drains back to 0.
+
+  Used by callers to decide between a `GenServer.call` wait (low latency
+  when uncontended) and a `PollWait.until/3` wait (bounded mailbox growth
+  under burst).
+  """
+  @spec congested?(String.t()) :: boolean()
+  def congested?(stack_id) do
+    :ets.lookup_element(ets_table(stack_id), @congested_key, 2, false)
+  rescue
+    ArgumentError -> false
+  end
+
+  @doc false
+  @spec congested_threshold() :: pos_integer()
+  def congested_threshold, do: @congested_threshold
 
   @spec status(String.t()) :: status()
   def status(stack_id) do
@@ -185,69 +208,82 @@ defmodule Electric.StatusMonitor do
 
       :sleeping ->
         if Keyword.get(opts, :block_on_conn_sleeping, false) do
-          do_wait_until(stack_id, level, opts)
+          dispatch_wait(stack_id, level, opts)
         else
           :conn_sleeping
         end
 
       _ ->
-        do_wait_until(stack_id, level, opts)
+        dispatch_wait(stack_id, level, opts)
+    end
+  end
+
+  defp dispatch_wait(stack_id, level, opts) do
+    if congested?(stack_id) do
+      poll_wait(stack_id, level, opts)
+    else
+      do_wait_until(stack_id, level, opts)
     end
   end
 
   defp do_wait_until(stack_id, level, opts) do
     timeout = Keyword.fetch!(opts, :timeout)
 
-    try do
-      case stack_id |> name() |> GenServer.whereis() do
-        nil ->
-          maybe_retry_wait_until(
-            stack_id,
-            level,
-            opts,
-            timeout,
-            "Status monitor not found for stack ID: #{stack_id}"
-          )
+    check_fn = fn ->
+      case monitor_lookup(stack_id) do
+        {:ready, pid} ->
+          try do
+            {:ready, GenServer.call(pid, {:wait_until, level, timeout}, :infinity)}
+          catch
+            :exit, _reason -> :not_ready
+          end
 
-        pid when is_pid(pid) ->
-          GenServer.call(pid, {:wait_until, level, timeout}, :infinity)
+        _ ->
+          :not_ready
       end
-    rescue
-      ArgumentError ->
-        maybe_retry_wait_until(
-          stack_id,
-          level,
-          opts,
-          timeout,
-          "Stack ID not recognised: #{stack_id}"
-        )
-    catch
-      :exit, _reason ->
-        maybe_retry_wait_until(
-          stack_id,
-          level,
-          opts,
-          timeout,
-          "Stack #{inspect(stack_id)} has terminated"
-        )
+    end
+
+    case PollWait.until(check_fn, timeout,
+           initial_interval: @spin_prevention_delay,
+           max_interval: @spin_prevention_delay,
+           jitter: 0.0
+         ) do
+      {:ready, result} -> result
+      :timeout -> {:error, monitor_unavailable_reason(stack_id)}
     end
   end
 
-  defp maybe_retry_wait_until(_stack_id, _level, _opts, timeout, last_error)
-       when timeout <= @spin_prevention_delay do
-    {:error, last_error}
+  defp poll_wait(stack_id, level, opts) do
+    timeout = Keyword.fetch!(opts, :timeout)
+
+    check_fn = fn ->
+      case check_level(level, stack_id) do
+        {:ok, _} = ready -> {:ready, ready}
+        :not_ready -> :not_ready
+      end
+    end
+
+    case PollWait.until(check_fn, timeout) do
+      {:ready, value} -> value
+      :timeout -> {:error, timeout_message(stack_id)}
+    end
   end
 
-  defp maybe_retry_wait_until(stack_id, level, opts, timeout, _) do
-    Process.sleep(@spin_prevention_delay)
+  defp monitor_lookup(stack_id) do
+    case stack_id |> name() |> GenServer.whereis() do
+      nil -> :monitor_not_found
+      pid when is_pid(pid) -> {:ready, pid}
+    end
+  rescue
+    ArgumentError -> :registry_not_found
+  end
 
-    remaining_timeout =
-      case timeout do
-        :infinity -> :infinity
-        _ -> timeout - @spin_prevention_delay
-      end
-
-    wait_until(stack_id, level, Keyword.put(opts, :timeout, remaining_timeout))
+  defp monitor_unavailable_reason(stack_id) do
+    case monitor_lookup(stack_id) do
+      :monitor_not_found -> "Status monitor not found for stack ID: #{stack_id}"
+      :registry_not_found -> "Stack ID not recognised: #{stack_id}"
+      {:ready, _} -> "Stack #{inspect(stack_id)} has terminated"
+    end
   end
 
   @doc "Convenience wrapper: wait until fully active. Returns `:ok` on success."
@@ -313,6 +349,16 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
+  # Test-only: writes the congestion flag directly. The flag is normally
+  # set/cleared by the GenServer in response to waiter-set transitions; this
+  # cast lets tests force the polling branch without first enqueuing the
+  # threshold's worth of real waiters.
+  @doc false
+  def handle_cast({:set_congested_flag_for_test, value}, state) when is_boolean(value) do
+    :ets.insert(ets_table(state.stack_id), {@congested_key, value})
+    {:noreply, state}
+  end
+
   def handle_call({:wait_until, level, timeout}, from, %{waiters: waiters} = state) do
     case check_level(level, state.stack_id) do
       {:ok, _} = reply ->
@@ -323,7 +369,10 @@ defmodule Electric.StatusMonitor do
           Process.send_after(self(), {:timeout_waiter, {from, level}}, timeout)
         end
 
-        {:noreply, %{state | waiters: MapSet.put(waiters, {from, level})}}
+        new_waiters = MapSet.put(waiters, {from, level})
+        maybe_set_congested(state.stack_id, MapSet.size(new_waiters))
+
+        {:noreply, %{state | waiters: new_waiters}}
     end
   end
 
@@ -352,7 +401,9 @@ defmodule Electric.StatusMonitor do
   def handle_info({:timeout_waiter, {from, _level} = waiter}, state) do
     if MapSet.member?(state.waiters, waiter) do
       GenServer.reply(from, {:error, timeout_message(state.stack_id)})
-      {:noreply, %{state | waiters: MapSet.delete(state.waiters, waiter)}}
+      new_waiters = MapSet.delete(state.waiters, waiter)
+      maybe_clear_congested(state.stack_id, MapSet.size(new_waiters))
+      {:noreply, %{state | waiters: new_waiters}}
     else
       {:noreply, state}
     end
@@ -375,8 +426,23 @@ defmodule Electric.StatusMonitor do
         end
       end)
 
+    maybe_clear_congested(state.stack_id, MapSet.size(waiters))
     %{state | waiters: waiters}
   end
+
+  defp maybe_set_congested(stack_id, size) when size >= @congested_threshold do
+    :ets.insert(ets_table(stack_id), {@congested_key, true})
+    :ok
+  end
+
+  defp maybe_set_congested(_stack_id, _size), do: :ok
+
+  defp maybe_clear_congested(stack_id, 0) do
+    :ets.insert(ets_table(stack_id), {@congested_key, false})
+    :ok
+  end
+
+  defp maybe_clear_congested(_stack_id, _size), do: :ok
 
   defp db_state(table) do
     :ets.lookup_element(table, @db_state_key, 2, :up)
