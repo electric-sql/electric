@@ -229,7 +229,7 @@ config :electric,
   long_poll_timeout: env!("ELECTRIC_LONG_POLL_TIMEOUT", :integer, nil),
   # Used in telemetry
   instance_id: instance_id,
-  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
+  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, false),
   telemetry_url: call_home_telemetry_url,
   system_metrics_poll_interval: system_metrics_poll_interval,
   stack_telemetry_init_delay: stack_telemetry_init_delay,
