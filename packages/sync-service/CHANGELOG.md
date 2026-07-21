@@ -1,5 +1,23 @@
 # @core/sync-service
 
+## 1.7.8
+
+### Patch Changes
+
+- 5a298c6: Bound the memory pinned by a shape response served to a slow or stalled client. Two compounding issues let every stalled connection pin its entire in-flight log chunk (~10 MB by default) for as long as the serve lived: the log file was read eagerly as one whole-range binary whose entries were served as sub-binary slices (pinning the full chunk plus the full entry list), and the JSON encoder batched response elements by item count only, so a batch of large rows grew into a multi-megabyte unit held in full by the request process and the socket's driver queue. Accumulated stalled serves could exhaust node memory (observed in production: ~400 stalled serves pinning ~3.9 GB, immune to GC since the references are live). The log is now read lazily in 64 KiB blocks and encoder batches are additionally capped at 256 KiB, bounding the pinned memory per stalled connection to well under 1 MB regardless of chunk size.
+- 7b8fecc: Fix a cold nested subquery shape returning an initial HTTP 500 while its dependency snapshots were still in progress. When an outer shape's consumer initialized, it subscribed to each dependency materializer using `GenServer.call` with the default 5s timeout. A dependency materializer stays blocked in start-up until its own snapshot starts, so if that snapshot took longer than 5s the subscribe timed out, the outer shape was removed, and the client's first request 500'd (a retry succeeded once the snapshot finished). The subscribe now waits with `:infinity`, consistent with the other materializer calls, so a cold nested shape waits for its dependency materializers and completes without an externally visible 500. Liveness is unaffected: the caller already monitors the materializer, so a dead dependency surfaces as a call exit rather than being masked by a short timeout.
+- a1026bd: fix: make call-home telemetry opt-in
+- 4c2498a: Stop subquery shapes from being spuriously removed during a server restart. When
+  a dependency consumer's inline call to its materializer raced the materializer's
+  shutdown, the resulting `:noproc` exit crashed the consumer and removed the shape
+  from disk, causing a `409 must-refetch` after the restart. The consumer now
+  absorbs that exit and lets the monitored `:DOWN` drive a clean stop.
+- b2cf71d: Add `ELECTRIC_TCP_READ_TIMEOUT` to configure the socket read / HTTP keep-alive
+  idle timeout (ThousandIsland's `read_timeout`, default 60s). When Electric runs
+  behind a connection-pooling proxy such as an AWS ALB, this must be set above
+  the proxy's idle timeout — otherwise the proxy races Electric's unannounced
+  idle close when reusing a pooled connection and clients see intermittent 502s.
+
 ## 1.7.7
 
 ### Patch Changes
