@@ -52,5 +52,5 @@
 
   <!-- SINK (cyan-filled destination accent) -->
   <rect class="accent" x="1948" y="190" width="224" height="80" rx="12"/>
-  <text class="main-on" x="2060" y="230" dominant-baseline="central">shape/s16</text>
+  <text class="main-on" x="2060" y="230" dominant-baseline="central">live query</text>
 </svg>
