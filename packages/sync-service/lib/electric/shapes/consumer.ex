@@ -1299,7 +1299,7 @@ defmodule Electric.Shapes.Consumer do
     Inspector.clean(table_oid, inspector)
   end
 
-  # Invariant: consumers must only ever stop with :normal/:shutdown or one of the two
+  # Consumers must only ever stop with :normal/:shutdown or one of the two
   # Electric-tagged shutdown reasons ({:shutdown, :cleanup} | {:shutdown, :suspend}) —
   # anything else is classified as a crash by the ShapeLogCollector.
   defp handle_materializer_down(reason, state) do
