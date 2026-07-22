@@ -199,6 +199,24 @@ defmodule Electric.ShapeCleanerTest do
         {:ok, _} =
           with_log(fn -> ShapeCleaner.remove_shape(ctx.stack_id, shape_handle) end)
       end
+
+      # An earlier removal chain may have died between the ShapeStatus removal and
+      # the SLC removal, leaving the shape's flush entry pinned. A retry must not
+      # short-circuit past the SLC removal just because ShapeStatus already errors.
+      test "re-issues the SLC removal when the shape is already gone from ShapeStatus", ctx do
+        parent = self()
+
+        patch_calls(Electric.Replication.ShapeLogCollector,
+          remove_shape: fn _stack_id, handle ->
+            send(parent, {:slc_remove_shape, handle})
+            :ok
+          end
+        )
+
+        :ok = @cleanup_fn.(ctx.stack_id, "already-gone")
+
+        assert_receive {:slc_remove_shape, "already-gone"}
+      end
     end
   end
 
@@ -305,6 +323,49 @@ defmodule Electric.ShapeCleanerTest do
       remaining_handles = Agent.get(agent, & &1)
 
       assert MapSet.size(remaining_handles) == 0
+    end
+  end
+
+  describe "handle_writer_termination/3" do
+    test "an untagged {:shutdown, term} reason triggers shape removal", ctx do
+      parent = self()
+
+      patch_calls(Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
+        perform_async: fn _stack_id, _fun ->
+          send(parent, :removal_scheduled)
+          :ok
+        end
+      )
+
+      log =
+        capture_log(fn ->
+          assert :removed =
+                   ShapeCleaner.handle_writer_termination(
+                     ctx.stack_id,
+                     "some-handle",
+                     {:shutdown, :arbitrary}
+                   )
+        end)
+
+      assert log =~ "abnormal shutdown"
+      assert_receive :removal_scheduled
+    end
+
+    test "benign termination reasons do not trigger removal", ctx do
+      parent = self()
+
+      patch_calls(Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
+        perform_async: fn _stack_id, _fun ->
+          send(parent, :removal_scheduled)
+          :ok
+        end
+      )
+
+      for reason <- [:normal, :killed, :shutdown] do
+        assert :ok = ShapeCleaner.handle_writer_termination(ctx.stack_id, "some-handle", reason)
+      end
+
+      refute_receive :removal_scheduled, 100
     end
   end
 

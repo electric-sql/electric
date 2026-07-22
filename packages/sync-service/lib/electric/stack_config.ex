@@ -31,6 +31,7 @@ defmodule Electric.StackConfig do
       shape_hibernate_after: Electric.Config.default(:shape_hibernate_after),
       shape_enable_suspend?: Electric.Config.default(:shape_enable_suspend?),
       shape_suspend_after: Electric.Config.default(:shape_suspend_after),
+      flush_stall_grace_period: Electric.Config.default(:flush_stall_grace_period),
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
       process_spawn_opts: %{},

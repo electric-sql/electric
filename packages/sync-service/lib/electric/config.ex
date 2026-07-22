@@ -104,6 +104,10 @@ defmodule Electric.Config do
     # After hibernating, wait this duration before suspending (terminating).
     # Only applies when shape_enable_suspend? is true.
     shape_suspend_after: :timer.minutes(10),
+    # How long a pending flush entry may sit without flush progress before its
+    # shape is invalidated to unpin the stack-wide flush boundary. The storage
+    # contract already says writes slower than this should raise.
+    flush_stall_grace_period: :timer.minutes(1),
     # Sets max_requests for Bandit handler processes:
     # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
     # "The maximum number of requests to serve in a single HTTP/{1,2}

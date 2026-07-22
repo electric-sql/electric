@@ -1859,6 +1859,71 @@ defmodule Electric.Shapes.ConsumerTest do
       assert Process.alive?(consumer_pid)
     end
 
+    @tag hibernate_after: 10, shape_suspend_after: 300
+    @tag suspend: true
+    test "should not suspend while a written txn is not yet flush-notified", ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      # Once hibernated, a suspend timer is armed.
+      assert is_reference(await_hibernation(consumer_pid))
+
+      # Inject un-notified txn state, as if a write had not yet been confirmed flushed.
+      offset = LogOffset.new(Lsn.from_integer(300), 0)
+
+      :sys.replace_state(consumer_pid, fn state ->
+        %{state | txn_offset_mapping: [{offset, offset}]}
+      end)
+
+      # The armed suspend timer fires but the consumer must refuse to suspend while
+      # a flush notification is outstanding.
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 500
+      assert Process.alive?(consumer_pid)
+
+      # Once the flush is confirmed and notified, the next suspend cycle goes through.
+      :sys.replace_state(consumer_pid, fn state -> %{state | txn_offset_mapping: []} end)
+      send(consumer_pid, {:configure_suspend, 5, 5, 10})
+
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 500
+    end
+
+    @tag hibernate_after: 10, shape_suspend_after: 300
+    @tag suspend: true
+    test "should not suspend while a deferred flush notification is pending", ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      # Once hibernated, a suspend timer is armed.
+      assert is_reference(await_hibernation(consumer_pid))
+
+      # Inject a deferred flush notification, as if a flush had been signalled in the
+      # middle of a multi-fragment transaction.
+      offset = LogOffset.new(Lsn.from_integer(300), 0)
+
+      :sys.replace_state(consumer_pid, fn state -> %{state | pending_flush_offset: offset} end)
+
+      # The armed suspend timer fires but the consumer must refuse to suspend while
+      # the deferred notification has not been delivered.
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 500
+      assert Process.alive?(consumer_pid)
+
+      # Once the deferred notification is delivered, the next suspend cycle goes through.
+      :sys.replace_state(consumer_pid, fn state -> %{state | pending_flush_offset: nil} end)
+      send(consumer_pid, {:configure_suspend, 5, 5, 10})
+
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}, 500
+    end
+
     @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
     test "compaction is scheduled and invoked for a shape that has compaction enabled", ctx do
       parent = self()
@@ -3156,6 +3221,54 @@ defmodule Electric.Shapes.ConsumerTest do
 
       refute is_nil(forced_at),
              "expected a forced GC to be recorded after the buffered-fragment drain"
+    end
+  end
+
+  describe "stall challenge response" do
+    # with_stack_id_from_test (line 87) already starts ProcessRegistry + StackConfig
+    # for ctx.stack_id; the GenServer callbacks are invoked directly with a synthetic
+    # state, with the test process registered under the ShapeLogCollector's name to
+    # receive the consumer's casts.
+
+    setup ctx do
+      {:via, Registry, {registry_name, key}} = ShapeLogCollector.name(ctx.stack_id)
+      {:ok, _} = Registry.register(registry_name, key, nil)
+      :ok
+    end
+
+    test "challenge is answered while buffering ahead of PG snapshot info", ctx do
+      state = Consumer.State.new(ctx.stack_id, "deferring-shape")
+      assert state.buffering?
+
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
+
+      assert_receive {:"$gen_cast", {:writer_flush_deferred, "deferring-shape"}}
+    end
+
+    test "a subquery move-in buffering phase counts as deferring", ctx do
+      handler = %Consumer.EventHandler.Subqueries.Buffering{
+        shape_info: nil,
+        queue: nil,
+        active_move: nil
+      }
+
+      state = %{
+        Consumer.State.new(ctx.stack_id, "move-in-shape")
+        | buffering?: false,
+          event_handler: handler
+      }
+
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
+
+      assert_receive {:"$gen_cast", {:writer_flush_deferred, "move-in-shape"}}
+    end
+
+    test "challenge is left unanswered when the consumer is not deferring", ctx do
+      state = %{Consumer.State.new(ctx.stack_id, "steady-shape") | buffering?: false}
+
+      assert {:noreply, ^state, _} = Consumer.handle_info(:verify_flush_progress, state)
+
+      refute_receive {:"$gen_cast", _}, 100
     end
   end
 

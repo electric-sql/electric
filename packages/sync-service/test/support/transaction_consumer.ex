@@ -61,6 +61,14 @@ defmodule Support.TransactionConsumer do
     GenServer.cast(pid, {:stop, reason})
   end
 
+  @doc """
+  Make the consumer die with `reason` without running its `terminate/2` callback,
+  like a crash that aborts terminate would.
+  """
+  def crash(pid, reason) do
+    GenServer.cast(pid, {:crash, reason})
+  end
+
   def init(opts) do
     Process.flag(:trap_exit, true)
     {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
@@ -106,11 +114,26 @@ defmodule Support.TransactionConsumer do
     {:stop, reason, state}
   end
 
+  def handle_cast({:crash, reason}, state) do
+    # Stop trapping exits and take an exit signal from a linked process: the
+    # process dies with `reason` and terminate/2 never runs.
+    Process.flag(:trap_exit, false)
+    spawn_link(fn -> exit(reason) end)
+    {:noreply, state}
+  end
+
   # we no longer monitor consumer processes in the ShapeLogCollector
   # so consumers must de-register themselves
   def terminate(reason, %{stack_id: stack_id, shape_handle: shape_handle} = state) do
     send(state.parent, {__MODULE__, {state.id, self()}, {:terminate, reason}})
     Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle)
+  end
+
+  # Forward stall challenges from the ShapeLogCollector so tests can observe
+  # them; answering (or not) is up to the test.
+  def handle_info(:verify_flush_progress, state) do
+    send(state.parent, {:flush_progress_challenged, self()})
+    {:noreply, state}
   end
 
   def handle_info(_msg, state), do: {:noreply, state}

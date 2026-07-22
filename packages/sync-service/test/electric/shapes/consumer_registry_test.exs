@@ -60,9 +60,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     test "starts consumer when receiving a message", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => pid}} =
                ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
+      assert is_pid(pid)
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
@@ -71,14 +72,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     test "uses existing consumer when already active", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => pid}} =
                ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => ^pid}} =
                ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
@@ -89,14 +90,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     test "starts any missing consumers", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => _}} =
                ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => _, "handle-2" => _}} =
                ConsumerRegistry.publish(
                  %{"handle-1" => {:txn, %{lsn: 2}}, "handle-2" => {:txn, %{lsn: 2}}},
                  ctx.registry_state
@@ -155,7 +156,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 3
 
-      assert %{} ==
+      assert {%{}, delivered} =
                ConsumerRegistry.publish(
                  %{
                    "handle-1" => {:txn, %{lsn: 1}},
@@ -164,6 +165,8 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
                  },
                  ctx.registry_state
                )
+
+      assert Map.keys(delivered) |> Enum.sort() == ["handle-1", "handle-2", "handle-3"]
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:start_consumer, "handle-2"}, 10
@@ -187,13 +190,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
       # Crashed consumers are NOT retried — they are returned as undeliverable
-      result =
+      {undeliverable, delivered} =
         ConsumerRegistry.publish(
           %{"handle-crash" => {:txn, %{lsn: 1}}},
           ctx.registry_state
         )
 
-      assert :noproc == Map.fetch!(result, "handle-crash")
+      assert :noproc == Map.fetch!(undeliverable, "handle-crash")
+      assert delivered == %{}
 
       # No replacement consumer should have been started
       refute_receive {:start_consumer, "handle-crash"}
@@ -234,13 +238,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       )
 
       # Dead PID is detected as crashed, returned as undeliverable
-      result =
+      {undeliverable, delivered} =
         ConsumerRegistry.publish(
           %{"handle-removed" => {:txn, %{lsn: 1}}},
           ctx.registry_state
         )
 
-      assert :noproc == Map.fetch!(result, "handle-removed")
+      assert :noproc == Map.fetch!(undeliverable, "handle-removed")
+      assert delivered == %{}
     end
 
     test "consumer that crashes during event processing is returned as undeliverable", ctx do
@@ -271,7 +276,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           id: :healthy_subscriber
         )
 
-      result =
+      {undeliverable, delivered} =
         ConsumerRegistry.publish(
           %{
             "handle-crash" => {:txn, %{lsn: 1}},
@@ -283,9 +288,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-ok", {:txn, %{lsn: 1}}}
 
       # Crashed handle is undeliverable with the crash reason
-      assert :processing_error == Map.fetch!(result, "handle-crash")
+      assert :processing_error == Map.fetch!(undeliverable, "handle-crash")
       # Healthy handle delivered successfully
-      refute Map.has_key?(result, "handle-ok")
+      refute Map.has_key?(undeliverable, "handle-ok")
+      assert Map.keys(delivered) == ["handle-ok"]
     end
 
     test "suspended consumers are retried but crashed consumers are not", ctx do
@@ -330,7 +336,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           id: :ok_subscriber
         )
 
-      result =
+      {undeliverable, delivered} =
         ConsumerRegistry.publish(
           %{
             "handle-suspend" => {:txn, %{lsn: 1}},
@@ -347,12 +353,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-suspend", {:txn, %{lsn: 1}}}
 
       # Crashed handle is undeliverable — NOT retried
-      assert :boom == Map.fetch!(result, "handle-crash")
+      assert :boom == Map.fetch!(undeliverable, "handle-crash")
       refute_receive {:start_consumer, "handle-crash"}
 
       # Healthy and retried-suspended handles delivered successfully
-      refute Map.has_key?(result, "handle-ok")
-      refute Map.has_key?(result, "handle-suspend")
+      refute Map.has_key?(undeliverable, "handle-ok")
+      refute Map.has_key?(undeliverable, "handle-suspend")
+      assert Map.keys(delivered) |> Enum.sort() == ["handle-ok", "handle-suspend"]
     end
 
     test "persistently suspending consumer results in shape removal after retry",
@@ -392,12 +399,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       end)
 
       # First broadcast: suspended → retry broadcast: also suspended → remove shape
-      result =
+      {undeliverable, delivered} =
         ConsumerRegistry.publish(%{"handle-stubborn" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {ShapeCleaner, :remove_shapes, ["handle-stubborn"]}
 
-      assert %{"handle-stubborn" => {:publish, :shape_removed}} == result
+      assert %{"handle-stubborn" => {:publish, :shape_removed}} == undeliverable
+      assert delivered == %{}
 
       # A new consumer has been started and suspended twice during the test
       assert_receive {:consumer_pid, pid}
@@ -424,7 +432,9 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} == ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      assert {%{}, %{^handle => ^pid}} =
+               ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
     end
@@ -460,7 +470,9 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} == ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      assert {%{}, %{^handle => _}} =
+               ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
 
@@ -468,7 +480,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      assert %{} ==
+      assert {%{}, %{"handle-1" => _}} =
                ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
@@ -511,7 +523,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           {:reply, :ok, state}
         end)
 
-      assert {%{}, %{}} =
+      assert {%{}, %{}, %{"handle-1" => ^sub1, "handle-2" => ^sub2}} =
                ConsumerRegistry.broadcast([
                  {"handle-1", :test_message_1, sub1},
                  {"handle-2", :test_message_2, sub2}
@@ -536,7 +548,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       {:ok, sub2} = TestSubscriber.start_link(on_message)
 
       Task.async(fn ->
-        assert {%{}, %{}} =
+        assert {%{}, %{}, %{"h-1" => ^sub1, "h-2" => ^sub2}} =
                  ConsumerRegistry.broadcast([
                    {"h-1", :test_message, sub1},
                    {"h-2", :test_message, sub2}
@@ -572,7 +584,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       pid = self()
 
       Task.async(fn ->
-        {_suspended, crashed} =
+        {_suspended, crashed, delivered} =
           ConsumerRegistry.broadcast([
             {"h-1", :test_message, sub1},
             {"h-2", :test_message, sub2}
@@ -580,6 +592,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
         # sub2 was killed, so it appears in crashed
         assert Map.has_key?(crashed, "h-2")
+        assert Map.keys(delivered) == ["h-1"]
 
         send(pid, :publish_finished)
       end)
@@ -614,7 +627,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       {:ok, sub2} = start_supervised({TestSubscriber, on_message_suspend}, id: :subscriber2)
       {:ok, sub3} = start_supervised({TestSubscriber, on_message}, id: :subscriber3)
 
-      {suspended, crashed} =
+      {suspended, crashed, delivered} =
         ConsumerRegistry.broadcast([
           {"h-1", :test_message, sub1},
           {"h-2", :test_message, sub2},
@@ -623,6 +636,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert Map.keys(suspended) |> Enum.sort() == ["h-1", "h-2"]
       assert crashed == %{}
+      assert Map.keys(delivered) == ["h-3"]
 
       assert_receive :message_received
       assert_receive :message_received
@@ -640,7 +654,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           {:reply, :ok, state}
         end)
 
-      assert {%{}, %{}} =
+      assert {%{}, %{}, %{"valid-shape" => ^subscriber}} =
                ConsumerRegistry.broadcast([
                  {"valid-shape", :event, subscriber},
                  {"removed-shape", :event, nil}
@@ -673,7 +687,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           id: :healthy_subscriber
         )
 
-      {suspended, crashed} =
+      {suspended, crashed, delivered} =
         ConsumerRegistry.broadcast([
           {"crash-handle", :test_event, crash_sub},
           {"healthy-handle", :test_event, healthy_sub}
@@ -687,6 +701,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       # The healthy handle should NOT appear in either map
       refute Map.has_key?(crashed, "healthy-handle")
       refute Map.has_key?(suspended, "healthy-handle")
+      assert Map.keys(delivered) == ["healthy-handle"]
     end
   end
 end

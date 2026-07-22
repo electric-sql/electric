@@ -173,6 +173,9 @@ shape_enable_suspend? = env!("ELECTRIC_SHAPE_SUSPEND_CONSUMER", :boolean, nil)
 shape_suspend_after =
   env!("ELECTRIC_SHAPE_SUSPEND_AFTER", &Electric.Config.parse_human_readable_time!/1, nil)
 
+flush_stall_grace_period =
+  env!("ELECTRIC_FLUSH_STALL_GRACE_PERIOD", &Electric.Config.parse_human_readable_time!/1, nil)
+
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
@@ -276,6 +279,7 @@ config :electric,
   shape_hibernate_after: shape_hibernate_after,
   shape_enable_suspend?: shape_enable_suspend?,
   shape_suspend_after: shape_suspend_after,
+  flush_stall_grace_period: flush_stall_grace_period,
   storage_dir: storage_dir,
   storage: storage_spec,
   cleanup_interval_ms:
