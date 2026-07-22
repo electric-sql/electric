@@ -104,7 +104,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   end
 
   @doc """
-  Check whether the shape has an incomplete flush entry (completed entries are deleted).
+  Returns true if the shape is awaiting a flush notification from storage.
   """
   @spec tracked?(t(), shape_id()) :: boolean()
   def tracked?(%__MODULE__{last_flushed: last_flushed}, shape_id) do
