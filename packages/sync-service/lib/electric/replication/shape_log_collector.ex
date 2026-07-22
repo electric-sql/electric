@@ -262,9 +262,8 @@ defmodule Electric.Replication.ShapeLogCollector do
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
         # A pending FlushTracker entry always has a live monitor watching the
-        # writer pid responsible for completing it, kept in two mirrored maps.
+        # writer pid responsible for completing it.
         writer_monitors: %{},
-        writer_monitor_refs: %{},
         # Shapes whose writer was challenged by the last stall check and has not
         # shown flush progress since (see :check_stalled_flushes).
         stall_suspects: MapSet.new(),
@@ -539,14 +538,16 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
-      when is_map_key(state.writer_monitor_refs, ref) do
-    shape_handle = Map.fetch!(state.writer_monitor_refs, ref)
-
+  def handle_info({{:down, shape_handle}, ref, :process, _pid, reason}, state) do
     state =
-      state
-      |> forget_writer_monitor(shape_handle, ref)
-      |> handle_writer_down(shape_handle, reason)
+      case Map.pop(state.writer_monitors, shape_handle) do
+        {{_pid, ^ref}, writer_monitors} ->
+          %{state | writer_monitors: writer_monitors}
+          |> handle_writer_down(shape_handle, reason)
+
+        {nil, _} ->
+          state
+      end
 
     {:noreply, state}
   end
@@ -676,33 +677,20 @@ defmodule Electric.Replication.ShapeLogCollector do
         # Monitoring an already-dead pid yields an immediate :noproc DOWN, so a
         # writer that dies before this call is never lost: the DOWN is classified
         # as teardown and the stall check picks the entry up if that was wrong.
-        ref = Process.monitor(pid)
-
-        %{
-          state
-          | writer_monitors: Map.put(state.writer_monitors, shape_handle, {pid, ref}),
-            writer_monitor_refs: Map.put(state.writer_monitor_refs, ref, shape_handle)
-        }
+        ref = Process.monitor(pid, tag: {:down, shape_handle})
+        %{state | writer_monitors: Map.put(state.writer_monitors, shape_handle, {pid, ref})}
     end
   end
 
   defp demonitor_writer(state, shape_handle) do
-    case Map.fetch(state.writer_monitors, shape_handle) do
-      {:ok, {_pid, ref}} ->
+    case Map.pop(state.writer_monitors, shape_handle) do
+      {{_pid, ref}, writer_monitors} ->
         Process.demonitor(ref, [:flush])
-        forget_writer_monitor(state, shape_handle, ref)
+        %{state | writer_monitors: writer_monitors}
 
-      :error ->
+      {nil, _} ->
         state
     end
-  end
-
-  defp forget_writer_monitor(state, shape_handle, ref) do
-    %{
-      state
-      | writer_monitors: Map.delete(state.writer_monitors, shape_handle),
-        writer_monitor_refs: Map.delete(state.writer_monitor_refs, ref)
-    }
   end
 
   # Any flush progress answers an outstanding stall challenge: if the shape's
