@@ -106,24 +106,8 @@ defmodule Electric.Shapes.Consumer do
       # The stop call timed out or the consumer exited mid-call. A consumer that is
       # still alive at this point is wedged and would keep pinning the stack's flush
       # boundary, so escalate to a kill.
-      kill_if_alive(pid)
-  end
-
-  defp kill_if_alive(pid) do
-    if Process.alive?(pid) do
-      ref = Process.monitor(pid)
       Process.exit(pid, :kill)
-
-      receive do
-        {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
-      after
-        5_000 ->
-          Process.demonitor(ref, [:flush])
-          :ok
-      end
-    else
       :ok
-    end
   end
 
   def stop(stack_id, shape_handle, reason) do
