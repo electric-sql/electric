@@ -97,7 +97,7 @@ defmodule Electric.Config do
     # After hibernating, wait this duration before suspending (terminating).
     # Only applies when shape_enable_suspend? is true.
     shape_suspend_after: :timer.minutes(10),
-    # How long an incomplete flush entry may sit without flush progress before its
+    # How long a pending flush entry may sit without flush progress before its
     # shape is invalidated to unpin the stack-wide flush boundary. The storage
     # contract already says writes slower than this should raise.
     flush_stall_grace_period: :timer.minutes(1),

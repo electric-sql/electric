@@ -1668,7 +1668,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   # Adapted from the stall reproduction in PR #4713, with the outcome inverted:
   # a consumer that dies without running its terminate callback (or wedges alive
   # without flushing) no longer pins the FlushTracker's global minimum forever.
-  # The SLC monitors the writer pid behind every incomplete flush entry and runs a
+  # The SLC monitors the writer pid behind every pending flush entry and runs a
   # periodic stall check, so the boundary is unpinned and the shape invalidated
   # without requiring new traffic or an explicit `remove_shape` call.
   describe "FlushTracker writer monitors and stall detection" do

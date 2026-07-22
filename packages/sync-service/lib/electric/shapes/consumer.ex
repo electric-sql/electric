@@ -480,7 +480,7 @@ defmodule Electric.Shapes.Consumer do
 
   # A suspending consumer must have flushed and notified everything it has written:
   # an empty txn_offset_mapping and no deferred flush notification guarantee that the
-  # ShapeLogCollector holds no incomplete flush entry for this shape.
+  # ShapeLogCollector holds no pending flush entry for this shape.
   defp consumer_can_suspend?(state) do
     is_snapshot_started(state) and not Shape.has_dependencies(state.shape) and
       not state.materializer_subscribed? and is_nil(state.pending_txn) and
