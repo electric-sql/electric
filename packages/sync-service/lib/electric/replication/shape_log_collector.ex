@@ -261,7 +261,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
-        # An incomplete FlushTracker entry always has a live monitor watching the
+        # A pending FlushTracker entry always has a live monitor watching the
         # writer pid responsible for completing it, kept in two mirrored maps.
         writer_monitors: %{},
         writer_monitor_refs: %{},
@@ -633,7 +633,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   # Anything else is a crash ({:shutdown, :suspend} included: a suspending consumer
-  # must have no incomplete flush entry, so a monitored suspend is a contract
+  # must have no pending flush entries, so a monitored suspend is a contract
   # violation). Unpin immediately and make sure the shape is invalidated — it must
   # not resume from storage that is behind the acked WAL.
   defp handle_writer_down(state, shape_handle, reason) do
@@ -921,7 +921,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     delivered_shapes =
       MapSet.difference(affected_shapes, undeliverable |> Map.keys() |> MapSet.new())
 
-    # An undeliverable shape may still hold an incomplete flush entry from an
+    # An undeliverable shape may still hold a pending flush entry from an
     # earlier commit. Run the failure through the same classification as a
     # writer DOWN instead of blindly unpinning: a crash still invalidates the
     # shape, and an ambiguous reason leaves the entry pinned for the stall
