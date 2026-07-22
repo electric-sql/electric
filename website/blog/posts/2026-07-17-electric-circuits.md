@@ -19,9 +19,16 @@ published: true
 import MemoryMatrixChart from '../../src/components/MemoryMatrixChart.vue'
 </script>
 
+<style scoped>
+figure figcaption {
+  text-align: center;
+  margin: 0.75rem auto 1.5rem;
+}
+</style>
+
 Electric Circuits is a new primitive that turns any static database query into a live one. Register a query from your application and its result set stays updated in realtime as changes happen on the database.
 
-Electric Circuits builds on the [theory of incremental view maintenance](https://www.vldb.org/pvldb/vol16/p1601-budiu.pdf) (IVM): rather than re-running a query when the data changes, the engine applies each change to the existing result. Beneath the query engine, [Durable Streams](https://electric-sql.com/blog/2025/12/09/announcing-durable-streams) deliver every change to clients.
+Electric Circuits builds on the [theory of incremental view maintenance](https://www.vldb.org/pvldb/vol16/p1601-budiu.pdf) (IVM): rather than re-running a query when the data changes, the engine applies each change against the existing result set. Beneath the query engine, [Durable Streams](https://electric-sql.com/blog/2025/12/09/announcing-durable-streams) deliver every change to clients.
 
 Electric Circuits provides end-to-end fine-grained reactivity at the precision of what's being rendered on screen. It is built on well-established open-source libraries, and is fully compatible with the Electric protocol.
 
@@ -40,11 +47,16 @@ The tension in a sync engine is granularity. Broad live queries are cheap to mai
 
 ## Electric Circuits
 
-An Electric Circuit maintains a SQL query as a live result: register a query and its result set stays updated as the database changes, without re-running it. The circuit is an incremental computation graph — changes flow from the database, through the graph, and out to the registered live queries they affect. Electric Circuits uses [DBSP](https://docs.rs/dbsp), an incremental view maintenance engine, to build the computation graphs.
+An Electric Circuit maintains a SQL query as a live result: register a query and its result set stays updated as the database changes, without re-running it. The circuit is an incremental computation graph: the engine tails Postgres logical replication, feeds every change through the graph, and delivers the output to the registered live queries it affects over [Durable Streams](https://electric-sql.com/blog/2025/12/09/announcing-durable-streams).
 
-[TanStack DB](https://tanstack.com/db) bridges live queries from the server all the way to client components. A live query on the backend can be bound to a collection in the frontend, closing the gap between what a client asks for and what the server sends over the wire. TanStack DB is also built on IVM technology.
+<figure>
+  <img src="/img/blog/electric-circuits/architecture.svg" alt="Electric Circuits architecture: Postgres feeds a logical replication tailer, changes flow through the circuits, and each live query result is written to a Durable Stream" />
+  <figcaption>
+    Electric Circuits architecture.
+  </figcaption>
+</figure>
 
-IVM is established technology. [Materialize](https://materialize.com/) and [Feldera](https://www.feldera.com/) apply it to the data warehouse, where it replaces the cost of re-running analytical queries over large data sets on every change. Electric Circuits applies the same technology to the application, delivering reactive state to clients over Durable Streams.
+The computation graphs are built with [DBSP](https://docs.rs/dbsp), the incremental view maintenance engine from the Feldera project. IVM is established technology: [Materialize](https://materialize.com/) and [Feldera](https://www.feldera.com/) apply it to the data warehouse, where it replaces the cost of re-running analytical queries over large data sets on every change. Electric Circuits applies it to the application, delivering reactive state to clients over Durable Streams.
 
 ## How Circuits work
 
@@ -52,12 +64,11 @@ You register a live query by making a POST request to the API, similarly to Elec
 
 ```sh
 curl -s -X POST http://localhost:8790/shapes \
-  -H 'content-type: application/json' \
   -d '{
     "table": "issues",
     "where": {
       "col": "project_id",
-      "in": { "table": "project_members", "project": "project_id",
+      "in": { "table": "project_members", "select": "project_id",
               "where": { "col": "user_id", "op": "eq", "value": 42 } }
     }
   }'
@@ -73,9 +84,18 @@ The query above compiles to this:
 
 ![The Electric Circuit for a subquery](/img/blog/electric-circuits/subquery-pipeline.svg)
 
-Logical replication feeds the change stream (**Δ**) per table to the circuit. The subquery runs along the `project_members` and `issues` branches: a filter (**σ**) narrows the stream to user 42's memberships, and a **distinct** maintains the *inner set*. Every `issues` change is matched against the user's project membership (**⋈**); a projection (**π**) turns a match into a change envelope, appended to the live query's stream.
+Logical replication feeds each table's change stream to the circuit. The subquery runs along the `project_members` branch: a filter narrows the stream to user 42's memberships, and a **distinct** maintains the *inner set* — the project ids the user belongs to. Every `issues` change is matched against that membership. The **projection** is where the circuit meets the log: it transforms the circuit's internal representation of a match — a key and a weight — into the change envelope that is appended to the live query's stream.
 
-A membership flip results in bulk data changes. If a user enrolls in a new project, the issues of that project must now **move in** to the live query; leave the project and they **move out**. In both cases the engine runs one indexed query against Postgres (`WHERE project_id = …`). On a move-in, the rows stream to the client as upserts; on a move-out, a delete is emitted for each key the query was serving — the engine keeps that key set as a compressed bitmap, so a row the client never had produces nothing.
+A membership flip results in bulk data changes. If a user enrolls in a new project, the issues of that project must now **move in** to the live query; leave the project and they **move out**. In both cases the engine runs one indexed query against Postgres (`WHERE project_id = …`). On a move-in, the rows stream to the client as upserts; on a move-out, a delete is emitted for each key the query was serving.
+
+<figure>
+  <video class="w-full" controls loop playsinline poster="/videos/blog/electric-circuits/move-in-out.jpg">
+    <source src="/videos/blog/electric-circuits/move-in-out.mp4" />
+  </video>
+  <figcaption>
+    Membership flip: enrolling in a project and leaving.
+  </figcaption>
+</figure>
 
 ### State de-duplication
 
@@ -83,7 +103,7 @@ A second live query with the same statement and different parameters reuses the 
 
 ### Circuits hold no rows
 
-The circuit holds only *keys* — the inner set of project ids, the membership decision — never a copy of your issues. Rows live in Postgres, which stays the source of truth; the engine fetches them only for an initial query, or when a membership flip moves rows in or out. The trade is one indexed read at those moments, in exchange for memory that scales with the queries you run, not the data you store — and established live queries in the streaming phase never pay it.
+The circuit holds only *keys* — the inner set of project ids, the membership decision — never a copy of your issues. Per-query key sets are compressed [Roaring bitmaps](https://roaringbitmap.org/) — bytes per row, not rows. Rows live in Postgres, which stays the source of truth; the engine fetches them only for an initial query, or when a membership flip moves rows in or out. The trade is one indexed read at those moments, in exchange for memory that scales with the queries you run, not the data you store — and established live queries in the streaming phase never pay it.
 
 ## What we've shipped
 
@@ -96,8 +116,7 @@ Aggregations are a perfect example of queries that require an expressive query e
 To register an aggregation:
 
 ```sh
-curl -s -X POST http://localhost:8790/aggregate.create \
-  -H 'content-type: application/json' \
+curl -s -X POST http://localhost:8790/shapes \
   -d '{
     "table": "issues",
     "fn": "sum",
@@ -106,17 +125,16 @@ curl -s -X POST http://localhost:8790/aggregate.create \
   }'
 ```
 
-The circuit is the same idea as the subquery's. A filter (**σ**) selects the matching rows, then an incremental **fold** accumulates them into the scalar: each delta nudges the running value — a `+1` on a row adds its `points`, a `−1` subtracts them — so the fold never re-scans the set. `min`/`max` keep a small ordered tally of the values behind the current extreme, so deleting the current minimum emits the next one instead of recomputing. And like every circuit, identical aggregations are shared — any number of dashboards on the same live count tail one fold and one stream.
+The circuit is the same idea as the subquery's. A filter selects the matching rows, then an incremental **fold** accumulates them into the scalar: each delta nudges the running value — a `+1` on a row adds its `points`, a `−1` subtracts them — so the fold never re-scans the set. `min`/`max` keep a small ordered tally of the values behind the current extreme, so deleting the current minimum emits the next one instead of recomputing. And like every circuit, identical aggregations are shared — any number of dashboards on the same live count tail one fold and one stream.
 
 ### Benchmarks
 
-The memory model above makes three testable claims:
+The engine's memory model is what makes live queries cheap to operate: a circuit retains keys and counts, never rows, and queries that share a statement share a circuit. Two testable claims follow:
 
-- Memory scales with the number of live queries, not with the size of the database
+- Memory scales with the number of live queries
 - State is de-duplicated across queries that share a statement
-- Internal state stays bounded as data grows
 
-We measured all three on the LinearLite schema, seeded at three deployment sizes (1k, 10k and 100k rows), with simulated user sessions each opening ten live queries, up to 10,000 registered live queries.
+We measured both on the LinearLite schema, seeded at three deployment sizes (1k, 10k and 100k rows), with simulated user sessions each opening ten live queries, up to 10,000 registered live queries.
 
 <MemoryMatrixChart
   title="Live query registration"
@@ -130,31 +148,22 @@ We measured all three on the LinearLite schema, seeded at three deployment sizes
   :height="360"
 />
 
-**Memory scales with live queries, not the database size.** At every step of the chart, the three bars are near-identical: idle, the engine sits at 24.5 MiB whether the database holds 1k or 100k rows, and with 10,000 live queries registered, growing the dataset 100× moves memory from 94 MiB to just 110 MiB.
+**Memory scales with live queries.** At every step of the chart, the three bars are near-identical: idle, the engine sits at 24.5 MiB whether the database holds 1k or 100k rows, and with 10,000 live queries registered, growing the dataset 100× moves memory from 94 MiB to just 110 MiB.
 
 **De-duplication holds.** The 10,000 live queries collapse onto a handful of shared circuits — one per family of queries — and that handful is the same at 100 queries as at 10,000. Registration is the only per-query cost: across the full run, **7–9 KiB per live query** on average. That figure is higher than it needs to be — the circuit state behind it is only ~0.1 KiB per query; the rest is per-stream bookkeeping we haven't optimized yet.
-
-The queries above only register. A second run goes further: each session's visibility query is *materialized* — its result backfilled from Postgres, and the keys of the rows it serves retained. This is the one place the model allows the data to show up:
-
-<MemoryMatrixChart
-  title="Materialized live queries"
-  subtitle="Engine memory usage with materialized live queries, including the visible-row key sets; one bar per deployment size"
-  :data="[
-    { label: '1k rows', data: [24.5, 34.1, 39.6, 55.3, 98.0], color: '#75fbfd' },
-    { label: '10k rows', data: [24.6, 43.2, 48.8, 68.9, 121.7], color: '#f59e0b' },
-    { label: '100k rows', data: [24.5, 156.8, 193.1, 217.6, 248.3], color: '#a855f7' }
-  ]"
-  :labels="['0', '1,000', '2,500', '5,000', '10,000']"
-  :height="360"
-/>
-
-And it shows up exactly as the model predicts — as keys, not rows: **~2 bytes per visible row**, or 18 MiB of accounted state for the ~12 million rows those queries serve at the 100k size. The 100k bars stand out only because each visibility query sees a hundred times more rows; the price per row is the key in a compressed [Roaring bitmap](https://roaringbitmap.org/), never the row itself.
-
-**Bounded stays bounded.** A circuit's internal indexes — the operator state DBSP keeps to decide membership incrementally — live behind a disk-backed cache: hot state stays in memory under an explicit budget (64 MiB by default) and the rest spills to disk. Worst-case memory is a configuration knob, not an emergent property of the workload.
 
 ### The circuit visualizer
 
 The **circuit visualizer** is a learning tool for how circuits work. It shows the live queries currently defined on the engine and the circuit that maintains them — every table source, filter, join and aggregate node. You can define new live queries, write to the database, and see each change move through the circuit to the live queries it updates: the affected nodes flash and the edges pulse as the delta travels. It has two views — a logical view of the query graph, and the underlying DBSP circuit — and an activity log to replay changes one at a time.
+
+<figure>
+  <video class="w-full" controls loop playsinline poster="/videos/blog/electric-circuits/circuit-vis.jpg">
+    <source src="/videos/blog/electric-circuits/circuit-vis.mp4" />
+  </video>
+  <figcaption>
+    Circuit visualizer running.
+  </figcaption>
+</figure>
 
 ## Live context for the agent loop
 
@@ -164,7 +173,7 @@ Dynamic and expressive queries are essential characteristics of an API for agent
 
 ## Try it now
 
-Applications and agents need live queries for greater user experience. Reduce the gap between the state that you expose in your app and the state that you render on screen. Electric circuits is the next generation of live queries: fine-grained, durable and scalable. Clone the repo, checkout the demo app with the circuit visualizer alongside.
+Applications and agents need live queries for greater user experience. Electric Circuits is the next generation of live queries: expressive, durable and scalable. Clone the repo and check out the demo app with the circuit visualizer alongside.
 
 One command boots the whole stack:
 
