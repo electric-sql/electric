@@ -577,6 +577,106 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert Lsn.to_integer(get_confirmed_flush_lsn(conn, ctx.slot_name)) >=
                Lsn.to_integer(Lsn.increment(lsn2, 1))
     end
+
+    @tag with_empty_publication?: true
+    test "keepalives don't ack WAL past an unflushed txn on an already-streamed table",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      pid = start_client(ctx)
+
+      # First insert into serial_ids in this walsender session. The txn carries
+      # a Relation message which is dispatched as a standalone mid-transaction
+      # event, so this txn incidentally clears flush_up_to_date?.
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+      assert {lsn1, %NewRecord{record: %{"id" => "1"}}} = receive_tx_change_with_lsn()
+
+      # Confirm txn1 as flushed: lsn1 is the last seen txn, so the client
+      # becomes fully caught up and flush_up_to_date? is re-armed.
+      send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn1)})
+
+      # A second small insert into the now already-streamed table: no Relation
+      # message and fewer changes than max_batch_size, so the whole txn is
+      # decoded into a single commit-carrying fragment with no mid-transaction
+      # event dispatch. Its flush is never confirmed.
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (2)", [])
+      assert {lsn2, %NewRecord{record: %{"id" => "2"}}} = receive_tx_change_with_lsn()
+
+      # Writes to a table outside the publication make the walsender skip
+      # transactions and send keepalives with an advancing wal_end.
+      for _ <- 1..10, do: insert_item(conn, "test value")
+
+      # Wait long enough for those keepalives to arrive (their timing is up to
+      # PG), then make the client report its ack state: re-notifying an
+      # already-confirmed boundary — as happens whenever any shape reports a
+      # flush — sends a standby status update carrying the current flushed_wal.
+      confirmed =
+        Enum.reduce_while(1..20, nil, fn _, _ ->
+          Process.sleep(50)
+          send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn1)})
+
+          confirmed = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+          if Lsn.compare(confirmed, lsn2) == :gt do
+            {:halt, confirmed}
+          else
+            {:cont, confirmed}
+          end
+        end)
+
+      # The unconfirmed txn2 must hold the flush boundary back: acknowledging
+      # WAL past it means PG can drop WAL that no shape has durably stored.
+      assert Lsn.compare(confirmed, lsn2) != :gt,
+             "confirmed_flush_lsn #{confirmed} advanced past the unflushed txn at #{lsn2}"
+    end
+
+    @tag with_empty_publication?: true
+    @tag database_settings: ["wal_sender_timeout='3s'"]
+    test "keepalives keep advancing acks past txns that are confirmed during processing",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      # The confirming handler notifies the flush boundary from within event
+      # processing, before the reply — like the ShapeLogCollector does for a
+      # transaction that affects no shapes. Such transactions must not stall
+      # the keepalive-driven slot advance. No further notifications arrive
+      # after the reply, so the up-to-date state must be recomputed once the
+      # transaction is acknowledged; the acks reach PG via the client's
+      # periodic status updates (wal_sender_timeout/3, hence the 3s setting).
+      replication_opts =
+        Keyword.put(
+          ctx.replication_opts,
+          :handle_event,
+          {__MODULE__, :test_handle_event_confirming_async, [self()]}
+        )
+
+      start_client(ctx, replication_opts: replication_opts)
+
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+      assert {lsn1, %NewRecord{record: %{"id" => "1"}}} = receive_tx_change_with_lsn()
+
+      # WAL produced outside the publication arrives as keepalives and must
+      # keep being acknowledged past the already-confirmed transaction.
+      for _ <- 1..10, do: insert_item(conn, "test value")
+
+      confirmed =
+        Enum.reduce_while(1..40, nil, fn _, _ ->
+          Process.sleep(100)
+
+          confirmed = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+          if Lsn.to_integer(confirmed) > Lsn.to_integer(lsn1) + 1 do
+            {:halt, confirmed}
+          else
+            {:cont, confirmed}
+          end
+        end)
+
+      # If the up-to-date state were only recomputed when the notification
+      # arrives, the ack would stall at exactly lsn1 + 1.
+      assert Lsn.to_integer(confirmed) > Lsn.to_integer(lsn1) + 1,
+             "confirmed_flush_lsn #{confirmed} stalled at the confirmed txn at #{lsn1}"
+    end
   end
 
   defp get_confirmed_flush_lsn(conn, slot_name) do
@@ -832,6 +932,23 @@ defmodule Electric.Postgres.ReplicationClientTest do
   # Async variant for the $gen_call-based apply_event. Runs the handler inline
   # (in the gen_statem process) and queues the result as a {ref, result} message.
   # Since these test handlers are fast (no delay), this doesn't block keepalives.
+  # Like test_handle_event_async, but confirms a committed transaction's flush
+  # boundary from within event processing, before replying — mirroring the
+  # ShapeLogCollector's behaviour for a transaction that affects no shapes.
+  # Runs inside the replication client process, so send(self(), ...) puts the
+  # notification in the client's mailbox ahead of the handler's reply.
+  def test_handle_event_confirming_async(
+        %TransactionFragment{commit: commit, lsn: lsn} = event,
+        test_pid
+      )
+      when not is_nil(commit) do
+    send(self(), {:flush_boundary_updated, Lsn.to_integer(lsn)})
+    test_handle_event_async(event, test_pid)
+  end
+
+  def test_handle_event_confirming_async(event, test_pid),
+    do: test_handle_event_async(event, test_pid)
+
   def test_handle_event_async(event, test_pid) do
     ref = make_ref()
 
