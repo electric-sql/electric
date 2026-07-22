@@ -441,13 +441,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
-    now = System.monotonic_time(:millisecond)
-
     state =
       Map.update!(
         state,
         :flush_tracker,
-        &FlushTracker.handle_flush_notification(&1, shape_id, offset, now)
+        &FlushTracker.handle_flush_notification(&1, shape_id, offset, now_ms())
       )
 
     # A flush that completes the entry removes it from the tracker; its writer no
@@ -461,10 +459,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_cast({:writer_flush_deferred, shape_handle}, state) do
-    now = System.monotonic_time(:millisecond)
-
-    state = Map.update!(state, :flush_tracker, &FlushTracker.touch(&1, shape_handle, now))
-
+    state = Map.update!(state, :flush_tracker, &FlushTracker.touch(&1, shape_handle, now_ms()))
     {:noreply, clear_stall_suspect(state, shape_handle)}
   end
 
@@ -553,7 +548,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_info(:check_stalled_flushes, state) do
-    now = System.monotonic_time(:millisecond)
+    now = now_ms()
 
     grace_period = stall_grace_period(state.stack_id)
     schedule_stall_check(grace_period)
@@ -797,12 +792,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       if txn_fragment.commit do
-        FlushTracker.handle_txn_fragment(
-          state.flush_tracker,
-          txn_fragment,
-          [],
-          System.monotonic_time(:millisecond)
-        )
+        FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [], now_ms())
       else
         state.flush_tracker
       end
@@ -930,12 +920,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
         flush_tracker =
-          FlushTracker.handle_txn_fragment(
-            state.flush_tracker,
-            event,
-            delivered_shapes,
-            System.monotonic_time(:millisecond)
-          )
+          FlushTracker.handle_txn_fragment(state.flush_tracker, event, delivered_shapes, now_ms())
 
         # Every delivered shape still tracked after this commit gets a monitor on
         # the pid that actually received it — not just newly tracked shapes. The
@@ -1148,4 +1133,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         {:error, reason}
     end
   end
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end
