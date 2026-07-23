@@ -131,6 +131,11 @@ defmodule Electric.Config do
     # Heap-size threshold (in BYTES) above which a consumer runs :erlang.garbage_collect()
     # after processing a transaction fragment.
     consumer_gc_heap_threshold: nil,
+    # Message-queue length above which a live shape subscriber that has stopped
+    # draining its mailbox (e.g. a stalled/dead client socket) is shed, to avoid
+    # unbounded memory growth. Always a positive integer; shedding cannot be
+    # disabled.
+    slow_subscriber_max_queue_len: 10_000,
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),

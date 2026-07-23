@@ -162,6 +162,10 @@ defmodule Electric.StackSupervisor do
                        type: {:or, [:non_neg_integer, nil]},
                        default: Electric.Config.default(:consumer_gc_heap_threshold)
                      ],
+                     slow_subscriber_max_queue_len: [
+                       type: :pos_integer,
+                       default: Electric.Config.default(:slow_subscriber_max_queue_len)
+                     ],
                      consumer_partitions: [type: {:or, [:pos_integer, nil]}, default: nil]
                    ]
                  ],
@@ -368,6 +372,9 @@ defmodule Electric.StackSupervisor do
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
     consumer_gc_heap_threshold = Keyword.fetch!(config.tweaks, :consumer_gc_heap_threshold)
 
+    slow_subscriber_max_queue_len =
+      Keyword.fetch!(config.tweaks, :slow_subscriber_max_queue_len)
+
     shape_cache_opts = [
       stack_id: stack_id
     ]
@@ -419,6 +426,7 @@ defmodule Electric.StackSupervisor do
            flush_stall_grace_period: flush_stall_grace_period,
            process_spawn_opts: process_spawn_opts,
            consumer_gc_heap_threshold: consumer_gc_heap_threshold,
+           slow_subscriber_max_queue_len: slow_subscriber_max_queue_len,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},
         {Electric.AsyncDeleter,
