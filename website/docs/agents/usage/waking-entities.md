@@ -141,7 +141,7 @@ Two wake types reach handlers directly:
 - `"inbox"` — an external message was delivered to this entity's inbox.
 - `"wake"` — a synthesised wake for anything else (child finished, collection change, cron, webhook source, timeout). The specifics are on `wake.payload`. A future-send schedule delivers a message, so it arrives as `"inbox"`.
 
-For the full payload shape (`changes[]`, `finished_child`, `other_children`, `timeout`), see the [wake-type catalog](../reference/wake-event#wake-type-catalog) in the reference.
+For the full payload shape (`changes[]`, `finished_child`, `timeout`), see the [wake-type catalog](../reference/wake-event#wake-type-catalog) in the reference.
 
 ## Coalescing and idempotency
 
