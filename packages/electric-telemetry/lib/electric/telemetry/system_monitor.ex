@@ -8,6 +8,9 @@ defmodule ElectricTelemetry.SystemMonitor do
     - long_schedule
     - long_message_queue
 
+  It also hosts slow periodic work that doesn't fit the poller's single ~5s
+  period: the per-allocator fragmentation sampling (`vm.alloc.fragmentation.*`)
+  runs on its own one-minute timer here.
   """
 
   use GenServer
@@ -21,6 +24,8 @@ defmodule ElectricTelemetry.SystemMonitor do
   @vm_monitor_long_message_queue [:vm, :monitor, :long_message_queue]
   @garbage_collect_interval :timer.hours(1)
   @garbage_collect_message :periodic_garbage_collect
+  @allocator_fragmentation_interval :timer.minutes(1)
+  @allocator_fragmentation_message :sample_allocator_fragmentation
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts.intervals_and_thresholds, name: __MODULE__)
@@ -39,6 +44,8 @@ defmodule ElectricTelemetry.SystemMonitor do
       long_message_queue_timer: nil,
       garbage_collect_timer: nil
     }
+
+    schedule_allocator_fragmentation()
 
     {:ok, schedule_garbage_collect(state)}
   end
@@ -142,6 +149,19 @@ defmodule ElectricTelemetry.SystemMonitor do
     {:noreply, %{state | garbage_collect_timer: nil} |> schedule_garbage_collect()}
   end
 
+  def handle_info(@allocator_fragmentation_message, state) do
+    # Don't let a metrics hiccup take down the system monitor.
+    try do
+      ElectricTelemetry.SystemMetrics.allocator_fragmentation_measurement()
+    rescue
+      error -> Logger.warning("Allocator fragmentation sampling failed: #{inspect(error)}")
+    end
+
+    schedule_allocator_fragmentation()
+
+    {:noreply, state}
+  end
+
   defp log_long_message_queue_event(pid, type) do
     with {:message_queue_len, queue_len} <- Process.info(pid, :message_queue_len) do
       :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
@@ -162,6 +182,14 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   defp maybe_start_long_message_queue_timer(state), do: state
+
+  defp schedule_allocator_fragmentation do
+    Process.send_after(
+      self(),
+      @allocator_fragmentation_message,
+      @allocator_fragmentation_interval
+    )
+  end
 
   defp schedule_garbage_collect(%{garbage_collect_timer: nil} = state) do
     %{

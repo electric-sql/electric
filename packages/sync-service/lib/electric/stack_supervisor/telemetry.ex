@@ -161,6 +161,27 @@ defmodule Electric.StackSupervisor.Telemetry do
         :pending ->
           :ok
       end
+
+      report_per_shape_disk_usage(stack_id)
+    end
+
+    # Emit `electric.storage.dir.bytes` for the top-N largest shapes only (the
+    # disk walk bounds cardinality by keeping just the top-N buckets). Each
+    # series is tagged with the shape handle.
+    defp report_per_shape_disk_usage(stack_id) do
+      case ElectricTelemetry.DiskUsage.current_dirs(stack_id) do
+        {:ok, top_dirs} ->
+          Enum.each(top_dirs, fn {shape_handle, bytes} ->
+            Electric.Telemetry.OpenTelemetry.execute(
+              [:electric, :storage, :dir],
+              %{bytes: bytes},
+              %{stack_id: stack_id, shape: shape_handle}
+            )
+          end)
+
+        :pending ->
+          :ok
+      end
     end
   else
     def report_disk_usage(_stack_id, _telemetry_opts) do
@@ -200,6 +221,7 @@ defmodule Electric.StackSupervisor.Telemetry do
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
         |> Keyword.put(:storage_dir, config.storage_dir)
+        |> Keyword.put(:disk_usage_group_depth, shape_dir_group_depth(config))
         |> Keyword.put(:otel_opts, otel_opts)
         # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(
@@ -216,6 +238,48 @@ defmodule Electric.StackSupervisor.Telemetry do
         )
 
       {ElectricTelemetry.StackTelemetry, telemetry_opts}
+    end
+
+    @doc """
+    Computes the directory depth, relative to the disk-usage walk root
+    (`config.storage_dir`), at which a single shape's directory sits. Used to
+    bucket the per-shape `electric.storage.dir.bytes` metric by shape handle.
+
+    The walk root and the shape storage root differ between deployments:
+
+      * standalone sync-service walks the bare `ELECTRIC_STORAGE_DIR` while
+        PureFileStorage is configured with `<storage_dir>/shapes`, so a shape
+        lives at `<root>/shapes/<stack_id>/<p1>/<p2>/<shape_handle>` (depth 5);
+      * cloud (multi-tenant) walks the per-tenant `<root>/<tenant_id>/shapes`
+        directly, so a shape lives at `<root>/<p1>/<p2>/<shape_handle>` relative
+        to that walk root (depth 4).
+
+    Rather than hard-code either number, the depth is derived from the actual
+    path that `Electric.ShapeCache.PureFileStorage.shape_data_dir/3` produces for
+    a sample shape handle, so it stays correct if the storage sharding scheme
+    changes. Returns `nil` (grouping disabled) for storage backends without an
+    on-disk shape layout.
+    """
+    def shape_dir_group_depth(config) do
+      with {Electric.ShapeCache.PureFileStorage, storage_opts} <- config.storage,
+           shape_storage_dir when is_binary(shape_storage_dir) <-
+             Keyword.get(storage_opts, :storage_dir) do
+        base_path = Path.join(shape_storage_dir, config.stack_id)
+        # Use a syntactically valid sample handle (>= 4 chars) so the real
+        # path-building code determines the depth, then measure it relative to
+        # the walk root.
+        sample_handle = "00000000-0000"
+        shape_dir = Electric.ShapeCache.PureFileStorage.shape_data_dir(base_path, sample_handle)
+        path_depth(shape_dir) - path_depth(config.storage_dir)
+      else
+        _ -> nil
+      end
+    end
+
+    defp path_depth(path) do
+      path
+      |> Path.split()
+      |> length()
     end
 
     defp default_metrics_from_periodic_measurements do

@@ -70,6 +70,112 @@ defmodule ElectricTelemetry.DiskUsageTest do
     :ok = DiskUsage.update(ctx.usage)
   end
 
+  describe "per-directory grouping (top-N)" do
+    # Mirror the real electric shape storage layout, where DiskUsage walks the
+    # per-stack `shapes` root and a shape lives at
+    # `<walk_root>/<stack_id>/<p1>/<p2>/<shape_handle>` (the two-level shard is
+    # the first two char-pairs of the handle; see
+    # Electric.ShapeCache.PureFileStorage.shape_data_dir/3). The shape handle
+    # therefore sits at depth 4 below the walk root.
+    @shape_dir_depth 4
+
+    defp make_shape(walk_root, stack_id, handle, bytes) do
+      <<p1::binary-2, p2::binary-2, _::binary>> = handle
+      base = Path.join([walk_root, stack_id, p1, p2, handle])
+      File.mkdir_p!(base)
+      File.write!(Path.join(base, "1.data"), :binary.copy("0", bytes), [:raw, :binary])
+      bytes
+    end
+
+    defp make_shape(ctx, handle, bytes) when is_map(ctx) do
+      make_shape(ctx.tmp_dir, ctx.stack_id, handle, bytes)
+    end
+
+    @tag start_usage: false
+    test "emits only the top-N largest shapes", ctx do
+      # 5 shapes with distinct handles and sizes, ask for top 3.
+      make_shape(ctx, "aaaa1111", 100)
+      make_shape(ctx, "bbbb2222", 500)
+      make_shape(ctx, "cccc3333", 300)
+      make_shape(ctx, "dddd4444", 50)
+      make_shape(ctx, "eeee5555", 400)
+
+      ctx = start_usage_grouped(ctx, group_depth: @shape_dir_depth, top_n: 3)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, 1350, _} = DiskUsage.current(ctx.stack_id)
+
+      assert {:ok, top} = DiskUsage.current_dirs(ctx.stack_id)
+      # Sorted desc by size, only the 3 largest, smaller ones dropped.
+      assert top == [{"bbbb2222", 500}, {"eeee5555", 400}, {"cccc3333", 300}]
+      handles = Enum.map(top, &elem(&1, 0))
+      refute "aaaa1111" in handles
+      refute "dddd4444" in handles
+    end
+
+    @tag start_usage: false
+    test "tag values are the shape_handle dir names", ctx do
+      make_shape(ctx, "abcd1234handle", 10)
+
+      ctx = start_usage_grouped(ctx, group_depth: @shape_dir_depth, top_n: 10)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, [{"abcd1234handle", 10}]} = DiskUsage.current_dirs(ctx.stack_id)
+    end
+
+    @tag start_usage: false
+    test "wrong (too shallow) group_depth buckets by hash-prefix, not handle", ctx do
+      # Regression guard for the off-by-one bug: bucketing one level too shallow
+      # keys by the 2-char shard prefix `<p2>`, aggregating many shapes into one
+      # bucket instead of reporting per shape. Two shapes that share a shard
+      # prefix must collapse together at the wrong depth.
+      make_shape(ctx, "zzaa1111", 10)
+      make_shape(ctx, "zzaa2222", 20)
+
+      # @shape_dir_depth - 1 == bucket by <p2> ("aa"), which both shapes share.
+      ctx = start_usage_grouped(ctx, group_depth: @shape_dir_depth - 1, top_n: 10)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, [{"aa", 30}]} = DiskUsage.current_dirs(ctx.stack_id)
+    end
+
+    @tag start_usage: false
+    test "grouping disabled by default leaves current_dirs pending", ctx do
+      make_shape(ctx, "aaaa1111", 10)
+      ctx = start_usage(ctx)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, 10, _} = DiskUsage.current(ctx.stack_id)
+      assert :pending = DiskUsage.current_dirs(ctx.stack_id)
+    end
+
+    @tag start_usage: false
+    test "total stays correct alongside grouping", ctx do
+      total =
+        make_shape(ctx, "aaaa1111", 100) +
+          make_shape(ctx, "bbbb2222", 250)
+
+      ctx = start_usage_grouped(ctx, group_depth: @shape_dir_depth)
+      :ok = DiskUsage.update(ctx.usage)
+
+      assert {:ok, ^total, _} = DiskUsage.current(ctx.stack_id)
+    end
+  end
+
+  defp start_usage_grouped(ctx, opts) do
+    {:ok, usage_pid} =
+      DiskUsage.start_link(
+        [
+          stack_id: ctx.stack_id,
+          storage_dir: ctx.tmp_dir,
+          manual_refresh: true,
+          update_period: 1_000
+        ] ++ opts
+      )
+
+    Map.put(ctx, :usage, usage_pid)
+  end
+
   defp stop_usage(ctx) do
     ref = Process.monitor(ctx.usage)
     Process.unlink(ctx.usage)

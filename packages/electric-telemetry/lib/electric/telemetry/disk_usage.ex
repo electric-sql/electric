@@ -4,6 +4,7 @@ defmodule ElectricTelemetry.DiskUsage do
   alias ElectricTelemetry.DiskUsage.Disk
 
   @default_update_period 60_000
+  @default_top_n 10
 
   def start_link(args) do
     {:ok, stack_id} = Keyword.fetch(args, :stack_id)
@@ -15,15 +16,29 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   def current(stack_id) do
-    table = name(stack_id)
-
-    case :ets.lookup(table, :usage_bytes) do
-      [] -> :pending
-      [{:usage_bytes, _bytes, nil, _duration}] -> :pending
+    case lookup(stack_id, :usage_bytes) do
       [{:usage_bytes, bytes, %DateTime{}, duration}] -> {:ok, bytes, duration}
+      _ -> :pending
     end
+  end
+
+  @doc """
+  Returns the top-N largest per-directory subtotals as a list of
+  `{dir_name, bytes}` tuples sorted descending by size, or `:pending` if no
+  measurement with grouping enabled has completed yet.
+  """
+  def current_dirs(stack_id) do
+    case lookup(stack_id, :top_dirs) do
+      [{:top_dirs, dirs}] -> {:ok, dirs}
+      _ -> :pending
+    end
+  end
+
+  # The table doesn't exist until this stack's DiskUsage server has started.
+  defp lookup(stack_id, key) do
+    :ets.lookup(name(stack_id), key)
   rescue
-    ArgumentError -> :pending
+    ArgumentError -> []
   end
 
   @impl GenServer
@@ -47,9 +62,12 @@ defmodule ElectricTelemetry.DiskUsage do
         storage_dir: storage_dir,
         manual_refresh: Keyword.get(args, :manual_refresh, false),
         update_period: update_period,
+        group_depth: Keyword.get(args, :group_depth),
+        top_n: Keyword.get(args, :top_n, @default_top_n),
         usage_bytes: usage_bytes,
         updated_at: updated_at,
         measurement_duration: 0,
+        top_dirs: nil,
         timer: nil
       }
       |> ets_write()
@@ -77,32 +95,45 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   defp read_disk_usage(state) do
-    {duration, bytes} =
+    exclude = [usage_cache_file(state.storage_dir)]
+
+    {duration, {bytes, buckets}} =
       :timer.tc(
-        fn ->
-          Disk.recursive_usage(state.storage_dir, [usage_cache_file(state.storage_dir)])
-        end,
+        fn -> Disk.recursive_usage_grouped(state.storage_dir, exclude, state.group_depth) end,
         :millisecond
       )
 
-    updated_at = DateTime.utc_now()
-
-    %{state | usage_bytes: bytes, updated_at: updated_at, measurement_duration: duration}
+    %{
+      state
+      | usage_bytes: bytes,
+        updated_at: DateTime.utc_now(),
+        measurement_duration: duration,
+        top_dirs: state.group_depth && top_n(buckets, state.top_n)
+    }
     |> ets_write()
     |> save_usage!()
     |> cancel_timer()
     |> schedule_update()
   end
 
-  defp ets_write(state) do
-    %{
-      usage_bytes: usage_bytes,
-      updated_at: updated_at,
-      table: table,
-      measurement_duration: duration
-    } = state
+  # The `n` largest `{name, bytes}` buckets, sorted descending by size. The
+  # full bucket map is materialized and sorted once per (~60s) walk before
+  # being trimmed; fine at ~10k shapes per stack — replace with a bounded
+  # min-heap if a stack ever holds hundreds of thousands.
+  defp top_n(buckets, n) do
+    buckets
+    |> Enum.sort_by(fn {_name, bytes} -> bytes end, :desc)
+    |> Enum.take(n)
+  end
 
-    :ets.insert(table, {:usage_bytes, usage_bytes, updated_at, duration})
+  defp ets_write(state) do
+    :ets.insert(
+      state.table,
+      {:usage_bytes, state.usage_bytes, state.updated_at, state.measurement_duration}
+    )
+
+    if dirs = state.top_dirs, do: :ets.insert(state.table, {:top_dirs, dirs})
+
     state
   end
 
