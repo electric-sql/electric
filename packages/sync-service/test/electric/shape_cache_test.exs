@@ -1301,57 +1301,7 @@ defmodule Electric.ShapeCacheTest do
                ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
     end
 
-    test "restores shapes with subqueries and their materializers", ctx do
-      {shape_handle, _} =
-        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
-
-      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-
-      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
-
-      # Materializer should be started
-      assert Process.alive?(
-               GenServer.whereis(
-                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-               )
-             )
-
-      # Register this test as the connection manager to get "consumers ready" notification
-      restart_shape_cache(ctx)
-
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
-    end
-
-    test "restarted subquery shape reseeds the subquery index after restart", ctx do
-      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
-
-      {shape_handle, _} =
-        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
-
-      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-
-      # Before restart: shape should have positions in the SubqueryIndex
-      index_before = SubqueryIndex.for_stack(ctx.stack_id)
-      assert index_before != nil
-      assert SubqueryIndex.has_positions?(index_before, shape_handle)
-
-      restart_shape_cache(ctx)
-
-      # After restart: the SubqueryIndex is recreated by the ShapeLogCollector.
-      # The consumer re-initializes and reseeds the index.
-      # Wait for the consumer to finish restoring.
-      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-
-      index_after = SubqueryIndex.for_stack(ctx.stack_id)
-      assert index_after != nil
-
-      assert wait_until(
-               fn -> SubqueryIndex.has_positions?(index_after, shape_handle) end,
-               200
-             )
-    end
-
-    test "restores shapes with subqueries and their materializers when backup missing", ctx do
+    test "drops shapes with subqueries and their materializers on restart", ctx do
       {shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
@@ -1368,7 +1318,59 @@ defmodule Electric.ShapeCacheTest do
 
       restart_shape_cache(ctx)
 
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
+      # Restoring subquery shapes consistently is problematic, so on restart we
+      # drop every shape involved in a subquery (the outer shape and its
+      # dependency materializers) and let clients re-request them from scratch.
+      # The drop runs asynchronously in handle_continue(:wait_for_restore).
+      assert wait_until(fn -> ShapeCache.list_shapes(ctx.stack_id) == [] end, 500)
+
+      # The ShapeLogCollector rebuilds its routing indexes independently from
+      # ShapeStatus, so the dropped hierarchy must be absent there too — not just
+      # from ShapeCache.list_shapes/1 — otherwise events could still be routed to
+      # the dropped handles after mark_as_ready.
+      active = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+      refute shape_handle in active
+      refute dep_handle in active
+    end
+
+    test "drops shapes with subqueries on restart even when backup missing", ctx do
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
+
+      # Materializer should be started
+      assert Process.alive?(
+               GenServer.whereis(
+                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
+               )
+             )
+
+      restart_shape_cache(ctx)
+
+      assert wait_until(fn -> ShapeCache.list_shapes(ctx.stack_id) == [] end, 500)
+    end
+
+    test "ShapeLogCollector restore skips the subquery hierarchy", ctx do
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
+
+      # Restart ONLY the collector, leaving ShapeStatus (and the shapes) intact so
+      # the async ShapeCache drop is not involved. The collector restores its
+      # routing indexes independently from ShapeStatus, and must skip the subquery
+      # hierarchy rather than reinstate it — otherwise those handles would receive
+      # events before the drop's asynchronous cleanup lands after a real restart.
+      :ok = stop_supervised(ctx.shape_log_collector)
+      _ = with_shape_log_collector(ctx)
+
+      active = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+      refute shape_handle in active
+      refute dep_handle in active
     end
 
     defp restart_shape_cache(ctx, opts \\ []) do
@@ -1399,7 +1401,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "wait_for_restore eager subquery consumer start" do
+  describe "wait_for_restore drops subquery shapes" do
     setup [
       :with_noop_publication_manager,
       :with_log_chunking,
@@ -1407,124 +1409,25 @@ defmodule Electric.ShapeCacheTest do
       :with_shape_log_collector
     ]
 
-    test "shapes with subquery dependencies have their consumer eagerly started", ctx do
+    test "shapes with subquery dependencies are dropped on restore", ctx do
       %{stack_id: stack_id} = ctx
       test_pid = self()
 
       # Pre-add a subquery shape to ShapeStatus, simulating a shape that
       # was created in a prior incarnation of the stack and is now being
-      # restored. The shape's consumer is NOT yet running.
+      # restored. Restoring subquery shapes consistently is problematic, so
+      # instead we drop them on restart and let clients refetch from scratch.
       {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, @shape_with_subquery)
 
-      # We don't have a fully wired-up consumer chain in this test, so
-      # short-circuit `start_shape_consumer` and `start_materializer` while
-      # recording the calls. This proves wait_for_restore reaches the start
-      # path for the subquery shape; full consumer lifecycle is covered by
-      # the integration tests in `oracle_restore_test.exs`.
-      Repatch.patch(
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_materializer,
-        [mode: :shared],
-        fn _stack_id, _config -> {:ok, self()} end
-      )
-
-      Repatch.patch(
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_shape_consumer,
-        [mode: :shared],
-        fn _stack_id, %{shape_handle: handle} ->
-          send(test_pid, {:start_shape_consumer_called, handle})
-          # Returning :error short-circuits restore_shape_and_dependencies'
-          # follow-up calls (initialize_shape, update_last_read_time) which
-          # would fail without a real consumer pid.
-          {:error, :test_short_circuit}
-        end
-      )
-
-      # clean_shape is called on start_shape_consumer error; stub it so the
-      # follow-up cleanup doesn't interfere with the test assertion.
+      # Capture the removal so we don't depend on a fully wired-up consumer
+      # chain here; the on-disk cleanup is covered by the "after restart"
+      # integration tests above.
       Repatch.patch(
         Electric.ShapeCache.ShapeCleaner,
-        :remove_shape,
+        :remove_shapes,
         [mode: :shared],
-        fn _stack_id, _handle -> :ok end
-      )
-
-      activate_mocks_for_descendant_procs(Electric.ShapeCache)
-
-      with_shape_cache(ctx)
-
-      # The eager-start path runs in handle_continue(:wait_for_restore); the
-      # patched start_shape_consumer captures the call.
-      assert_receive {:start_shape_consumer_called, ^shape_handle}, 5_000
-    end
-
-    test "non-subquery shapes are NOT eagerly started", ctx do
-      %{stack_id: stack_id} = ctx
-      test_pid = self()
-
-      # Add a shape with no dependencies — eager-start should skip it.
-      {:ok, _shape_handle} = ShapeStatus.add_shape(stack_id, @shape)
-
-      Repatch.patch(
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_shape_consumer,
-        [mode: :shared],
-        fn _stack_id, %{shape_handle: handle} ->
-          send(test_pid, {:start_shape_consumer_called, handle})
-          {:error, :test_short_circuit}
-        end
-      )
-
-      activate_mocks_for_descendant_procs(Electric.ShapeCache)
-
-      with_shape_cache(ctx)
-
-      # Give wait_for_restore time to complete; eager-start should NOT
-      # have called start_shape_consumer for the simple shape.
-      refute_receive {:start_shape_consumer_called, _}, 200
-    end
-
-    test "purges the shape when the eager consumer await fails", ctx do
-      %{stack_id: stack_id} = ctx
-      test_pid = self()
-
-      {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, @shape_with_subquery)
-
-      # Make the consumer start succeed so restore_shape_and_dependencies
-      # returns {:ok, pid} and the eager-start reaches await_snapshot_start.
-      Repatch.patch(
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_materializer,
-        [mode: :shared],
-        fn _stack_id, _config -> {:ok, self()} end
-      )
-
-      Repatch.patch(
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_shape_consumer,
-        [mode: :shared],
-        fn _stack_id, _config -> {:ok, self()} end
-      )
-
-      # ...then make the await fail (consumer died, or timed out while
-      # wedged) so the catch fires. We can't confirm the shape came up
-      # subscribed-and-correct, so it must be purged rather than left alive.
-      Repatch.patch(
-        Electric.Shapes.Consumer,
-        :await_snapshot_start,
-        [mode: :shared],
-        fn _stack_id, _handle -> exit(:test_consumer_died) end
-      )
-
-      # clean_shape goes through ShapeCleaner.remove_shape; capture the call
-      # to prove the failed shape is purged so a client refetches from scratch.
-      Repatch.patch(
-        Electric.ShapeCache.ShapeCleaner,
-        :remove_shape,
-        [mode: :shared],
-        fn _stack_id, handle ->
-          send(test_pid, {:remove_shape_called, handle})
+        fn _stack_id, handles, _reason ->
+          send(test_pid, {:remove_shapes_called, handles})
           :ok
         end
       )
@@ -1533,7 +1436,36 @@ defmodule Electric.ShapeCacheTest do
 
       with_shape_cache(ctx)
 
-      assert_receive {:remove_shape_called, ^shape_handle}, 5_000
+      # The drop runs in handle_continue(:wait_for_restore); the outer shape
+      # handle is included in the removed set.
+      assert_receive {:remove_shapes_called, handles}, 5_000
+      assert shape_handle in handles
+    end
+
+    test "non-subquery shapes are NOT dropped", ctx do
+      %{stack_id: stack_id} = ctx
+      test_pid = self()
+
+      # Add a shape with no dependencies — the drop should skip it.
+      {:ok, _shape_handle} = ShapeStatus.add_shape(stack_id, @shape)
+
+      Repatch.patch(
+        Electric.ShapeCache.ShapeCleaner,
+        :remove_shapes,
+        [mode: :shared],
+        fn _stack_id, handles, _reason ->
+          send(test_pid, {:remove_shapes_called, handles})
+          :ok
+        end
+      )
+
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      # Give wait_for_restore time to complete; the drop should NOT have
+      # removed the simple shape.
+      refute_receive {:remove_shapes_called, _}, 200
     end
   end
 
@@ -1569,29 +1501,6 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
 
       assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
-
-      # Materializer should be started
-      assert Process.alive?(
-               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
-             )
-
-      restart_shape_cache(ctx)
-
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
-
-      # After restart, ShapeCache eagerly starts subquery shape consumers
-      # in `handle_continue(:wait_for_restore)` so the outer consumer and
-      # its dependency materializer come back up automatically — no
-      # explicit `start_consumer_for_handle/2` call is required. The
-      # continue runs asynchronously after `start_supervised!` returns,
-      # so we wait for the registry to populate.
-      assert wait_until(
-               fn ->
-                 not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) and
-                   not is_nil(Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle))
-               end,
-               1000
-             )
 
       # Materializer should be started
       assert Process.alive?(

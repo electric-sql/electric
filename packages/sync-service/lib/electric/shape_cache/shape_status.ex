@@ -147,6 +147,25 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @doc """
+  Given a list of `{handle, shape}` pairs (e.g. from `list_shapes/1`), return the
+  set of handles for every shape involved in a subquery: each shape with a
+  non-empty `shape_dependencies` plus all of its dependency handles.
+
+  This is the transitive closure of the subquery hierarchy — a nested dependency
+  that itself has a subquery matches the same filter and contributes its own
+  dependencies — so it covers outer shapes, intermediate dependencies and leaf
+  materializers. Both the startup drop (`ShapeCache`) and the routing restore
+  (`ShapeLogCollector`) use it so neither reinstates a subquery shape.
+  """
+  @spec subquery_shape_handles([{shape_handle(), Shape.t()}]) :: MapSet.t(shape_handle())
+  def subquery_shape_handles(handles_and_shapes) do
+    for {handle, %Shape{shape_dependencies: [_ | _]} = shape} <- handles_and_shapes,
+        h <- [handle | shape.shape_dependencies_handles],
+        into: MapSet.new(),
+        do: h
+  end
+
   @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
   defp topological_sort(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
   defp topological_sort([], acc, _visited), do: Enum.reverse(acc) |> List.flatten()

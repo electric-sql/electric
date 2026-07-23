@@ -296,9 +296,20 @@ defmodule Electric.Replication.ShapeLogCollector do
       fn ->
         start = System.monotonic_time()
 
+        shapes = Electric.ShapeCache.ShapeStatus.list_shapes(state.stack_id)
+
+        # Shapes involved in a subquery are dropped on restart by ShapeCache
+        # (see `ShapeCache.drop_subquery_shapes/1`) rather than restored, since
+        # restoring them consistently proved too fragile. That drop removes them
+        # from ShapeStatus and the collector's routing asynchronously (via the
+        # RequestBatcher), which can race this restore. Skip the whole subquery
+        # hierarchy here so a dropped handle is never reinstated into the routing
+        # indexes and cannot start receiving events before the cleanup lands.
+        subquery_handles = Electric.ShapeCache.ShapeStatus.subquery_shape_handles(shapes)
+
         {partitions, event_router, layers, count} =
-          state.stack_id
-          |> Electric.ShapeCache.ShapeStatus.list_shapes()
+          shapes
+          |> Enum.reject(fn {handle, _shape} -> MapSet.member?(subquery_handles, handle) end)
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
             fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
