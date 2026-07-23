@@ -18,6 +18,11 @@ defmodule Electric.ShapeCache.Storage do
           filter_txns?: boolean()
         }
   @type offset :: LogOffset.t()
+  @typedoc """
+  Per-dependency "moves-applied-up-to" source LSN positions for an outer
+  subquery consumer, keyed by the dependency's shape handle.
+  """
+  @type move_positions :: %{shape_handle() => LogOffset.t()}
 
   @type compiled_opts :: term()
   @type shape_opts :: term()
@@ -76,6 +81,18 @@ defmodule Electric.ShapeCache.Storage do
   @callback fetch_pg_snapshot(shape_opts()) :: {:ok, pg_snapshot() | nil} | {:error, term()}
 
   @callback set_pg_snapshot(pg_snapshot(), shape_opts()) :: :ok
+
+  @doc """
+  Persist the per-dependency moves-applied-up-to positions for an outer
+  subquery consumer.
+  """
+  @callback set_move_positions!(move_positions(), shape_opts()) :: :ok
+
+  @doc """
+  Fetch the per-dependency moves-applied-up-to positions for an outer subquery
+  consumer. Returns `{:ok, %{}}` when none have been persisted yet.
+  """
+  @callback fetch_move_positions(shape_opts()) :: {:ok, move_positions()} | {:error, term()}
 
   @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
@@ -170,6 +187,22 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(offset :: LogOffset.t(), max_offset :: LogOffset.t(), shape_opts()) ::
               log()
+
+  @doc """
+  Like `get_log_stream/3` but yields `{LogOffset.t(), log_item_json}` pairs so the
+  caller gets each item's authoritative storage offset.
+
+  Data-change log items carry their offset in their headers, but control messages
+  (subquery move-in/move-out events) do not, so they cannot be positioned by
+  re-parsing the JSON alone. Materializer replay uses this to place control
+  messages in the correct transaction. Snapshot lines (which precede all real
+  offsets) are yielded with `LogOffset.before_all/0`.
+  """
+  @callback get_log_stream_with_offsets(
+              offset :: LogOffset.t(),
+              max_offset :: LogOffset.t(),
+              shape_opts()
+            ) :: Enumerable.t({LogOffset.t(), binary()})
 
   @doc """
   Get the last exclusive offset of the chunk starting from the given offset.
@@ -321,6 +354,16 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
+  def set_move_positions!(move_positions, {mod, shape_opts}) do
+    mod.set_move_positions!(move_positions, shape_opts)
+  end
+
+  @impl __MODULE__
+  def fetch_move_positions({mod, shape_opts}) do
+    mod.fetch_move_positions(shape_opts)
+  end
+
+  @impl __MODULE__
   def snapshot_started?({mod, shape_opts}) do
     mod.snapshot_started?(shape_opts)
   end
@@ -406,6 +449,19 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def get_log_stream(offset, max_offset, _storage) when is_log_offset_lt(max_offset, offset) do
+    []
+  end
+
+  @impl __MODULE__
+  def get_log_stream_with_offsets(offset, max_offset \\ @last_log_offset, storage)
+
+  def get_log_stream_with_offsets(offset, max_offset, {mod, shape_opts})
+      when max_offset == @last_log_offset or not is_log_offset_lt(max_offset, offset) do
+    mod.get_log_stream_with_offsets(offset, max_offset, shape_opts)
+  end
+
+  def get_log_stream_with_offsets(offset, max_offset, _storage)
+      when is_log_offset_lt(max_offset, offset) do
     []
   end
 

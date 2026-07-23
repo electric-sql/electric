@@ -26,6 +26,27 @@ defmodule Electric.Shapes.Consumer.State do
     buffer: [],
     txn_offset_mapping: [],
     materializer_subscribed?: false,
+    # Per-dependency "moves-applied-up-to" source LSNs (`%{dep_handle => LogOffset}`),
+    # persisted so that after a restart the outer subquery consumer can ask each
+    # dependency materializer to replay the moves it missed and dedup by position.
+    move_positions: %{},
+    # Per-dependency seed views (`%{dep_handle => MapSet}`) captured from the
+    # materializer at subscribe time (as-of `move_positions`), used to seed the
+    # event handler's dependency views so replayed moves are not
+    # redundancy-eliminated.
+    dep_seed_views: %{},
+    # Per-dependency source LSN of the most recently received (not yet applied)
+    # materializer move (`%{dep_handle => LogOffset}`); moved into
+    # `staged_move_positions` once the move pipeline is fully drained (applied to
+    # the writer buffer).
+    pending_move_lsns: %{},
+    # Per-dependency source LSNs that have been applied to the writer buffer but
+    # are not yet known to be durably flushed
+    # (`%{dep_handle => [{flush_threshold_offset, source_lsn}]}`, ascending).
+    # An entry is committed to `move_positions` (advanced + persisted) only once
+    # the writer confirms a flush at/after its threshold, so the persisted
+    # position never runs ahead of durable storage.
+    staged_move_positions: %{},
     terminating?: false,
     buffering?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until
@@ -146,6 +167,7 @@ defmodule Electric.Shapes.Consumer.State do
 
     {:ok, latest_offset} = Storage.fetch_latest_offset(storage)
     {:ok, pg_snapshot} = Storage.fetch_pg_snapshot(storage)
+    {:ok, move_positions} = Storage.fetch_move_positions(storage)
 
     initial_snapshot_state = InitialSnapshot.new(pg_snapshot)
 
@@ -154,6 +176,7 @@ defmodule Electric.Shapes.Consumer.State do
       | latest_offset: latest_offset,
         storage: storage,
         writer: writer,
+        move_positions: move_positions,
         initial_snapshot_state: initial_snapshot_state,
         buffering?: InitialSnapshot.needs_buffering?(initial_snapshot_state)
     }

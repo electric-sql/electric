@@ -282,6 +282,144 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     )
   end
 
+  @doc """
+  Like `stream_jsons/5` but yields `{LogOffset.t(), json}` pairs, preserving each
+  entry's on-disk offset (used to position control messages, which carry no
+  offset in their JSON headers).
+  """
+  def stream_entries_with_offsets(
+        %PFS{} = opts,
+        log_file_path,
+        start_position,
+        end_position,
+        exclusive_min_offset
+      ) do
+    case safely_open_file!(opts, log_file_path, [:read, :raw]) do
+      {:halt, :data_removed} ->
+        []
+
+      {:ok, file} ->
+        try do
+          with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
+            {entries, _} = extract_entries_from_binary(data, exclusive_min_offset, nil)
+            entries
+          else
+            :eof ->
+              raise "unexpected end of file"
+
+            {:error, reason} ->
+              raise File.Error,
+                path: log_file_path,
+                reason: reason,
+                action: "pread(#{start_position}, #{end_position - start_position})"
+          end
+        after
+          File.close(file)
+        end
+    end
+  end
+
+  @doc "Like `stream_jsons_until_offset/5` but yields `{LogOffset.t(), json}` pairs."
+  def stream_entries_until_offset_with_offsets(
+        %PFS{} = opts,
+        log_file_path,
+        start_position,
+        exclusive_min_offset,
+        inclusive_max_offset
+      ) do
+    Stream.resource(
+      fn ->
+        case safely_open_file!(opts, log_file_path, [:read, :raw]) do
+          {:ok, file} ->
+            {:ok, ^start_position} = :file.position(file, start_position)
+            {file, ""}
+
+          {:halt, :data_removed} ->
+            :halt
+        end
+      end,
+      fn
+        :halt ->
+          {:halt, []}
+
+        {file, binary_rest} ->
+          case :file.read(file, 4096) do
+            {:ok, data} ->
+              {entries, rest} =
+                extract_entries_from_binary(
+                  binary_rest <> data,
+                  exclusive_min_offset,
+                  inclusive_max_offset
+                )
+
+              {entries, {file, rest}}
+
+            :eof ->
+              {:halt, {file, binary_rest}}
+          end
+      end,
+      fn
+        [] -> :ok
+        {file, _} -> File.close(file)
+      end
+    )
+  end
+
+  # Offset-preserving counterpart to `extract_jsons_from_binary/4`. Kept separate
+  # so the json-only hot path avoids the per-entry `LogOffset` allocation.
+  @spec extract_entries_from_binary(binary(), LogOffset.t(), LogOffset.t() | nil) ::
+          {[{LogOffset.t(), String.t()}], binary()}
+  defp extract_entries_from_binary(binary, exclusive_min_offset, inclusive_max_offset, acc \\ [])
+  defp extract_entries_from_binary(<<>>, _, _, acc), do: {Enum.reverse(acc), ""}
+
+  defp extract_entries_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, _::binary-size(json_size), rest::binary>>,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = log_offset,
+         inclusive_max_offset,
+         acc
+       )
+       when tx_offset1 < tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 <= op_offset2),
+       do: extract_entries_from_binary(rest, log_offset, inclusive_max_offset, acc)
+
+  defp extract_entries_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, json::binary-size(json_size), _::binary>>,
+         log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         acc
+       )
+       when tx_offset1 == tx_offset2 and op_offset1 == op_offset2,
+       do:
+         extract_entries_from_binary("", log_offset, inclusive_max_offset, [
+           {LogOffset.new(tx_offset1, op_offset1), json} | acc
+         ])
+
+  defp extract_entries_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, _json::binary-size(json_size), _::binary>>,
+         log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         acc
+       )
+       when tx_offset1 > tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 > op_offset2),
+       do: extract_entries_from_binary("", log_offset, inclusive_max_offset, acc)
+
+  defp extract_entries_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, json::binary-size(json_size), rest::binary>>,
+         log_offset,
+         inclusive_max_offset,
+         acc
+       ),
+       do:
+         extract_entries_from_binary(rest, log_offset, inclusive_max_offset, [
+           {LogOffset.new(tx_offset1, op_offset1), json} | acc
+         ])
+
+  defp extract_entries_from_binary(rest, _, _, acc),
+    do: {Enum.reverse(acc), rest}
+
   @spec extract_jsons_from_binary(binary(), LogOffset.t(), LogOffset.t() | nil) ::
           Enumerable.t(String.t())
   defp extract_jsons_from_binary(binary, exclusive_min_offset, inclusive_max_offset, acc \\ [])

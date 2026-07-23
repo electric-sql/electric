@@ -8,6 +8,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.SetupEffects
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
@@ -357,6 +358,10 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
+    # Remember the source LSN of this move so that the per-dependency
+    # moves-position can be advanced once the move pipeline is fully drained.
+    state = record_pending_move_lsn(state, dep_handle, payload)
+
     handle_apply_event_result(
       state,
       apply_event(state, {:materializer_changes, dep_handle, payload})
@@ -509,6 +514,11 @@ defmodule Electric.Shapes.Consumer do
     # to this process). leads to unecessary writes in the case of a deleted
     # shape but the alternative is leaking ets tables.
     state = terminate_writer(state)
+
+    # `terminate_writer/1` flushes the writer, so any staged move positions are
+    # now durable — commit them so the persisted position matches storage across
+    # a graceful restart.
+    state = commit_all_move_positions(state)
 
     ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason)
 
@@ -1018,9 +1028,132 @@ defmodule Electric.Shapes.Consumer do
             {{previous_offset, result.state.latest_offset}, result.state.latest_offset}
           end
 
-        {result.state, notification, result.num_changes, result.total_size}
+        final_state = maybe_stage_move_positions(result.state)
+
+        {final_state, notification, result.num_changes, result.total_size}
     end
   end
+
+  # Stash the source LSN carried by a materializer move payload, keyed by
+  # dependency handle. It is staged once the move pipeline is fully drained (see
+  # `maybe_stage_move_positions/1`) and only persisted once the writer confirms
+  # the flush (see `commit_flushed_move_positions/2`).
+  defp record_pending_move_lsn(state, dep_handle, payload) do
+    case Map.get(payload, :lsn) do
+      nil ->
+        state
+
+      lsn ->
+        %{state | pending_move_lsns: Map.put(state.pending_move_lsns, dep_handle, lsn)}
+    end
+  end
+
+  # Once the move pipeline is fully drained (Steady, empty queue) every received
+  # move has been applied to the writer buffer. Stage the received source LSNs,
+  # tagged with the current outer `latest_offset` as a flush threshold: the move's
+  # splice rows are at/below `latest_offset`, so they are durable once the writer
+  # has flushed to that offset. Staged entries are only advanced into (and
+  # persisted as) `move_positions` by `commit_flushed_move_positions/2` — so the
+  # persisted position never runs ahead of durable storage across a restart.
+  defp maybe_stage_move_positions(%State{pending_move_lsns: pending} = state)
+       when pending == %{},
+       do: state
+
+  defp maybe_stage_move_positions(%State{} = state) do
+    if move_pipeline_fully_drained?(state.event_handler) do
+      threshold = state.latest_offset
+
+      staged =
+        Enum.reduce(state.pending_move_lsns, state.staged_move_positions, fn {handle, lsn}, acc ->
+          Map.update(acc, handle, [{threshold, lsn}], &(&1 ++ [{threshold, lsn}]))
+        end)
+
+      %{state | staged_move_positions: staged, pending_move_lsns: %{}}
+    else
+      state
+    end
+  end
+
+  # Commit staged move positions whose splice rows are now durable (flush
+  # threshold at/below `flushed_offset`), advancing and persisting
+  # `move_positions`.
+  defp commit_flushed_move_positions(
+         %State{staged_move_positions: staged} = state,
+         _flushed_offset
+       )
+       when staged == %{},
+       do: state
+
+  defp commit_flushed_move_positions(%State{} = state, flushed_offset) do
+    {staged, positions, changed?} =
+      Enum.reduce(state.staged_move_positions, {%{}, state.move_positions, false}, fn
+        {handle, entries}, {staged_acc, positions_acc, changed} ->
+          {committed, remaining} =
+            Enum.split_while(entries, fn {threshold, _lsn} ->
+              LogOffset.is_log_offset_lte(threshold, flushed_offset)
+            end)
+
+          positions_acc =
+            case List.last(committed) do
+              nil -> positions_acc
+              {_threshold, lsn} -> Map.update(positions_acc, handle, lsn, &LogOffset.max(&1, lsn))
+            end
+
+          staged_acc =
+            if remaining == [], do: staged_acc, else: Map.put(staged_acc, handle, remaining)
+
+          {staged_acc, positions_acc, changed or committed != []}
+      end)
+
+    if changed? do
+      ShapeCache.Storage.set_move_positions!(positions, state.storage)
+      %{state | staged_move_positions: staged, move_positions: positions}
+    else
+      state
+    end
+  end
+
+  # Commit all staged move positions unconditionally. Called from `terminate/2`
+  # after `terminate_writer/1` has flushed the writer, so every staged move's
+  # splice rows are durable by then. Note this runs after `terminate_writer/1`
+  # has popped `:writer` off the state, so we match a bare map rather than
+  # `%State{}`.
+  defp commit_all_move_positions(state) do
+    staged = Map.get(state, :staged_move_positions, %{})
+    storage = Map.get(state, :storage)
+
+    if staged == %{} or is_nil(storage) do
+      state
+    else
+      positions =
+        Enum.reduce(staged, state.move_positions, fn {handle, entries}, acc ->
+          {_threshold, lsn} = List.last(entries)
+          Map.update(acc, handle, lsn, &LogOffset.max(&1, lsn))
+        end)
+
+      # A persistence failure here must not crash `terminate/2` (that would mask
+      # the shutdown reason, and storage may already be torn down), but it should
+      # not pass silently: a dropped position just means more moves are replayed
+      # on restart. Log it so a genuine failure is observable.
+      try do
+        ShapeCache.Storage.set_move_positions!(positions, storage)
+      rescue
+        error ->
+          Logger.warning(
+            "Failed to persist move positions for shape " <>
+              "#{Map.get(state, :shape_handle)} during terminate: #{Exception.message(error)}"
+          )
+      end
+
+      %{state | move_positions: positions, staged_move_positions: %{}}
+    end
+  end
+
+  defp move_pipeline_fully_drained?(%EventHandler.Subqueries.Steady{queue: queue}),
+    do: MoveQueue.length(queue) == 0
+
+  defp move_pipeline_fully_drained?(%EventHandler.Subqueries.Buffering{}), do: false
+  defp move_pipeline_fully_drained?(_handler), do: true
 
   defp handle_event_error(state, {:truncate, xid}) do
     handle_txn_with_truncate(xid, state)
@@ -1198,7 +1331,7 @@ defmodule Electric.Shapes.Consumer do
   defp confirm_flushed_and_notify(state, flushed_offset) do
     {state, txn_offset} = State.align_offset_to_txn_boundary(state, flushed_offset)
     ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, txn_offset)
-    state
+    commit_flushed_move_positions(state, flushed_offset)
   end
 
   # After a pending transaction completes and txn_offset_mapping is populated,
@@ -1231,41 +1364,68 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp finish_initialization(%State{} = state, action, otel_ctx) do
-    if all_materializers_alive?(state) do
-      case initialize_event_handler(state, action) do
-        {:ok, state} ->
-          Logger.debug("Writer for #{state.shape_handle} initialized")
+    case subscribe_to_materializers(state) do
+      {:ok, state} ->
+        case initialize_event_handler(state, action) do
+          {:ok, state} ->
+            Logger.debug("Writer for #{state.shape_handle} initialized")
 
-          # We start the snapshotter even if there's a snapshot because it also performs the call
-          # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
-          # process if the shape already has a snapshot but the current semantics rely on being able
-          # to wait for the snapshot asynchronously and if we called publication manager here it would
-          # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+            # We start the snapshotter even if there's a snapshot because it also performs the call
+            # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+            # process if the shape already has a snapshot but the current semantics rely on being able
+            # to wait for the snapshot asynchronously and if we called publication manager here it would
+            # block and prevent await_snapshot_start calls from adding snapshot subscribers.
 
-          {:ok, _pid} =
-            Shapes.DynamicConsumerSupervisor.start_snapshotter(
-              state.stack_id,
-              %{
-                stack_id: state.stack_id,
-                shape: state.shape,
-                shape_handle: state.shape_handle,
-                storage: state.storage,
-                otel_ctx: otel_ctx
-              }
-            )
+            {:ok, _pid} =
+              Shapes.DynamicConsumerSupervisor.start_snapshotter(
+                state.stack_id,
+                %{
+                  stack_id: state.stack_id,
+                  shape: state.shape,
+                  shape_handle: state.shape_handle,
+                  storage: state.storage,
+                  otel_ctx: otel_ctx
+                }
+              )
 
-          {:noreply, state}
+            {:noreply, state}
 
-        {:error, state} ->
-          stop_and_clean(state)
-      end
-    else
-      stop_and_clean(state)
+          {:error, state} ->
+            stop_and_clean(state)
+        end
+
+      :error ->
+        stop_and_clean(state)
     end
   end
 
-  defp all_materializers_alive?(state) do
-    Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
+  # Subscribe to each dependency materializer, passing the persisted per-dep
+  # moves-position so the materializer replays any moves this consumer missed
+  # across a restart. Captures the returned seed views (as-of the position) for
+  # seeding the event handler's dependency views, and baselines a position for
+  # dependencies that don't have one yet so a first missed move can be replayed.
+  #
+  # Returns `{:ok, state}` with `dep_seed_views`/`move_positions` populated, or
+  # `:error` if any dependency materializer is not alive.
+  defp subscribe_to_materializers(state) do
+    case do_subscribe_to_materializers(state) do
+      {:ok, %State{move_positions: move_positions} = state} ->
+        # Persist baselined positions so a restart before the first move can
+        # still replay it (no-op writes if nothing changed are cheap at startup).
+        if state.shape.shape_dependencies_handles != [] do
+          ShapeCache.Storage.set_move_positions!(move_positions, state.storage)
+        end
+
+        {:ok, state}
+
+      :error ->
+        :error
+    end
+  end
+
+  defp do_subscribe_to_materializers(state) do
+    Enum.reduce_while(state.shape.shape_dependencies_handles, {:ok, state}, fn shape_handle,
+                                                                               {:ok, state} ->
       name = Materializer.name(state.stack_id, shape_handle)
 
       with pid when is_pid(pid) <- GenServer.whereis(name),
@@ -1274,9 +1434,19 @@ defmodule Electric.Shapes.Consumer do
           tag: {:dependency_materializer_down, shape_handle}
         )
 
-        Materializer.subscribe(pid)
+        from_lsn = Map.get(state.move_positions, shape_handle)
+        {:ok, seed_view, applied_offset} = Materializer.subscribe(pid, from_lsn)
 
-        true
+        move_positions =
+          Map.put_new(state.move_positions, shape_handle, applied_offset)
+
+        state = %{
+          state
+          | dep_seed_views: Map.put(state.dep_seed_views, shape_handle, seed_view),
+            move_positions: move_positions
+        }
+
+        {:cont, {:ok, state}}
       else
         _ ->
           Logger.warning(
@@ -1285,7 +1455,7 @@ defmodule Electric.Shapes.Consumer do
             state_shape_handle: state.shape_handle
           )
 
-          false
+          {:halt, :error}
       end
     end)
   end
