@@ -2977,23 +2977,26 @@ export class EntityManager {
     const spec = resolveCronScheduleSpec(req.expression, req.timezone)
 
     const manifestKey = `schedule:${req.id}`
-    await this.wakeRegistry.unregisterByManifestKey(
+    // Gap-free reconcile (register-first, then prune stale). The old
+    // unregister-then-register briefly left this manifest key's wake absent from
+    // the cache; a cron tick landing in that window would be missed. See
+    // WakeRegistry.reconcileManifestRegistration.
+    await this.wakeRegistry.reconcileManifestRegistration(
       entityUrl,
       manifestKey,
+      {
+        subscriberUrl: entityUrl,
+        sourceUrl: getCronStreamPath(spec.expression, spec.timezone),
+        condition: {
+          on: `change`,
+        },
+        debounceMs: req.debounceMs,
+        timeoutMs: req.timeoutMs,
+        oneShot: false,
+        manifestKey,
+      },
       this.tenantId
     )
-    await this.wakeRegistry.register({
-      tenantId: this.tenantId,
-      subscriberUrl: entityUrl,
-      sourceUrl: getCronStreamPath(spec.expression, spec.timezone),
-      condition: {
-        on: `change`,
-      },
-      debounceMs: req.debounceMs,
-      timeoutMs: req.timeoutMs,
-      oneShot: false,
-      manifestKey,
-    })
     await this.getOrCreateCronStream(spec.expression, spec.timezone)
 
     const txid = randomUUID()
@@ -3162,24 +3165,26 @@ export class EntityManager {
     )
 
     // The manifest is the durable source of truth. Register side effects after
-    // it is appended so failures can be repaired by manifest replay.
-    await this.wakeRegistry.unregisterByManifestKey(
+    // it is appended so failures can be repaired by manifest replay. Gap-free
+    // reconcile (register-first, then prune stale) so a webhook event landing
+    // during a re-subscribe isn't missed — see
+    // WakeRegistry.reconcileManifestRegistration.
+    await this.wakeRegistry.reconcileManifestRegistration(
       entityUrl,
       manifestKey,
+      {
+        subscriberUrl: entityUrl,
+        sourceUrl: req.subscription.sourceUrl,
+        condition: {
+          on: `change`,
+          collections: [`webhook_event`],
+          ops: [`insert`],
+        },
+        oneShot: false,
+        manifestKey,
+      },
       this.tenantId
     )
-    await this.wakeRegistry.register({
-      tenantId: this.tenantId,
-      subscriberUrl: entityUrl,
-      sourceUrl: req.subscription.sourceUrl,
-      condition: {
-        on: `change`,
-        collections: [`webhook_event`],
-        ops: [`insert`],
-      },
-      oneShot: false,
-      manifestKey,
-    })
 
     return { txid, subscription: req.subscription }
   }

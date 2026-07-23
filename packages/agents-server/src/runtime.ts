@@ -242,31 +242,34 @@ export class ElectricAgentsTenantRuntime {
       if (!manifestKey) continue
 
       if (operation === `delete`) {
-        await this.manager.wakeRegistry.unregisterByManifestKey(
+        await this.manager.wakeRegistry.reconcileManifestRegistration(
           subscriberUrl,
           manifestKey,
+          null,
           this.serviceId
         )
         continue
       }
 
-      await this.manager.wakeRegistry.unregisterByManifestKey(
+      // Reconcile idempotently and WITHOUT a delivery gap. The old
+      // unregister-then-register sequence briefly removed the registration
+      // from the cache; a source (e.g. a sibling sub-agent) that finished in
+      // that window had its wake dropped. reconcileManifestRegistration
+      // registers the desired reg first, then prunes only stale rows.
+      const reg = value
+        ? buildManifestWakeRegistration(subscriberUrl, value, manifestKey)
+        : null
+      if (reg) {
+        reg.tenantId = this.serviceId
+      }
+      await this.manager.wakeRegistry.reconcileManifestRegistration(
         subscriberUrl,
         manifestKey,
+        reg,
         this.serviceId
       )
 
       if (value) {
-        const reg = buildManifestWakeRegistration(
-          subscriberUrl,
-          value,
-          manifestKey
-        )
-        if (reg) {
-          reg.tenantId = this.serviceId
-          await this.manager.wakeRegistry.register(reg)
-        }
-
         const cronSpec = extractManifestCronSpec(value)
         if (cronSpec) {
           void this.manager
