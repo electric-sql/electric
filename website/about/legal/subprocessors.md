@@ -8,7 +8,7 @@ outline: deep
 
 # Subprocessor List
 
-Last Updated: March 17, 2026
+Last Updated: July 23, 2026
 
 Electric DB Inc. ("Electric") uses the following third-party subprocessors to provide the Electric Services. This list is maintained in accordance with our [Data Processing Addendum](/about/legal/dpa).
 
@@ -60,6 +60,13 @@ If you have questions, contact us at [support@electric-sql.com](mailto:support@e
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
 | PostHog, Inc. (PostHog Cloud — US) | Website and product analytics | User identifiers, device data, usage data, online identifiers (see [Cookie Policy](/about/legal/privacy#cookie-policy)) | United States |
+| Plausible Insights OÜ (Plausible Analytics) | Privacy-friendly website analytics (cookieless) | De-identified device and usage data | European Union |
+
+## Email delivery
+
+| Subprocessor | Purpose | Data Processed | Location |
+| --- | --- | --- | --- |
+| Resend, Inc. | Transactional email delivery | Recipient email addresses, email content (e.g. invitations and account notifications) | United States |
 
 ## Authentication
 
