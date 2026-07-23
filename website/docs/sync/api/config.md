@@ -566,6 +566,8 @@ If provided must be one of `MEMORY` or `FAST_FILE`.
 
 Path to root folder for storing data on the filesystem.
 
+This must be persistent storage that survives restarts. See [Optimizing for disk](/docs/sync/guides/deployment#optimizing-for-disk) in the deployment guide for what to run it on.
+
 </EnvVarConfig>
 
 ## Telemetry

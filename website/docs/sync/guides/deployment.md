@@ -129,19 +129,23 @@ You can deploy it anywhere you can run a container with a filesystem and exposed
 - [Fly.io](/docs/sync/integrations/fly)
 - [Render](/docs/sync/integrations/render)
 
+The [AWS guide](/docs/sync/integrations/aws#deploy-electric) goes into the most depth, covering how to choose an ECS launch type and storage backing. It comes with [example Terraform and Pulumi configurations](https://github.com/electric-sql/electric-aws) that provision the whole stack &mdash; database, sync service and load balancer.
+
 ### Docker container
 
 Images are deployed to Docker Hub at [electricsql/electric](https://hub.docker.com/r/electricsql/electric).
 
 ### Optimizing for disk
 
-Electric caches [Shape logs](/docs/sync/api/http#shape-log) and metadata on the filesystem. Your Electric host must provide a persistent filesystem. Ideally this should be large, fast and locally mounted, such as a NVMe SSD. If you're configuring a machine and you want to optimise it for Electric, the factors to optimise for, in order of important, are:
+Electric caches [Shape logs](/docs/sync/api/http#shape-log) and metadata on the filesystem. Your Electric host must provide a persistent filesystem. Ideally this should be large, fast and locally mounted, such as a NVMe SSD. If you're configuring a machine and you want to optimise it for Electric, the factors to optimise for, in order of importance, are:
 
 1. disk speed &mdash; low latency, high throughput reads and writes
 2. memory
 3. CPU
 
-For example, on AWS, [Storage Optimized](https://aws.amazon.com/ec2/instance-types/#Storage_Optimized) instances such as the `i3en.large`, or on Hetzner the [SX-line](https://www.hetzner.com/dedicated-rootserver/matrix-sx/) of dedicated servers would both be great choices.
+For example, on AWS, [storage optimized](https://aws.amazon.com/ec2/instance-types/#Storage_Optimized) instances such as the `i4i` family, or general purpose instances that ship local NVMe such as `m6id`, are both good choices. On Hetzner, the [SX-line](https://www.hetzner.com/dedicated-rootserver/matrix-sx/) of dedicated servers works well.
+
+For a worked example, see [ECS on EC2](/docs/sync/integrations/aws#ecs-on-ec2) in the AWS guide. It covers choosing between local NVMe and an attached EBS volume, and [preparing the disk on boot](/docs/sync/integrations/aws#bootstrapping-the-data-disk).
 
 ### Configuring storage
 

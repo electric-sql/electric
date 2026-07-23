@@ -226,6 +226,8 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
 
 This example uses EC2 launch type with a host bind mount for shared storage. Both old and new tasks share the same directory on the EC2 host.
 
+See [ECS on EC2](/docs/sync/integrations/aws#ecs-on-ec2) in the AWS guide for how to provision this. The [example configurations](https://github.com/electric-sql/electric-aws) run a single container instance per cluster, which satisfies the placement requirement below.
+
 > [!Warning] Same-host placement
 > ECS does not guarantee that the new task lands on the same host as the old one. To ensure both tasks share the same host volume, your ECS cluster must have exactly one EC2 instance matching your placement constraint, or use a custom instance attribute to pin tasks to a specific host.
 
