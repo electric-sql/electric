@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ShapeStream,
+  FetchError,
   isChangeMessage,
   isControlMessage,
   Message,
@@ -24,6 +25,36 @@ describe(`ShapeStream`, () => {
   })
 
   afterEach(() => aborter.abort())
+
+  it(`does not create an unhandled rejection when a subscriber handles an error`, async () => {
+    const unhandledRejections: unknown[] = []
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledRejections.push(reason)
+    }
+    process.on(`unhandledRejection`, onUnhandledRejection)
+
+    try {
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        signal: aborter.signal,
+        fetchClient: async () =>
+          new Response(undefined, {
+            status: 401,
+          }),
+      })
+
+      const subscriberError = new Promise<Error>((resolve) => {
+        stream.subscribe(() => {}, resolve)
+      })
+
+      await expect(subscriberError).resolves.toBeInstanceOf(FetchError)
+      await resolveInMacrotask(undefined)
+      expect(unhandledRejections).toEqual([])
+    } finally {
+      process.off(`unhandledRejection`, onUnhandledRejection)
+    }
+  })
 
   it(`requestSnapshot waits for snapshot messages to be published to subscribers before resolving`, async () => {
     const snapshotRow = {
