@@ -1,15 +1,20 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BuiltinAgentsServer } from '../src/server'
+
+const pullWakeRunnerMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  reconnect: vi.fn(),
+  stop: vi.fn(async () => {}),
+  waitForStopped: vi.fn(async () => {}),
+}))
 
 vi.mock(`@electric-ax/agents-runtime`, async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...(actual as object),
     createPullWakeRunner: vi.fn(() => ({
-      start: vi.fn(),
-      stop: vi.fn(async () => {}),
-      waitForStopped: vi.fn(async () => {}),
+      ...pullWakeRunnerMocks,
       get running() {
         return false
       },
@@ -79,6 +84,13 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     ReturnType<typeof startRecordingAgentsServer>
   > | null
 
+  beforeEach(() => {
+    pullWakeRunnerMocks.start.mockClear()
+    pullWakeRunnerMocks.reconnect.mockClear()
+    pullWakeRunnerMocks.stop.mockClear()
+    pullWakeRunnerMocks.waitForStopped.mockClear()
+  })
+
   afterEach(async () => {
     await builtinServer?.stop()
     builtinServer = null
@@ -91,6 +103,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     builtinServer = new BuiltinAgentsServer({
       agentServerUrl: agentsServer.url,
       mockStreamFn,
+      durableStreamsFetchCache: false,
       pullWake: { runnerId: `test-runner` },
     })
 
@@ -109,6 +122,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     builtinServer = new BuiltinAgentsServer({
       agentServerUrl: agentsServer.url,
       mockStreamFn,
+      durableStreamsFetchCache: false,
       pullWake: { runnerId: `test-runner` },
     })
 
@@ -147,6 +161,7 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     builtinServer = new BuiltinAgentsServer({
       agentServerUrl: `${agentsServer.url}/t/svc-agent-1/v1`,
       mockStreamFn,
+      durableStreamsFetchCache: false,
       pullWake: { runnerId: `test-runner`, registerRunner: true },
     })
 
@@ -158,5 +173,41 @@ describe(`BuiltinAgentsServer pull-wake registration`, () => {
     expect(agentsServer.requestUrls).toContain(
       `/t/svc-agent-1/v1/_electric/runners`
     )
+  })
+
+  it(`reconnects the pull-wake runner without restarting the built-in runtime`, async () => {
+    agentsServer = await startRecordingAgentsServer()
+    builtinServer = new BuiltinAgentsServer({
+      agentServerUrl: agentsServer.url,
+      mockStreamFn,
+      durableStreamsFetchCache: false,
+      pullWake: { runnerId: `test-runner` },
+    })
+    await builtinServer.start()
+
+    builtinServer.reconnectPullWake()
+
+    expect(pullWakeRunnerMocks.reconnect).toHaveBeenCalledTimes(1)
+    expect(pullWakeRunnerMocks.stop).not.toHaveBeenCalled()
+  })
+
+  it(`treats pull-wake reconnect as a no-op outside the running lifecycle`, async () => {
+    agentsServer = await startRecordingAgentsServer()
+    builtinServer = new BuiltinAgentsServer({
+      agentServerUrl: agentsServer.url,
+      mockStreamFn,
+      durableStreamsFetchCache: false,
+      pullWake: { runnerId: `test-runner` },
+    })
+
+    builtinServer.reconnectPullWake()
+    expect(pullWakeRunnerMocks.reconnect).not.toHaveBeenCalled()
+
+    await builtinServer.start()
+    await builtinServer.stop()
+    pullWakeRunnerMocks.reconnect.mockClear()
+    builtinServer.reconnectPullWake()
+
+    expect(pullWakeRunnerMocks.reconnect).not.toHaveBeenCalled()
   })
 })

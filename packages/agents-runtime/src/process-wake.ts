@@ -75,6 +75,7 @@ interface ClaimCallbackResponse {
   claimToken?: string
   token?: string
   writeToken?: string
+  next_wake?: boolean
   error?: { code?: string; message?: string }
 }
 
@@ -84,6 +85,12 @@ interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
 
 const DEFAULT_IDLE_TIMEOUT = 20_000
 const DEFAULT_HEARTBEAT_INTERVAL = 10_000
+
+function appendAll<T>(target: Array<T>, items: Array<T>): void {
+  for (const item of items) {
+    target.push(item)
+  }
+}
 type EntityStreamOptions = NonNullable<
   Parameters<typeof createEntityStreamDB>[3]
 >
@@ -179,12 +186,14 @@ function withRegisteredManifestEntry(
   }
 }
 
-async function latestNewRunKey(
+async function latestStartedNewRunKey(
   db: EntityStreamDBWithActions,
   existingRunKeys: ReadonlySet<string>
 ): Promise<string | undefined> {
   const runs = await queryOnce((q) => q.from({ runs: db.collections.runs }))
-  return runs.filter((run) => !existingRunKeys.has(run.key)).at(-1)?.key
+  return runs
+    .filter((run) => !existingRunKeys.has(run.key) && run.status === `started`)
+    .at(-1)?.key
 }
 
 async function resolveHeadersProvider(
@@ -551,7 +560,29 @@ export async function processWake(
       failBackgroundWake(error, `WRITE_FAILED`)
     },
   })
+  const producedRunStatuses = new Map<
+    string,
+    `started` | `completed` | `failed`
+  >()
+  const producedRunOrder: Array<string> = []
   const writeEvent = (event: ChangeEvent): void => {
+    if (
+      event.type === `run` &&
+      event.value &&
+      typeof event.value === `object`
+    ) {
+      const status = (event.value as { status?: unknown }).status
+      if (
+        status === `started` ||
+        status === `completed` ||
+        status === `failed`
+      ) {
+        if (!producedRunStatuses.has(event.key)) {
+          producedRunOrder.push(event.key)
+        }
+        producedRunStatuses.set(event.key, status)
+      }
+    }
     producer.append(JSON.stringify(event))
   }
 
@@ -644,7 +675,47 @@ export async function processWake(
     return left < right ? -1 : 1
   }
 
+  const firstPendingRunnableFreshOffset = (): string | null => {
+    for (const batch of pendingLiveBatches) {
+      const events = toChangeEvents(batch)
+      const cancelledInboxKeys = new Set(
+        events.filter(isInboxCancellationEvent).map(inboxEventKey)
+      )
+      for (const event of events) {
+        if (event.type === `wake`) {
+          return event.headers.offset ?? batch.offset
+        }
+        if (isInboxEvent(event)) {
+          if (cancelledInboxKeys.has(inboxEventKey(event))) continue
+          const value = event.value as
+            | {
+                payload?: unknown
+                mode?: `immediate` | `queued` | `paused` | `steer`
+                status?: `pending` | `processed` | `cancelled`
+              }
+            | undefined
+          if (
+            value?.status !== `cancelled` &&
+            (value?.payload !== undefined ||
+              value?.mode === `queued` ||
+              value?.mode === `steer`)
+          ) {
+            return event.headers.offset ?? batch.offset
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const setSafeAckOffset = (offset: string): void => {
+    const pendingFreshOffset = firstPendingRunnableFreshOffset()
+    if (
+      pendingFreshOffset !== null &&
+      compareOffsets(offset, pendingFreshOffset) >= 0
+    ) {
+      return
+    }
     if (compareOffsets(offset, safeAckOffset) > 0) {
       safeAckOffset = offset
     }
@@ -1075,7 +1146,7 @@ export async function processWake(
       // ctx.events so no child result is silently acked without being visible.
       pendingLiveBatches.shift()
       batches.push(batch)
-      deltaEvents.push(...changeEvents)
+      appendAll(deltaEvents, changeEvents)
 
       if (freshKind === `inbox`) {
         selectedKind = `inbox`
@@ -1130,7 +1201,7 @@ export async function processWake(
     if (!preloaded) {
       const changeEvents = toChangeEvents(batch)
       if (changeEvents.length > 0) {
-        catchUpEvents.push(...changeEvents)
+        appendAll(catchUpEvents, changeEvents)
       }
       lastCatchUpOffset = batch.offset
       return
@@ -1145,7 +1216,7 @@ export async function processWake(
 
     handleLatestSignalEvents(changeEvents)
 
-    catchUpEvents.push(...changeEvents)
+    appendAll(catchUpEvents, changeEvents)
 
     if (
       resolveCurrentWakeReady !== null &&
@@ -2367,7 +2438,22 @@ export async function processWake(
             ? setupErr.code
             : `HANDLER_FAILED`
         log.error(`handler failed for ${entityUrl}:`, errMsg)
-        const failedRunKey = await latestNewRunKey(db, existingRunKeys)
+        const failedRunKey =
+          (await latestStartedNewRunKey(db, existingRunKeys)) ??
+          [...producedRunOrder]
+            .reverse()
+            .find((key) => producedRunStatuses.get(key) === `started`)
+        if (failedRunKey) {
+          writeEvent(
+            entityStateSchema.runs.update({
+              key: failedRunKey,
+              value: {
+                status: `failed`,
+                finish_reason: `error`,
+              } as never,
+            }) as ChangeEvent
+          )
+        }
         writeEvent(
           entityStateSchema.errors.insert({
             key: `error-${epoch}-${crypto.randomUUID()}`,
@@ -2604,7 +2690,7 @@ export async function processWake(
         log.info(`shutdown requested, sending done callback at checkpoint`)
       }
       try {
-        await sendDone(
+        const doneResponse = await sendDone(
           callback,
           activeClaimToken,
           claimHeaderConfig,
@@ -2612,6 +2698,9 @@ export async function processWake(
           streamPath,
           doneOffset === `-1` ? null : doneOffset
         )
+        if (doneResponse.next_wake) {
+          config.onDoneNextWake?.(streamPath)
+        }
       } catch (err) {
         cleanupErrors.push(toError(err))
       }
@@ -2653,7 +2742,7 @@ async function sendDone(
   epoch: number,
   streamPath: string,
   offset: string | null
-): Promise<void> {
+): Promise<ClaimCallbackResponse> {
   const response = await fetch(callback, {
     method: `POST`,
     headers: await createClaimCallbackHeaders(claimHeaderConfig, token),
@@ -2664,15 +2753,16 @@ async function sendDone(
     }),
   })
 
+  const body = await response.text().catch(() => `<body unreadable>`)
   if (!response.ok) {
-    let body = ``
-    try {
-      body = await response.text()
-    } catch {
-      body = `<body unreadable>`
-    }
     throw new Error(
       `Done callback failed (${response.status}): ${body || response.statusText}`
     )
+  }
+
+  const raw = parseClaimCallbackResponseBody(body)
+  return {
+    ...raw,
+    ok: raw.ok === undefined ? response.ok && raw.error === undefined : raw.ok,
   }
 }

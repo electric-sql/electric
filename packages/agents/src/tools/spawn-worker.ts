@@ -2,7 +2,7 @@ import { Type } from '@sinclair/typebox'
 import { randomBytes } from 'node:crypto'
 import { serverLog } from '../log'
 import type { BuiltinAgentModelConfig } from '../model-catalog'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { HandlerContext } from '@electric-ax/agents-runtime'
 
 export const WORKER_TOOL_NAMES = [
