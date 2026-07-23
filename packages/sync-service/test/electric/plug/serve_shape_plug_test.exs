@@ -720,6 +720,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 409
       assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
+      assert get_resp_header(conn, "electric-handle") == []
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
+      assert get_resp_header(conn, "surrogate-control") == ["no-store"]
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed",
