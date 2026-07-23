@@ -33,7 +33,7 @@ Electric Circuits builds on the [theory of incremental view maintenance](https:/
 Electric Circuits provides end-to-end fine-grained reactivity at the precision of what's being rendered on screen. It is built on well-established open-source libraries, and is fully compatible with the Electric protocol.
 
 > [!Warning] ✨ Research preview
-> Electric Circuits is a research preview, functional end to end — everything in this post is runnable today. [Clone the repo](https://github.com/balegas/electric-ivm) and watch your own writes ripple through the circuit in the circuit visualizer.
+> Electric Circuits is a research preview, functional end to end — everything in this post is runnable today. [Clone the repo](https://github.com/electric-sql/electric-circuits) and watch your own writes ripple through the circuit in the circuit visualizer.
 
 ## From static to live queries
 
@@ -178,8 +178,8 @@ Applications and agents need live queries for greater user experience. Electric 
 One command boots the whole stack:
 
 ```sh
-git clone https://github.com/balegas/electric-ivm
-cd electric-ivm
+git clone https://github.com/electric-sql/electric-circuits
+cd electric-circuits
 pnpm install
 pnpm demo:linearlite
 ```
