@@ -349,6 +349,15 @@ Then when you run the app you should see:
 INFO: [agent-runtime] Registered entity type: assistant
 ```
 
+::: warning How the container reaches your app
+
+The runtime server runs in Docker while your app runs on the host, so webhook callbacks cross the Docker host boundary. Two things make this work — and both are easy to trip over:
+
+- **Your app must listen on all interfaces (`0.0.0.0`), not just loopback.** The `@hono/node-server` `serve()` above already does this, so the walkthrough works as-is. But if you wire the runtime handler into a framework that binds to loopback only by default (e.g. Nuxt/Nitro), the container can't reach it — the agent spawns but never responds, with **no error**. Configure the framework to listen on `0.0.0.0` (for Nuxt: `devServer.host: '0.0.0.0'`).
+- **`localhost` in `serveEndpoint` is rewritten to `host.docker.internal` automatically.** That is why the `agents types` output below shows `http://host.docker.internal:3000/electric-agents` even though we configured `http://localhost:3000`. The rewrite is controlled by the `ELECTRIC_AGENTS_REWRITE_LOOPBACK_WEBHOOKS_TO` env var, which the CLI's docker-compose sets. If you run the runtime server directly on the host instead of in Docker, it is unset and loopback URLs are used as-is.
+
+:::
+
 Check the registered entities types on the command line:
 
 ```sh
