@@ -134,27 +134,11 @@ not the server. Options, in order of preference:
 
 ### Run-configuration matrix
 
-The server runs in several configurations — durability (`wal` vs `memory`), the
-resident tail cache on/off, and read-offload. Each is **protocol-equivalent**:
-CI runs the whole conformance suite once per configuration (the `rust-conformance`
-matrix in `.github/workflows/ci.yml`), passing the flags through the `RUST_SERVER_ARGS`
-env var that the test harness forwards to the spawned binary. These are exactly the
-configurations CI guards.
-
-| Config                    | Flags                      | Exercises                                                   | Platform |
-| ------------------------- | -------------------------- | ----------------------------------------------------------- | -------- |
-| `wal-default`             | _(none)_                   | WAL durability, buffered append, resident cache off (Linux) | all      |
-| `wal-resident-cache`      | `--tail-cache-bytes 65536` | WAL + resident tail cache on                                | all      |
-| `wal-read-offload-always` | `--read-offload always`    | reads served on the blocking pool                           | Linux    |
-| `memory`                  | `--durability memory`      | no WAL; buffered append; page-cache ack                     | all      |
-
-Run one configuration's conformance suite locally:
-
-```bash
-RUST_SERVER_ARGS="--durability memory" pnpm vitest run --project server-rust
-```
-
-(The Linux-only config needs a Linux host — e.g. Docker.)
+Every run configuration — durability (`wal` vs `memory`), resident tail cache
+on/off, read-offload — is **protocol-equivalent**, and CI runs the full
+conformance suite once per configuration (the `rust-conformance` matrix in
+`.github/workflows/ci.yml`; flags are passed via `RUST_SERVER_ARGS`, e.g.
+`RUST_SERVER_ARGS="--durability memory" pnpm vitest run --project server-rust`).
 
 ## What it implements
 
@@ -176,10 +160,7 @@ In `memory` mode there is no WAL and no WAL replay. Recovery is a sidecar pass: 
 
 Opt-in (`--tier`, off by default). Because streams are append-only and immutable by position, the server can break a stream into fixed-size, CDN-friendly **segments** (`--tier-segment-bytes`, default 8 MiB): once data leaves the hot tail it is **sealed** and offloaded to object storage, and catch-up reads of cold history are served from there. Recent data stays local (the hot tier, served zero-copy as today). With `--tier off` the server is byte-identical to a single-file deployment.
 
-- **S3-compatible, not AWS-only.** The `s3` backend works with any S3-compatible endpoint — Cloudflare R2, Fly/Tigris, MinIO, Backblaze B2 — via a configurable endpoint + path-style addressing. It's built on the `object_store` crate behind the **`tier` Cargo feature** (so a default build pulls no object-storage dependencies): `cargo build --release --features tier`. A `local` backend (sealed segments to a directory) needs no feature/deps and is handy for testing.
-- **How it stays correct.** Each stream keeps a manifest of its sealed segments. The lifecycle is seal → upload → `head`-verify → durably flip the manifest entry `local → remote` → only then unlink the staged chunk file (safe even under an in-flight read — Unix keeps an open fd readable after unlink). A read resolves each requested offset against the manifest — local ranges (live file or sealed chunk file) keep the zero-copy `sendfile` path; remote ranges are fetched by range-GET and streamed in. JSON seals always land on a value boundary (never inside a string). Durability is unchanged: an append still acks only after the local fsync — offload is strictly post-durability. Fully-sealed ranges are stamped `Cache-Control: immutable` for long-lived CDN caching, and remote objects are GC'd ref-count-aware with forks. The live data file's redundant sealed prefix is reclaimed by **compaction**: once it exceeds `--tier-compact-bytes` (default 64 MiB), the live file is rewritten to hold only the hot tail, under the appender lock and crash-safe via a `pending_compaction` intent. In-flight reads drain off the old fd, so reads stay lock-free — this is why compaction is used rather than `fallocate` hole-punching, which raced those reads. Set `--tier-compact-bytes 0` to disable.
-- **Flags:** `--tier {off|s3}`, `--tier-segment-bytes`, `--tier-compact-bytes` (live-file compaction threshold; `0` disables), `--tier-key-prefix`, `--tier-endpoint` / `--tier-region` / `--tier-bucket`, `--tier-path-style` / `--tier-virtual-hosted`, `--tier-allow-http`. S3 credentials come from `DS_S3_ACCESS_KEY_ID` / `DS_S3_SECRET_ACCESS_KEY` (with `AWS_*` fallback), env only.
-  Conformance passes with tiering on as well as off (verified manually with a small `--tier-segment-bytes` so streams seal and offload mid-suite; catch-up reads, ETag/304, closed-stream EOF, and forks are all served correctly from cold). Note this is a manual check, not a CI gate: the `rust-conformance` matrix in `.github/workflows/ci.yml` builds the default feature set (no `--features tier`) and never passes `--tier`, so the tier code path is not exercised in CI today.
+The `s3` backend works with any S3-compatible endpoint — Cloudflare R2, Fly/Tigris, MinIO, Backblaze B2 — behind the **`tier` Cargo feature** (a default build pulls no object-storage dependencies): `cargo build --release --features tier`. Flags are in the [table above](#flags); credentials come from the environment only. Durability is unchanged — an append still acks only after the local fsync; offload is strictly post-durability. The seal/upload/manifest lifecycle, crash-safe live-file compaction, and CDN/GC behaviour are documented in [ARCHITECTURE.md › Tiering](ARCHITECTURE.md#tiering-hot-buffer--cold-storage-optional). Conformance passes with tiering on as well as off (a manual check — the CI matrix runs the default, tier-less build).
 
 ## Observability (OpenTelemetry)
 
@@ -199,38 +180,16 @@ The core protocol suite passes.
 
 ## Releasing
 
-> **npm publishing is currently disabled.** A release publishes the crate
-> (crates.io) and the Docker image, but **not** the npm packages — the `npm-publish`
-> job in `server_rust_publish.yml` is gated off (search `DISABLED:`). Re-enable it
-> when ready to ship the npm packages. (The merge-time canary Docker build is also
-> off; the release image still publishes.)
-
-Released via Changesets, like the rest of the monorepo. The version lives in this
-package's `package.json` (the `@electric-ax/durable-streams-server-rust` anchor,
-`private: true` — Changesets bumps it but does not publish it; CI publishes the
-real binary packages). To cut a release: add a changeset for this package and
-merge the "Version Packages" PR. On the version bump, `changesets_release.yml`
-fans out to publish all three channels at that version:
-
-- **crates.io** — the `durable-streams` crate (`cargo install durable-streams`),
-  via `server_rust_publish.yml`. `Cargo.toml`'s version is synced from
-  `package.json` at publish time (`scripts/sync-cargo-version.mjs`).
-- **npm** — `@electric-ax/durable-streams-server-rust` plus its four platform
-  packages (built per target, assembled by `npm/assemble.mjs`).
-- **Docker Hub** — `electricax/durable-streams-server-rust` (multi-arch), via
-  `server_rust_dockerhub_image.yml`.
-
-Both registries authenticate via OIDC trusted publishing, so CI stores no registry
-tokens. The `durable-streams` crate is reserved and its crates.io Trusted Publishing
-is configured. The npm trusted publishers still need configuring before npm
-publishing is re-enabled.
+Released via Changesets to three channels — crates.io (`durable-streams`), npm
+(`@electric-ax/durable-streams-server-rust`, currently gated off), and Docker Hub
+(`electricax/durable-streams-server-rust`). See [RELEASING.md](RELEASING.md).
 
 ---
 
 ## Benchmarks
 
-Numbers from **[ds-bench](https://github.com/electric-sql/ds-bench)**, a reproducible single-node harness — full matrix, methodology, and the comparison systems are in the **[2026-06-30 report](https://github.com/electric-sql/ds-bench/blob/feat/read-scalability-workload/results-2026-06-30/REPORT.md)** (measured on this build). One server node (`c4d-standard-16-lssd`) pinned to **4 CPUs**, a Kubernetes client fleet driving 256-byte binary appends. Throughput is the saturation ceiling; latency is fleet-wide p50 / p99; memory is the pod cgroup working set (anon + active page cache), peak / p50.
+Numbers from **[ds-bench](https://github.com/electric-sql/ds-bench)**, a reproducible single-node harness — the maintained results are the **[canonical campaign report](https://github.com/electric-sql/ds-bench/blob/main/results/REPORT.md)** (latest: 2026-07-23, measured on the `0.1.5` release with the barrier-aligned saturation methodology). Server on one `c4d-standard-64-lssd` node (raw-block local NVMe, the WAL_TUNING.md split-lane layout) pinned to **8 CPUs**; a Kubernetes client fleet drives 256-byte binary appends. Throughput is the saturation ceiling; latency is fleet-wide p50 / p99; memory is the pod cgroup working set (anon + active page cache), peak / p50.
 
-**Writes** (`wal` mode, group-commit fsync) — peak **~928,000 append/s** at 4 CPUs, scaling cleanly to **100k streams**, with median append latency sub-ms → ~1.5 ms through 10k streams. Memory tracks **stream count, not bytes** (each stream is a lean record plus its open file; data lives on disk / in the page cache, never resident), so it stays in tens–hundreds of MiB even at 100k streams, with p50 ≪ peak — versus the 1–3.5 GB a log-resident design holds at the same load.
+**Writes** (`wal` mode, group-commit fsync, the WAL_TUNING.md ideal configuration) — **~422k append/s at 10k streams and ~388k at 100k** on 8 pinned CPUs (**no cardinality cliff**: −8% from 10k→100k), with p50 append latency ~2.5 ms at ≤80% load. `memory` durability (the no-fsync ceiling) measures ≥636k at 100k streams on the same box. Past the fsync fixes the write path is CPU-bound: **16 pinned cores reach ~537k append/s** (true plateau). Memory tracks **stream count, not bytes** (each stream is a lean record plus its open file; data lives on disk / in the page cache, never resident), so the pod working set stays in the hundreds of MiB even at 100k streams — versus the 1–3.5 GB a log-resident design holds at the same load.
 
-**Live-tail reads (SSE reactor)** — the per-core epoll reactor serves SSE live tail at **p99 ~0.5–2.5 ms from 64 to 2048 concurrent connections**, the flattest-scaling read path (long-poll holds ~5–7 ms at the same fan-out; catch-up's resident re-scan does not scale past ~64 connections). **Fan-out memory is shared, not per-subscriber**: 1000 SSE subscribers on one stream cost **~27 MiB** total — one resident tail served to all — so subscriber count is decoupled from memory.
+**Reads** — catch-up replay sustains **~2.8 GiB/s** aggregate at 512 concurrent connections, flat from 10 to 100 streams; SSE live tail holds its delivery rate flat to 2048 concurrent connections; and interference stays decoupled: **100k concurrent paced catch-up readers cost a pinned 50k append/s write load nothing** (zero errors, write throughput unchanged). Single-stream fan-out (subscriber ladder) numbers — **fan-out memory is shared, not per-subscriber**: 1000 SSE subscribers on one stream cost ~27 MiB total — are from the **[2026-06-30 snapshot](https://github.com/electric-sql/ds-bench/blob/main/results-2026-06-30/REPORT.md)**.
