@@ -241,7 +241,7 @@ up-to-date; replay is meaningless.
 
 - ErrorState:
   `handleResponseMetadata` returns `{ action: 'ignored', state: this }`
-  and `handleMessageBatch` returns `{ state: this, suppressBatch: false, becameUpToDate: false }`
+  and `handleMessageBatch` returns `{ state: this, suppressUpToDate: false, becameUpToDate: false }`
 - PausedState:
   `handleMessageBatch` and `handleSseConnectionClosed` are no-ops
   and `handleResponseMetadata` delegates to `previousState`, preserving the paused wrapper for `accepted` and `stale-retry` transitions (`ignored` returns `this`)
@@ -291,6 +291,16 @@ Other states don't carry SSE state — when transitioning from a non-Live state
 back to Live, SSE state resets to defaults.
 
 **Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
+
+### C9: Replay suppression must not discard data messages
+
+When a non-SSE replay reaches an up-to-date message with the same cursor as the
+previous session, the duplicate `up-to-date` control message is suppressed. Every
+other message in that batch, including inserts, updates, and deletes, is still
+delivered to stream subscribers. A fresh up-to-date message is delivered once the
+cursor advances.
+
+**Enforcement**: Dedicated test (`should preserve change messages while suppressing a cached up-to-date`).
 
 ## Shape notification semantics
 
@@ -368,31 +378,32 @@ observing an intermediate empty-rows notification. The
 | C6         | -     | -           | yes            |
 | C7         | -     | yes         | yes            |
 | C8         | -     | -           | yes            |
+| C9         | -     | -           | yes            |
 
 ### Code -> Doc: Is each test derived from the spec?
 
-| Test File / Section            | Spec Reference          |
-| ------------------------------ | ----------------------- |
-| Tier 1: scenario builder tests | I0-I11 (via auto-check) |
-| Tier 2: transition truth table | All 70 cells            |
-| Algebraic property tests       | I3, I4, I10, I11, I8    |
-| Fuzz testing                   | I0-I12 (all invariants) |
-| Mutation testing               | I0-I12 (robustness)     |
-| shouldUseSse guard tests       | LiveState SSE behavior  |
-| SSE connection closed tests    | LiveState SSE fallback  |
-| applyUrlParams tests           | URL construction        |
-| Schema adoption tests          | C4                      |
-| 204/200 lastSyncedAt tests     | C5                      |
-| SSE offset tests               | C6                      |
-| Stale handle tests             | C7                      |
-| ReplayingState suppress tests  | Replay cursor semantics |
+| Test File / Section            | Spec Reference              |
+| ------------------------------ | --------------------------- |
+| Tier 1: scenario builder tests | I0-I11 (via auto-check)     |
+| Tier 2: transition truth table | All 70 cells                |
+| Algebraic property tests       | I3, I4, I10, I11, I8        |
+| Fuzz testing                   | I0-I12 (all invariants)     |
+| Mutation testing               | I0-I12 (robustness)         |
+| shouldUseSse guard tests       | LiveState SSE behavior      |
+| SSE connection closed tests    | LiveState SSE fallback      |
+| applyUrlParams tests           | URL construction            |
+| Schema adoption tests          | C4                          |
+| 204/200 lastSyncedAt tests     | C5                          |
+| SSE offset tests               | C6                          |
+| Stale handle tests             | C7                          |
+| ReplayingState suppress tests  | Replay cursor semantics, C9 |
 
 ### Gaps
 
 | Gap                            | Status | Notes                                         |
 | ------------------------------ | ------ | --------------------------------------------- |
 | SSE fallback to long polling   | Tested | Direct construction only (DSL doesn't expose) |
-| ReplayingState suppressBatch   | Tested | Direct construction only (DSL doesn't expose) |
+| ReplayingState suppression     | Tested | Direct construction only (DSL doesn't expose) |
 | ErrorState.reset()             | Tested | Direct construction (DSL doesn't have reset)  |
 | handleMessageBatch no-messages | Tested | Direct construction (edge case)               |
 
