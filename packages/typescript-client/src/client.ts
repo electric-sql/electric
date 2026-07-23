@@ -1825,7 +1825,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const subscriptionId = {}
 
     this.#subscribers.set(subscriptionId, [callback, onError])
-    if (!this.#started) this.#start()
+    if (!this.#started) {
+      this.#start().catch(() => {
+        // Errors from #start are handled internally via onError.
+        // This catch prevents unhandled promise rejection in Node/Bun.
+      })
+    }
 
     return () => {
       this.#subscribers.delete(subscriptionId)
