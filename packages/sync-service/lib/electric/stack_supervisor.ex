@@ -162,6 +162,10 @@ defmodule Electric.StackSupervisor do
                        type: {:or, [:non_neg_integer, nil]},
                        default: Electric.Config.default(:consumer_gc_heap_threshold)
                      ],
+                     stalled_serve_timeout: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:stalled_serve_timeout)
+                     ],
                      consumer_partitions: [type: {:or, [:pos_integer, nil]}, default: nil]
                    ]
                  ],
@@ -367,6 +371,7 @@ defmodule Electric.StackSupervisor do
     flush_stall_grace_period = Keyword.fetch!(config.tweaks, :flush_stall_grace_period)
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
     consumer_gc_heap_threshold = Keyword.fetch!(config.tweaks, :consumer_gc_heap_threshold)
+    stalled_serve_timeout = Keyword.fetch!(config.tweaks, :stalled_serve_timeout)
 
     shape_cache_opts = [
       stack_id: stack_id
@@ -419,8 +424,10 @@ defmodule Electric.StackSupervisor do
            flush_stall_grace_period: flush_stall_grace_period,
            process_spawn_opts: process_spawn_opts,
            consumer_gc_heap_threshold: consumer_gc_heap_threshold,
+           stalled_serve_timeout: stalled_serve_timeout,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},
+        {Electric.Shapes.Api.ServeWatchdog, stack_id: stack_id},
         {Electric.AsyncDeleter,
          stack_id: stack_id,
          storage_dir: config.storage_dir,

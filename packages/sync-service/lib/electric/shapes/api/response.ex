@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Api.Response do
   alias Electric.Plug.Utils
   alias Electric.Shapes.Api
+  alias Electric.Shapes.Api.ServeWatchdog
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -434,37 +435,111 @@ defmodule Electric.Shapes.Api.Response do
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
 
     conn = Plug.Conn.send_chunked(conn, status)
+    watchdog = watchdog_context(stack_id, response)
 
     {conn, bytes_sent} =
-      response.body
-      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
-        chunk_size = IO.iodata_length(chunk)
+      try do
+        response.body
+        |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
+          chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span(
-          "shape_get.plug.stream_chunk",
-          Map.put(sample_rate_attrs, "chunk_size", chunk_size),
-          stack_id,
-          fn ->
-            case Plug.Conn.chunk(conn, chunk) do
-              {:ok, conn} ->
-                {:cont, {conn, bytes_sent + chunk_size}}
+          OpenTelemetry.with_span(
+            "shape_get.plug.stream_chunk",
+            Map.put(sample_rate_attrs, "chunk_size", chunk_size),
+            stack_id,
+            fn ->
+              case write_in_bounded_pieces(conn, chunk, chunk_size, watchdog) do
+                {:ok, conn} ->
+                  {:cont, {conn, bytes_sent + chunk_size}}
 
-              {:error, reason} when reason in ["closed", :closed] ->
-                error_str = "Connection closed unexpectedly while streaming response"
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:error, reason} when reason in ["closed", :closed] ->
+                  error_str = "Connection closed unexpectedly while streaming response"
+                  conn = Plug.Conn.assign(conn, :error_str, error_str)
+                  {:halt, {conn, bytes_sent}}
 
-              {:error, reason} ->
-                error_str = "Error while streaming response: #{inspect(reason)}"
-                Logger.error(error_str)
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:error, reason} ->
+                  error_str = "Error while streaming response: #{inspect(reason)}"
+                  Logger.error(error_str)
+                  conn = Plug.Conn.assign(conn, :error_str, error_str)
+                  {:halt, {conn, bytes_sent}}
+              end
             end
-          end
-        )
-      end)
+          )
+        end)
+      after
+        watchdog && ServeWatchdog.write_finished(stack_id)
+      end
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
+  end
+
+  # Socket writes are split into pieces of at most this size. Bounding the
+  # write unit bounds the response data queued in the socket's driver queue
+  # at any moment and — because a bounded write to a live client completes
+  # once the transport buffers drain — gives the stall watchdog below a
+  # progress signal: each completed piece is proof the client accepted data.
+  #
+  # Derived from the encoder's batch cap so that ordinary body elements are
+  # written as-is (no flattening or splitting) and only oversized single
+  # items (e.g. one very large row) are split. Making pieces smaller would
+  # not sharpen the watchdog: write completion is quantized by the OS at up
+  # to a kernel send buffer of drain, which dwarfs the piece size.
+  @socket_write_bytes Electric.Shapes.Api.Encoder.JSON.max_batch_bytes()
+
+  # See Electric.Shapes.Api.ServeWatchdog for the design rationale. The
+  # context carries what each per-piece registration needs; `nil` (timeout
+  # not positive) disables reaping for this serve.
+  defp watchdog_context(stack_id, response) do
+    # Fallback for stacks whose seed config omits the key (e.g. minimal
+    # unit-test stacks); Electric.Config is the single source of truth.
+    timeout =
+      Electric.StackConfig.lookup(
+        stack_id,
+        :stalled_serve_timeout,
+        Electric.Config.default(:stalled_serve_timeout)
+      )
+
+    if is_integer(timeout) and timeout > 0 do
+      {stack_id, response.handle, timeout}
+    end
+  end
+
+  # Write one response body element as a sequence of bounded socket writes,
+  # notifying the watchdog around each one. Elements within the bound — the
+  # common case, as the bound is derived from the encoder's batch cap — are
+  # written directly without flattening.
+  defp write_in_bounded_pieces(conn, chunk, chunk_size, watchdog)
+       when chunk_size <= @socket_write_bytes do
+    guarded_chunk(conn, chunk, watchdog)
+  end
+
+  defp write_in_bounded_pieces(conn, chunk, _chunk_size, watchdog) do
+    chunk
+    |> IO.iodata_to_binary()
+    |> write_pieces(conn, watchdog)
+  end
+
+  defp write_pieces(<<piece::binary-size(@socket_write_bytes), rest::binary>>, conn, watchdog)
+       when byte_size(rest) > 0 do
+    case guarded_chunk(conn, piece, watchdog) do
+      {:ok, conn} -> write_pieces(rest, conn, watchdog)
+      error -> error
+    end
+  end
+
+  defp write_pieces(piece, conn, watchdog) do
+    guarded_chunk(conn, piece, watchdog)
+  end
+
+  defp guarded_chunk(conn, data, nil) do
+    Plug.Conn.chunk(conn, data)
+  end
+
+  defp guarded_chunk(conn, data, {stack_id, shape_handle, timeout}) do
+    ServeWatchdog.write_started(stack_id, shape_handle, timeout)
+    result = Plug.Conn.chunk(conn, data)
+    ServeWatchdog.write_finished(stack_id)
+    result
   end
 
   def etag(response, opts \\ [])
