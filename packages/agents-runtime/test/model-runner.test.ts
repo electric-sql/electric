@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const completeSimple = vi.fn()
-const getModel = vi.fn(() => ({ provider: `openai-codex`, id: `gpt-5.4-mini` }))
+const getModel = vi.fn(() => ({ provider: `openai-codex`, id: `gpt-5.6-luna` }))
 
-vi.mock(`@mariozechner/pi-ai`, () => ({ completeSimple, getModel }))
+vi.mock(`@earendil-works/pi-ai/compat`, () => ({ completeSimple, getModel }))
 
 const {
   completeWithLowCostModel,
@@ -33,7 +33,7 @@ describe(`completeWithLowCostModel`, () => {
     await completeWithLowCostModel({
       catalog: {
         choices: [
-          { provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false },
+          { provider: `openai-codex`, id: `gpt-5.6-luna`, reasoning: false },
         ],
       },
       purpose: `URL extraction`,
@@ -54,7 +54,7 @@ describe(`completeWithLowCostModel`, () => {
     await completeWithLowCostModel({
       catalog: {
         choices: [
-          { provider: `openai-codex`, id: `gpt-5.4-mini`, reasoning: false },
+          { provider: `openai-codex`, id: `gpt-5.6-luna`, reasoning: false },
         ],
       },
       purpose: `URL extraction`,

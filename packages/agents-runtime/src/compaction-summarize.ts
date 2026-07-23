@@ -1,4 +1,4 @@
-import { completeSimple } from '@mariozechner/pi-ai'
+import { completeSimple } from '@earendil-works/pi-ai/compat'
 import { resolvePiModel, toAgentHistory } from './pi-adapter'
 import {
   COMPACTION_SUMMARIZATION_PROMPT,

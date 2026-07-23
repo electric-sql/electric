@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTransaction } from '@durable-streams/state/db'
-import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
+import { createAssistantMessageEventStream } from '@earendil-works/pi-ai/compat'
 import { getCronSourceRef } from '../src/cron-utils'
 import {
   buildWebhookSourceManifestEntry,
@@ -19,7 +19,7 @@ import type { MockInstance } from 'vitest'
 import type { ProcessWakeConfig, WebhookNotification } from '../src/types'
 import type { ChangeEvent } from '@durable-streams/state'
 import type { ErrorEvent, Manifest } from '../src/entity-schema'
-import type { AssistantMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage } from '@earendil-works/pi-ai/compat'
 
 // ---------------------------------------------------------------------------
 // Mock @durable-streams/client
