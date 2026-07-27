@@ -419,6 +419,13 @@ defmodule Support.ComponentSetup do
     [on_cleanup: on_cleanup]
   end
 
+  defp env_pool_size do
+    case System.get_env("TEST_POOL_SIZE") do
+      nil -> 2
+      value -> String.to_integer(value)
+    end
+  end
+
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
@@ -731,7 +738,11 @@ defmodule Support.ComponentSetup do
          pool_opts: [
            backoff_type: :stop,
            max_restarts: 0,
-           pool_size: 2
+           # Default of 2 leaves a snapshot pool of 1 connection
+           # (Connection.Manager.pool_sizes/1), which under many-shape loads
+           # (e.g. the oracle property test) starves move-in queries into
+           # queue timeouts and 409 load-shedding. Override for such tests.
+           pool_size: Map.get(ctx, :db_pool_size, env_pool_size())
          ],
          tweaks: [
            registry_partitions: 1,
