@@ -565,13 +565,23 @@ defmodule Support.ComponentSetup do
     old_sup_id = Map.get(ctx, :stack_supervisor_id, Electric.StackSupervisor)
     old_server_id = Map.get(ctx, :server_id, Bandit)
 
-    # The old stack derived its slot name from its stack_id in
-    # start_stack_supervisor!/7; force the new stack onto the same slot so they
-    # contend on one advisory lock.
-    old_slot_name = "electric_test_slot_#{:erlang.phash2(old_stack_id)}"
+    # All generations derive their identity from the base (pre-roll) stack_id.
+    # Deriving from the *previous* generation's id instead compounds the
+    # suffix ("…_roll1_roll2_…"): registry-name atoms eventually exceed the
+    # 255-char atom limit (crashing the stack boot around gen 17 with this
+    # test's names), and — worse for fidelity — a slot name hashed from the
+    # evolving id changes every generation, so restarts 2+ would silently
+    # create fresh replication slots instead of contending for and taking over
+    # the original one.
+    base_stack_id = Map.get(ctx, :base_stack_id, old_stack_id)
+
+    # The original stack derived its slot name from its stack_id in
+    # start_stack_supervisor!/7; force every replacement stack onto that same
+    # slot so old and new always contend on one advisory lock.
+    old_slot_name = "electric_test_slot_#{:erlang.phash2(base_stack_id)}"
 
     gen = Map.get(ctx, :rolling_gen, 0) + 1
-    new_stack_id = "#{old_stack_id}_roll#{gen}"
+    new_stack_id = "#{base_stack_id}_roll#{gen}"
     new_sup_id = {Electric.StackSupervisor, new_stack_id}
     new_server_id = {Bandit, new_stack_id}
 
@@ -651,7 +661,7 @@ defmodule Support.ComponentSetup do
 
     new_ctx
     |> Map.merge(server)
-    |> Map.merge(%{server_id: new_server_id, rolling_gen: gen})
+    |> Map.merge(%{server_id: new_server_id, rolling_gen: gen, base_stack_id: base_stack_id})
   end
 
   # Polls until the stack's registered processes are gone. Uses
