@@ -465,47 +465,17 @@ Consumer processes are partitioned across some number of supervisors to improve 
 
 ## Feature Flags
 
-Feature flags enable advanced features and staged rollouts for capabilities that are not yet enabled by default in production.
+Feature flags enable staged rollouts of new capabilities that are not yet enabled by default in production.
 
 ### ELECTRIC_FEATURE_FLAGS
 
 <EnvVarConfig
     name="ELECTRIC_FEATURE_FLAGS"
-    defaultValue=""
-    example="allow_subqueries,tagged_subqueries">
+    defaultValue="">
 
-**Available flags:**
-
-- `allow_subqueries` - Enables preview subquery support in shape WHERE clauses
-- `tagged_subqueries` - Enables preview incremental subquery move handling, including compound boolean expressions with compatible clients
+Comma-separated list of feature flags to enable. There are currently no feature flags available.
 
 </EnvVarConfig>
-
-:::warning Client compatibility
-Electric 1.6's incremental handling for compound subquery expressions changes the client protocol. Upgrade clients before enabling the server rollout. TanStack DB clients need `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`.
-:::
-
-### allow_subqueries
-
-Enables support for subqueries in the WHERE clause of [shape](/docs/sync/guides/shapes) definitions. When enabled, you can use queries in the form:
-
-```sql
-WHERE id IN (SELECT user_id FROM memberships WHERE org_id = 'org_123')
-```
-
-This allows creating shapes that filter based on related data in other tables, enabling more complex data synchronization patterns.
-
-**Status:** Preview. Disabled by default in production until enabled with `ELECTRIC_FEATURE_FLAGS`.
-
-### tagged_subqueries
-
-Subqueries create dependency trees between shapes. This flag enables incremental move handling when dependency rows change, including compound `WHERE` expressions that combine subqueries with `AND`, `OR`, and `NOT`.
-
-Before Electric 1.6, complex boolean combinations around subqueries could still invalidate the shape and return a `409` on a move. With this flag enabled and compatible clients, those changes are reconciled in-stream instead.
-
-See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
-
-**Status:** Preview rollout flag for subquery move handling. Disabled by default in production. Requires `allow_subqueries` to be enabled.
 
 ## Caching
 

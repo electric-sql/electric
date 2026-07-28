@@ -295,7 +295,6 @@ defmodule Electric.Shapes.Shape do
   defp validate_where_clause(where, %{inspector: inspector} = opts, refs) do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
-         :ok <- check_feature_flag(subqueries, opts),
          {:ok, shape_dependencies, sublink_dependency_indexes} <-
            build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
@@ -315,15 +314,6 @@ defmodule Electric.Shapes.Shape do
     else
       {:error, {part, reason}} -> {:error, {part, reason}}
       {:error, reason} -> {:error, {:where, reason}}
-    end
-  end
-
-  defp check_feature_flag(subqueries, opts) do
-    if subqueries != [] and
-         not Enum.member?(opts.feature_flags, "allow_subqueries") do
-      {:error, {:where, "Subqueries are not supported"}}
-    else
-      :ok
     end
   end
 

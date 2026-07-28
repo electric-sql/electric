@@ -1000,7 +1000,6 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok, %Shape{where: where, shape_dependencies: dependencies}} =
                Shape.new("item",
                  inspector: inspector,
-                 feature_flags: ["allow_subqueries"],
                  where:
                    "id IN (SELECT a FROM rel WHERE kind = 'k') OR id IN (SELECT b FROM rel WHERE kind = 'k')"
                )

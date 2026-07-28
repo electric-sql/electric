@@ -52,7 +52,7 @@ Shapes are defined by:
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
 > [!Warning] Limitations
-> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries-preview) to filter based on related data. Shape definitions are [immutable](#immutable).
+> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries) to filter based on related data. Shape definitions are [immutable](#immutable).
 
 > [!Warning] Security
 > Production apps should request shapes through your backend API for authorization and security. See the [auth guide](/docs/sync/guides/auth).
@@ -121,9 +121,9 @@ Where clauses have the following constraints:
 
 1. can't use non-deterministic SQL functions like `count()` or `now()`
 
-#### Subqueries (preview)
+#### Subqueries
 
-Electric has preview support for subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables relational filtering patterns such as memberships, sharing rules, parent-child traversal, and exclusions while the feature remains gated behind flags.
+Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables relational filtering patterns such as memberships, sharing rules, parent-child traversal, and exclusions.
 
 For example, you can sync only users who belong to a specific organization:
 
@@ -189,11 +189,7 @@ const shape = new Shape(stream)
 
 When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (e.g., a project becomes archived), rows will automatically move in or out of the shape without the row itself being modified.
 
-Electric 1.6 keeps these moves incremental even for compound expressions that use `AND`, `OR`, and `NOT` around subqueries. In older releases those cases could return `409` and force a full resync of the shape.
-
-:::info Preview feature
-Subqueries are currently in preview and are enabled using `ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries`. The flags gate availability rather than a separate syntax or API. See the [configuration docs](/docs/sync/api/config#allow_subqueries) for details.
-:::
+Electric keeps these moves incremental even for compound expressions that use `AND`, `OR`, and `NOT` around subqueries. In older releases those cases could return `409` and force a full resync of the shape.
 
 When constructing a where clause with user input as a filter, it's recommended to use a positional placeholder (`$1`) to avoid
 SQL injection-like situations. For example, if filtering a table on a user id, it's better to use `where=user = $1` with
@@ -514,7 +510,7 @@ We currently optimize the evaluation of the following clauses:
 
 ### Single table
 
-Shapes sync data from a single table. While you can use [subqueries](#subqueries-preview) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
+Shapes sync data from a single table. While you can use [subqueries](#subqueries) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
 
 For syncing related data across tables, you currently need to use multiple shapes. In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
 

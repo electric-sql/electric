@@ -21,7 +21,10 @@
 - `timetz` — not supported in WHERE
 - Non-deterministic functions: `now()`, `random()`, `count()`, `current_timestamp`
 - Aggregate functions
-- Subqueries (experimental, requires `ELECTRIC_FEATURE_FLAGS=allow_subqueries`)
+
+## Subqueries
+
+Supported in WHERE clauses to filter rows based on data in other tables, e.g. `id IN (SELECT user_id FROM memberships WHERE org_id = $1)`.
 
 ## Positional Parameters
 

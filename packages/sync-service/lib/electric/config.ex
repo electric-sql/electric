@@ -38,7 +38,7 @@ defmodule Electric.Config do
 
   @build_env Mix.env()
 
-  @known_feature_flags ~w[allow_subqueries tagged_subqueries]
+  @known_feature_flags ~w[]
   @default_storage_dir "./persistent"
 
   @defaults [
@@ -133,7 +133,7 @@ defmodule Electric.Config do
     consumer_gc_heap_threshold: nil,
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
-    feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
+    feature_flags: [],
     publication_refresh_period: 60_000,
     schema_reconciler_period: 60_000,
     snapshot_timeout_to_first_data: :timer.seconds(30),
