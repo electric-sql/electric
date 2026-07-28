@@ -31,9 +31,19 @@ defmodule Support.IntegrationSetup do
       if num_clients > 1 do
         finch_name = :"Electric.Client.Finch.Test.#{System.unique_integer([:positive])}"
 
+        # Explicit http1: an http2 pool multiplexes every checker onto a
+        # handful of connections and sheds excess concurrent streams with
+        # `:pool_not_available`, which starves random checkers under
+        # many-client load (e.g. 800 concurrent long-polls in the oracle
+        # property tests). An http1 pool sized to the client count queues
+        # instead of shedding. The `default` key applies to every origin, so
+        # replacement servers on new ports (rolling deploys) get the same
+        # pool configuration.
         {:ok, _} =
           ExUnit.Callbacks.start_supervised(
-            {Finch, name: finch_name, pools: %{default: [size: num_clients]}}
+            {Finch,
+             name: finch_name,
+             pools: %{default: [size: num_clients, count: 1, protocols: [:http1]]}}
           )
 
         finch_name

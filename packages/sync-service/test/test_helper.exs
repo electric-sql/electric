@@ -12,6 +12,25 @@ ExUnit.start(
   capture_log: true
 )
 
+# Debug aid: mirror all Logger events at/above ORACLE_LOG_LEVEL (default info)
+# to a file, bypassing ExUnit's capture_log which otherwise swallows server
+# logs in the long-running oracle tests. Enable with ORACLE_LOG_FILE=/path.
+if log_file = System.get_env("ORACLE_LOG_FILE") do
+  level = String.to_existing_atom(System.get_env("ORACLE_LOG_LEVEL", "info"))
+
+  :ok =
+    :logger.add_handler(:oracle_file_log, :logger_std_h, %{
+      config: %{file: to_charlist(log_file), file_check: 100},
+      level: level,
+      formatter:
+        Logger.Formatter.new(
+          format: "$time $metadata[$level] $message\n",
+          metadata: [:pid, :stack_id, :shape_handle, :failed_handle],
+          colors: [enabled: false]
+        )
+    })
+end
+
 # Start electric_client application directly, bypassing OTP's dependency resolution.
 # This avoids a circular dependency: electric_client has :electric as an optional dep,
 # which gets added to its applications list when compiled in sync-service context,

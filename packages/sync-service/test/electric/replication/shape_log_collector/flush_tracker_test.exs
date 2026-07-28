@@ -192,6 +192,29 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       assert FlushTracker.empty?(tracker)
     end
 
+    test "a notification past last_sent completes the shape", %{tracker: tracker} do
+      tracker = handle_txn(tracker, batch(lsn: 5, last_offset: 10), ["shape1"])
+
+      # Subquery consumers append move-in/move-out control messages to the
+      # shape log after the transaction's last replicated operation, so their
+      # writer's flush notification can land past the offset the tracker
+      # recorded as last_sent. Having flushed past everything it was sent,
+      # the shape owes nothing and must be considered caught up.
+      tracker = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 12), 0)
+
+      assert_receive {:flush_confirmed, 5}
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "a notification past last_sent is not reported as stalled", %{tracker: tracker} do
+      tracker = handle_txn(tracker, batch(lsn: 5, last_offset: 10), ["shape1"], 100)
+
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 12), 150)
+
+      assert FlushTracker.stalled_shapes(tracker, 100_000, 100) == []
+    end
+
     test "should notify flushes under continuous updates", %{tracker: tracker} do
       tracker
       |> handle_txn(batch(lsn: 10, last_offset: 10), ["shape1"])

@@ -64,6 +64,43 @@ defmodule Electric.Shapes.Consumer.StateTest do
       assert state.txn_offset_mapping == []
     end
 
+    test "carries a dropped boundary forward when the flush lands between written offset and boundary",
+         %{state: state} do
+      # The writer wrote up to (100, 5) for a txn whose boundary is (100, 10),
+      # then a trailing unmapped write (e.g. a subquery move-out control
+      # message) landed at (100, 7) and storage flushed through it. Everything
+      # the shape owes through (100, 10) is durable — nothing was written in
+      # ((100, 5), (100, 10)] except the flushed control message — so the
+      # notification must be the boundary, not the raw flushed offset.
+      # Returning (100, 7) here permanently under-reports: the mapping entry is
+      # gone, no further writes are pending, and the ShapeLogCollector's flush
+      # entry for the txn at (100, 10) can never complete.
+      state =
+        %{state | txn_offset_mapping: [{LogOffset.new(100, 5), LogOffset.new(100, 10)}]}
+
+      {state, result} = State.align_offset_to_txn_boundary(state, LogOffset.new(100, 7))
+
+      assert result == LogOffset.new(100, 10)
+      assert state.txn_offset_mapping == []
+    end
+
+    test "uses the max dropped boundary when multiple entries are dropped", %{state: state} do
+      state =
+        %{
+          state
+          | txn_offset_mapping: [
+              {LogOffset.new(100, 5), LogOffset.new(100, 10)},
+              {LogOffset.new(200, 3), LogOffset.new(200, 8)},
+              {LogOffset.new(300, 1), LogOffset.new(300, 9)}
+            ]
+        }
+
+      {state, result} = State.align_offset_to_txn_boundary(state, LogOffset.new(200, 5))
+
+      assert result == LogOffset.new(200, 8)
+      assert state.txn_offset_mapping == [{LogOffset.new(300, 1), LogOffset.new(300, 9)}]
+    end
+
     test "handles empty mapping", %{state: state} do
       state = %{state | txn_offset_mapping: []}
       offset = LogOffset.new(100, 5)

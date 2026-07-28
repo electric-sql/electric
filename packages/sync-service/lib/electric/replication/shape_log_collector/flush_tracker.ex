@@ -2,6 +2,8 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.{Commit, TransactionFragment}
 
+  import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
+
   @type shape_id() :: term()
 
   defstruct [
@@ -190,7 +192,16 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
       when is_map_key(last_flushed, shape_id) do
     {last_flushed, min_incomplete_flush_tree} =
       case Map.fetch!(last_flushed, shape_id) do
-        {^last_flushed_offset, prev_flushed_offset, _last_progress_at} ->
+        # A flush at or past last_sent means the writer has durably persisted
+        # everything this shape was sent, so it is caught up. Strict equality
+        # is not enough here: shape writers can append entries past the
+        # transaction's last replicated operation (e.g. subquery move-in/
+        # move-out control messages at incremented op offsets), making their
+        # flush notification overshoot last_sent. Keeping such an entry would
+        # pin it forever — the consumer has nothing left to flush — dragging
+        # the global flush boundary and eventually tripping the stall check.
+        {last_sent, prev_flushed_offset, _last_progress_at}
+        when not is_log_offset_lt(last_flushed_offset, last_sent) ->
           {Map.delete(last_flushed, shape_id),
            min_incomplete_flush_tree
            |> delete_from_tree(prev_flushed_offset, shape_id)}

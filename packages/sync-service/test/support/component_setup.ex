@@ -565,13 +565,23 @@ defmodule Support.ComponentSetup do
     old_sup_id = Map.get(ctx, :stack_supervisor_id, Electric.StackSupervisor)
     old_server_id = Map.get(ctx, :server_id, Bandit)
 
-    # The old stack derived its slot name from its stack_id in
-    # start_stack_supervisor!/7; force the new stack onto the same slot so they
-    # contend on one advisory lock.
-    old_slot_name = "electric_test_slot_#{:erlang.phash2(old_stack_id)}"
+    # All generations derive their identity from the base (pre-roll) stack_id.
+    # Deriving from the *previous* generation's id instead compounds the
+    # suffix ("…_roll1_roll2_…"): registry-name atoms eventually exceed the
+    # 255-char atom limit (crashing the stack boot around gen 17 with this
+    # test's names), and — worse for fidelity — a slot name hashed from the
+    # evolving id changes every generation, so restarts 2+ would silently
+    # create fresh replication slots instead of contending for and taking over
+    # the original one.
+    base_stack_id = Map.get(ctx, :base_stack_id, old_stack_id)
+
+    # The original stack derived its slot name from its stack_id in
+    # start_stack_supervisor!/7; force every replacement stack onto that same
+    # slot so old and new always contend on one advisory lock.
+    old_slot_name = "electric_test_slot_#{:erlang.phash2(base_stack_id)}"
 
     gen = Map.get(ctx, :rolling_gen, 0) + 1
-    new_stack_id = "#{old_stack_id}_roll#{gen}"
+    new_stack_id = "#{base_stack_id}_roll#{gen}"
     new_sup_id = {Electric.StackSupervisor, new_stack_id}
     new_server_id = {Bandit, new_stack_id}
 
@@ -651,7 +661,7 @@ defmodule Support.ComponentSetup do
 
     new_ctx
     |> Map.merge(server)
-    |> Map.merge(%{server_id: new_server_id, rolling_gen: gen})
+    |> Map.merge(%{server_id: new_server_id, rolling_gen: gen, base_stack_id: base_stack_id})
   end
 
   # Polls until the stack's registered processes are gone. Uses
@@ -711,49 +721,64 @@ defmodule Support.ComponentSetup do
 
     stack_supervisor =
       start_supervised!(
-        {Electric.StackSupervisor,
-         stack_id: stack_id,
-         stack_events_registry: stack_events_registry,
-         chunk_bytes_threshold:
-           Map.get(
-             ctx,
-             :chunk_size,
-             Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
-           ),
-         persistent_kv: kv,
-         storage: storage,
-         storage_dir: ctx.tmp_dir,
-         connection_opts: connection_opts,
-         replication_opts:
-           Keyword.merge(
-             [
-               connection_opts: replication_connection_opts,
-               slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
-               publication_name: publication_name,
-               try_creating_publication?: true,
-               slot_temporary?: true
-             ],
-             List.wrap(ctx[:replication_opts_overrides])
-           ),
-         pool_opts: [
-           backoff_type: :stop,
-           max_restarts: 0,
-           # Default of 2 leaves a snapshot pool of 1 connection
-           # (Connection.Manager.pool_sizes/1), which under many-shape loads
-           # (e.g. the oracle property test) starves move-in queries into
-           # queue timeouts and 409 load-shedding. Override for such tests.
-           pool_size: Map.get(ctx, :db_pool_size, env_pool_size())
-         ],
-         tweaks: [
-           registry_partitions: 1,
-           shape_cleaner_opts: shape_cleaner_opts(ctx)
-         ],
-         manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
-         telemetry_opts: [instance_id: "test_instance", version: Electric.version()],
-         feature_flags: Electric.Config.get_env(:feature_flags),
-         shape_db_opts: [
-           storage_dir: ctx.tmp_dir
-         ]},
+        {
+          Electric.StackSupervisor,
+          # Scope the shape metadata db by stack_id so two stacks sharing a
+          # tmp_dir (a rolling deploy's old and new stack) don't share one
+          # shape-db: with a shared db the new stack "restores" the old stack's
+          # shape metadata while having none of its data, a storage layout no
+          # production deploy has (per-instance disks have neither; a shared
+          # bind-mount has both). The scoped dir must live *beside* the
+          # PureFileStorage data namespace (`tmp_dir/<stack_id>`), not inside
+          # it: `reset_storage`/`cleanup_all!` trashes that whole directory,
+          # which must never take the metadata db with it. The stack_id (a
+          # full test name) is hashed rather than embedded because sqlite's
+          # unix VFS caps database pathnames at 512 bytes, which long test
+          # names exceed. Same stack_id (graceful and brutal restarts) hashes
+          # to the same path, so restore-from-disk scenarios are unaffected.
+          stack_id: stack_id,
+          stack_events_registry: stack_events_registry,
+          chunk_bytes_threshold:
+            Map.get(
+              ctx,
+              :chunk_size,
+              Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+            ),
+          persistent_kv: kv,
+          storage: storage,
+          storage_dir: ctx.tmp_dir,
+          connection_opts: connection_opts,
+          replication_opts:
+            Keyword.merge(
+              [
+                connection_opts: replication_connection_opts,
+                slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
+                publication_name: publication_name,
+                try_creating_publication?: true,
+                slot_temporary?: true
+              ],
+              List.wrap(ctx[:replication_opts_overrides])
+            ),
+          pool_opts: [
+            backoff_type: :stop,
+            max_restarts: 0,
+            # Default of 2 leaves a snapshot pool of 1 connection
+            # (Connection.Manager.pool_sizes/1), which under many-shape loads
+            # (e.g. the oracle property test) starves move-in queries into
+            # queue timeouts and 409 load-shedding. Override for such tests.
+            pool_size: Map.get(ctx, :db_pool_size, env_pool_size())
+          ],
+          tweaks: [
+            registry_partitions: 1,
+            shape_cleaner_opts: shape_cleaner_opts(ctx)
+          ],
+          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
+          telemetry_opts: [instance_id: "test_instance", version: Electric.version()],
+          feature_flags: Electric.Config.get_env(:feature_flags),
+          shape_db_opts: [
+            storage_dir: Path.join(ctx.tmp_dir, "meta-#{:erlang.phash2(stack_id)}")
+          ]
+        },
         id: id,
         restart: :temporary,
         significant: false
