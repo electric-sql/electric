@@ -178,7 +178,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        restart_type: [graceful, brutal]
+        restart_type: [graceful, brutal, rolling]
     env:
       MIX_ENV: test
       MIX_TARGET: application
