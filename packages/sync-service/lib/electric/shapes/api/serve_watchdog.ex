@@ -11,34 +11,59 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
   the connection survives — a population of them accumulates with connection
   count (reproduced in test/integration/stalled_serve_memory_test.exs).
 
-  This server instead times the completion of each bounded application-level
-  socket write: request handlers register before every write and deregister
-  after it, and a periodic sweep terminates any handler whose in-flight
-  write has outlived its deadline. The effective contract is a minimum
-  sustained throughput — one bounded write unit per deadline window — which
-  any live client trivially meets and a stalled one cannot. Write completion
-  is quantized by the OS at up to a kernel send buffer of drain, so
-  deadlines should comfortably exceed the time a healthy-but-slow client
-  needs to drain one (the 60s default is ample). A terminated client can
-  reconnect and resume from its last offset.
+  ## Mechanism
 
-  Registration is cast-based: handlers never block on this server, and casts
-  to a stack without a running instance are dropped, so serving degrades to
-  unguarded rather than failing. If the server restarts, in-flight serves
-  re-register on their next write, leaving at most one write unguarded.
+  Around each bounded socket write, the request handler arms a BIF timer
+  (`:erlang.start_timer/3`) addressed at this server and cancels it when the
+  write completes. Timers are per-scheduler O(1) and a cancelled timer never
+  sends anything, so this server's load is proportional to *stalls* — the
+  rare event it exists for — rather than to write throughput, and deadlines
+  fire exactly rather than with sweep slack.
 
-  One instance runs per stack.
+  A fired timer is only acted on if the handler's process dictionary still
+  carries that exact timer ref: the handler stamps the ref when arming and
+  deletes it when the write completes, so a timeout message racing a
+  completed write (or landing after the same process has moved on to another
+  request on a keepalive connection) is a no-op rather than a wrong kill.
+
+  ## What a kill must clean up
+
+  `Process.exit(pid, :kill)` destroys the handler without running another
+  instruction, so this server takes over the accounting the handler can no
+  longer do. From the same dictionary snapshot used for the ref check it
+  reads the handler's admission permit (see
+  `Electric.AdmissionControl.permit_pd_key/0`), then monitors, kills, and on
+  observing the `:killed` exit releases the permit and emits a
+  `[:electric, :plug, :serve_shape, :reaped]` telemetry event with the stack
+  and shape — otherwise reaped serves would be invisible to request metrics
+  (the handler's own telemetry emission dies with it) and would permanently
+  leak their admission slot. There is a theoretical window in which the
+  handler completes its entire serve and releases its own permit between the
+  dictionary snapshot and the kill landing — accepted, like the analogous
+  arm/fire boundary race, as it requires the whole remainder of a serve to
+  execute in the microseconds after its current write has already overrun a
+  deadline measured in tens of seconds.
+
+  The handler's root OTel span is not ended by the kill; orphaned spans are
+  dropped by the SDK's sweeper.
+
+  ## Scope
+
+  Serves are only guarded under adapters where the plug runs in the
+  socket-owning process (Bandit HTTP/1) — see `Response.send_stream/2` for
+  the gate. Arming toward a stack without a running server is a silent
+  no-op, so serving degrades to unguarded rather than failing; if this
+  server restarts, in-flight serves re-arm toward it on their next write.
   """
   use GenServer
 
   require Logger
 
-  @sweep_interval_ms 1_000
+  @write_ref_key {__MODULE__, :write_ref}
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    sweep_interval_ms = Keyword.get(opts, :sweep_interval_ms, @sweep_interval_ms)
-    GenServer.start_link(__MODULE__, {stack_id, sweep_interval_ms}, name: name(stack_id))
+    GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
 
   def name(stack_id) do
@@ -46,78 +71,113 @@ defmodule Electric.Shapes.Api.ServeWatchdog do
   end
 
   @doc """
-  Register the calling process as being inside a socket write that must
-  complete within `timeout_ms`.
+  Resolve the watchdog for a stack, or nil if none is running — including
+  when the stack's process registry itself is absent, so callers uniformly
+  degrade to unguarded serving.
   """
-  def write_started(stack_id, shape_handle, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    GenServer.cast(name(stack_id), {:write_started, self(), deadline, timeout_ms, shape_handle})
+  def resolve(stack_id) do
+    GenServer.whereis(name(stack_id))
+  rescue
+    ArgumentError -> nil
   end
 
   @doc """
-  Deregister the calling process's in-flight write.
+  Arm a deadline for a socket write the calling process is about to make.
+
+  Returns the timer ref to pass to `disarm/1` once the write completes.
   """
-  def write_finished(stack_id) do
-    GenServer.cast(name(stack_id), {:write_finished, self()})
+  def arm(watchdog, shape_handle, timeout_ms) when is_pid(watchdog) do
+    ref = :erlang.start_timer(timeout_ms, watchdog, {:stalled_write, self(), shape_handle})
+    Process.put(@write_ref_key, ref)
+    ref
+  end
+
+  @doc """
+  Disarm a deadline after the write completed.
+
+  Clearing the stamped ref before cancelling matters: with an asynchronous
+  cancel, the timer may already have fired, and the stale stamp would
+  otherwise make the in-flight timeout message kill a handler whose write
+  completed.
+  """
+  def disarm(ref) do
+    Process.delete(@write_ref_key)
+    :erlang.cancel_timer(ref, async: true, info: false)
+    :ok
   end
 
   @impl GenServer
-  def init({stack_id, sweep_interval_ms}) do
+  def init(stack_id) do
     Process.set_label({:serve_watchdog, stack_id})
     Logger.metadata(stack_id: stack_id)
-    schedule_sweep(sweep_interval_ms)
-    {:ok, %{stack_id: stack_id, sweep_interval_ms: sweep_interval_ms, writes: %{}}}
+    {:ok, %{stack_id: stack_id, pending_kills: %{}}}
   end
 
   @impl GenServer
-  def handle_cast({:write_started, pid, deadline, timeout_ms, shape_handle}, state) do
-    {:noreply,
-     %{state | writes: Map.put(state.writes, pid, {deadline, timeout_ms, shape_handle})}}
-  end
+  def handle_info({:timeout, ref, {:stalled_write, pid, shape_handle}}, state) do
+    state =
+      case Process.info(pid, :dictionary) do
+        {:dictionary, dict} ->
+          if List.keyfind(dict, @write_ref_key, 0) == {@write_ref_key, ref} do
+            kill(pid, shape_handle, dict, state)
+          else
+            # The write completed (or the process moved on to another
+            # request) before the cancel could beat the firing timer.
+            state
+          end
 
-  def handle_cast({:write_finished, pid}, state) do
-    {:noreply, %{state | writes: Map.delete(state.writes, pid)}}
-  end
-
-  @impl GenServer
-  def handle_info(:sweep, state) do
-    now = System.monotonic_time(:millisecond)
-
-    writes =
-      for {pid, {deadline, timeout_ms, shape_handle}} = entry <- state.writes,
-          keep_entry?(pid, deadline, timeout_ms, shape_handle, now),
-          into: %{} do
-        entry
+        # The handler died on its own; nothing to do.
+        nil ->
+          state
       end
 
-    schedule_sweep(state.sweep_interval_ms)
-    {:noreply, %{state | writes: writes}}
+    {:noreply, state}
   end
 
-  defp keep_entry?(pid, deadline, timeout_ms, shape_handle, now) do
-    cond do
-      # The handler died on its own (client disconnect, error); nothing to do.
-      not Process.alive?(pid) ->
-        false
+  def handle_info({:DOWN, mref, :process, _pid, reason}, state) do
+    {entry, pending_kills} = Map.pop(state.pending_kills, mref)
 
-      now > deadline ->
-        Logger.warning(
-          "Terminating stalled shape response serve: client accepted no data " <>
-            "for #{timeout_ms}ms",
-          shape_handle: shape_handle
-        )
+    if entry && reason == :killed do
+      release_permit(entry.permit)
 
-        # The handler is blocked inside a socket write and cannot process
-        # messages, so only an untrappable exit can terminate it.
-        Process.exit(pid, :kill)
-        false
-
-      true ->
-        true
+      :telemetry.execute([:electric, :plug, :serve_shape, :reaped], %{count: 1}, %{
+        stack_id: state.stack_id,
+        shape_handle: entry.shape_handle
+      })
     end
+
+    {:noreply, %{state | pending_kills: pending_kills}}
   end
 
-  defp schedule_sweep(interval_ms) do
-    Process.send_after(self(), :sweep, interval_ms)
+  defp kill(pid, shape_handle, dict, state) do
+    permit =
+      case List.keyfind(dict, Electric.AdmissionControl.permit_pd_key(), 0) do
+        {_key, permit} -> permit
+        nil -> nil
+      end
+
+    Logger.warning(
+      "Terminating stalled shape response serve: client did not accept an " <>
+        "in-flight write within its deadline",
+      shape_handle: shape_handle
+    )
+
+    mref = Process.monitor(pid)
+
+    # The handler is blocked inside a socket write and cannot process
+    # messages, so only an untrappable exit can terminate it. The permit
+    # release and reap telemetry happen when the resulting :killed exit is
+    # observed, standing in for the cleanup the killed handler can no
+    # longer run itself.
+    Process.exit(pid, :kill)
+
+    %{
+      state
+      | pending_kills:
+          Map.put(state.pending_kills, mref, %{permit: permit, shape_handle: shape_handle})
+    }
   end
+
+  defp release_permit({stack_id, kind}), do: Electric.AdmissionControl.release(stack_id, kind)
+  defp release_permit(nil), do: :ok
 end

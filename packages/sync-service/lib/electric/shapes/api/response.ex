@@ -435,40 +435,36 @@ defmodule Electric.Shapes.Api.Response do
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
 
     conn = Plug.Conn.send_chunked(conn, status)
-    watchdog = watchdog_context(stack_id, response)
+    watchdog = watchdog_context(conn, stack_id, response)
 
     {conn, bytes_sent} =
-      try do
-        response.body
-        |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
-          chunk_size = IO.iodata_length(chunk)
+      response.body
+      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
+        chunk_size = IO.iodata_length(chunk)
 
-          OpenTelemetry.with_span(
-            "shape_get.plug.stream_chunk",
-            Map.put(sample_rate_attrs, "chunk_size", chunk_size),
-            stack_id,
-            fn ->
-              case write_in_bounded_pieces(conn, chunk, chunk_size, watchdog) do
-                {:ok, conn} ->
-                  {:cont, {conn, bytes_sent + chunk_size}}
+        OpenTelemetry.with_span(
+          "shape_get.plug.stream_chunk",
+          Map.put(sample_rate_attrs, "chunk_size", chunk_size),
+          stack_id,
+          fn ->
+            case write_in_bounded_pieces(conn, chunk, chunk_size, watchdog) do
+              {:ok, conn} ->
+                {:cont, {conn, bytes_sent + chunk_size}}
 
-                {:error, reason} when reason in ["closed", :closed] ->
-                  error_str = "Connection closed unexpectedly while streaming response"
-                  conn = Plug.Conn.assign(conn, :error_str, error_str)
-                  {:halt, {conn, bytes_sent}}
+              {:error, reason} when reason in ["closed", :closed] ->
+                error_str = "Connection closed unexpectedly while streaming response"
+                conn = Plug.Conn.assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
 
-                {:error, reason} ->
-                  error_str = "Error while streaming response: #{inspect(reason)}"
-                  Logger.error(error_str)
-                  conn = Plug.Conn.assign(conn, :error_str, error_str)
-                  {:halt, {conn, bytes_sent}}
-              end
+              {:error, reason} ->
+                error_str = "Error while streaming response: #{inspect(reason)}"
+                Logger.error(error_str)
+                conn = Plug.Conn.assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
             end
-          )
-        end)
-      after
-        watchdog && ServeWatchdog.write_finished(stack_id)
-      end
+          end
+        )
+      end)
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
   end
@@ -487,9 +483,14 @@ defmodule Electric.Shapes.Api.Response do
   @socket_write_bytes Electric.Shapes.Api.Encoder.JSON.max_batch_bytes()
 
   # See Electric.Shapes.Api.ServeWatchdog for the design rationale. The
-  # context carries what each per-piece registration needs; `nil` (timeout
-  # not positive) disables reaping for this serve.
-  defp watchdog_context(stack_id, response) do
+  # context carries what arming each write's deadline needs; `nil` disables
+  # reaping for this serve: when the timeout is not positive, when no
+  # watchdog is running for the stack, or when the adapter does not run the
+  # plug in the socket-owning process (only Bandit does; under proxying
+  # adapters like Plug.Test or Cowboy, writes complete without touching a
+  # socket, so a deadline would measure nothing and a kill would hit a
+  # process whose cleanup semantics we do not own).
+  defp watchdog_context(%Plug.Conn{adapter: {Bandit.Adapter, _}}, stack_id, response) do
     # Fallback for stacks whose seed config omits the key (e.g. minimal
     # unit-test stacks); Electric.Config is the single source of truth.
     timeout =
@@ -499,10 +500,15 @@ defmodule Electric.Shapes.Api.Response do
         Electric.Config.default(:stalled_serve_timeout)
       )
 
-    if is_integer(timeout) and timeout > 0 do
-      {stack_id, response.handle, timeout}
+    with true <- is_integer(timeout) and timeout > 0,
+         watchdog when is_pid(watchdog) <- ServeWatchdog.resolve(stack_id) do
+      {watchdog, response.handle, timeout}
+    else
+      _ -> nil
     end
   end
+
+  defp watchdog_context(%Plug.Conn{}, _stack_id, _response), do: nil
 
   # Write one response body element as a sequence of bounded socket writes,
   # notifying the watchdog around each one. Elements within the bound — the
@@ -535,11 +541,17 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.chunk(conn, data)
   end
 
-  defp guarded_chunk(conn, data, {stack_id, shape_handle, timeout}) do
-    ServeWatchdog.write_started(stack_id, shape_handle, timeout)
-    result = Plug.Conn.chunk(conn, data)
-    ServeWatchdog.write_finished(stack_id)
-    result
+  defp guarded_chunk(conn, data, {watchdog, shape_handle, timeout}) do
+    ref = ServeWatchdog.arm(watchdog, shape_handle, timeout)
+
+    # Disarming in `after` keeps the stamped ref from outliving this write on
+    # any exit path; a stale stamp would let a later firing timer kill a
+    # handler that is no longer inside the write it was armed for.
+    try do
+      Plug.Conn.chunk(conn, data)
+    after
+      ServeWatchdog.disarm(ref)
+    end
   end
 
   def etag(response, opts \\ [])
