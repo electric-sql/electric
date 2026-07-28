@@ -181,21 +181,37 @@ defmodule Electric.Shapes.Consumer.State do
   defp validate_storage_capabilities(state, _storage), do: state
 
   @doc """
-  For the given offset, find the appropriate transaction boundary and
-  remove all transactions that are less than or equal to the boundary.
+  For the given flushed offset, drop all mapping entries whose written offset
+  is covered by the flush and return the offset to report to the
+  ShapeLogCollector: the max of the flushed offset and the dropped entries'
+  transaction boundaries.
+
+  A mapping entry `{written, boundary}` promises "once the writer has flushed
+  `written`, this shape has processed everything up to `boundary`". A flush can
+  land past `written` without matching it exactly — trailing writes that carry
+  no boundary of their own (subquery move-in/move-out control messages) advance
+  the writer beyond the mapped offset. The dropped boundaries must still be
+  honoured in that case: reporting only the raw flushed offset would
+  permanently under-report when a boundary lies above it, leaving the
+  ShapeLogCollector's flush entry for that transaction uncompletable.
   """
   @spec align_offset_to_txn_boundary(t(), LogOffset.t()) :: {t(), LogOffset.t()}
   def align_offset_to_txn_boundary(
         %__MODULE__{txn_offset_mapping: txn_offset_mapping} = state,
         offset
       ) do
-    case Enum.drop_while(txn_offset_mapping, &(LogOffset.compare(elem(&1, 0), offset) == :lt)) do
-      [{^offset, boundary} | rest] ->
-        {%{state | txn_offset_mapping: rest}, boundary}
+    {dropped, rest} =
+      Enum.split_while(txn_offset_mapping, &(LogOffset.compare(elem(&1, 0), offset) != :gt))
 
-      rest ->
-        {%{state | txn_offset_mapping: rest}, offset}
-    end
+    boundary =
+      case dropped do
+        # Entries are appended in write order, so the last dropped entry
+        # carries the highest boundary.
+        [] -> offset
+        _ -> LogOffset.max(offset, dropped |> List.last() |> elem(1))
+      end
+
+    {%{state | txn_offset_mapping: rest}, boundary}
   end
 
   @spec add_to_buffer(t(), TransactionFragment.t()) :: t()
