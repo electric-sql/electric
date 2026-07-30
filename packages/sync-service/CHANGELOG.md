@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.7.9
+
+### Patch Changes
+
+- ca04983: Prevent a dead or stalled shape consumer from pinning the replication slot's `confirmed_flush_lsn` indefinitely, which caused unbounded WAL retention. The collector now monitors the writer behind every pending flush entry — a crashed writer unpins its entry immediately, and a shape making no flush progress past a grace period is challenged and invalidated if it doesn't respond.
+- bb69764: Fix keepalives acknowledging WAL past small transactions whose storage flush hasn't been confirmed yet. A crash in that window could permanently lose the transaction for all affected shapes, since the replication slot had already advanced past it.
+
 ## 1.7.8
 
 ### Patch Changes
