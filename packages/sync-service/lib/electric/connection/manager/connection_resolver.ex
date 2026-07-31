@@ -4,6 +4,14 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
   require Logger
 
+  # Socket option numbers from the Linux headers, for use with :inet's `:raw`
+  # option. IPPROTO_TCP is from netinet/in.h, the rest from netinet/tcp.h.
+  @ipproto_tcp 6
+  @tcp_keepidle 4
+  @tcp_keepintvl 5
+  @tcp_keepcnt 6
+  @tcp_user_timeout 18
+
   defmodule Connection do
     @moduledoc false
     @behaviour Postgrex.SimpleConnection
@@ -173,15 +181,69 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   end
 
   defp populate_tcp_opts(connection_opts) do
-    tcp_opts =
+    inet_opts =
       if connection_opts[:ipv6] do
         [:inet6]
       else
         []
       end
 
-    Keyword.put(connection_opts, :socket_options, tcp_opts)
+    Keyword.put(connection_opts, :socket_options, inet_opts ++ tcp_liveness_opts())
   end
+
+  # Options that let the kernel notice a connection whose peer has gone away
+  # without closing it.
+  #
+  # The replication connection can sit idle for long stretches and only writes a
+  # StandbyStatusUpdate every `wal_sender_timeout / 3`. If the peer disappears
+  # without a FIN or an RST -- a hard-killed container or proxy, a dropped route
+  # -- the socket stays ESTABLISHED here and those writes are simply
+  # retransmitted. Nothing surfaces an error until the kernel gives up, which on
+  # Linux takes `net.ipv4.tcp_retries2` retries (~15 minutes by default). Until
+  # then replication is stalled with no indication that anything is wrong.
+  #
+  # SO_KEEPALIVE makes the kernel probe an idle connection, and TCP_USER_TIMEOUT
+  # caps how long unacknowledged data may stay outstanding before the connection
+  # is dropped -- the latter also bounds detection while data *is* being sent,
+  # which keepalive alone does not.
+  #
+  # Everything here is opt-in: with no configuration we emit no options and
+  # inherit the OS defaults.
+  defp tcp_liveness_opts do
+    keepalive_idle = Electric.Config.get_env(:db_tcp_keepalive_idle)
+    keepalive_interval = Electric.Config.get_env(:db_tcp_keepalive_interval)
+    keepalive_count = Electric.Config.get_env(:db_tcp_keepalive_count)
+    user_timeout = Electric.Config.get_env(:db_tcp_user_timeout)
+
+    keepalive_opt =
+      if is_nil(keepalive_idle) and is_nil(keepalive_interval) and is_nil(keepalive_count) do
+        []
+      else
+        [{:keepalive, true}]
+      end
+
+    keepalive_opt ++
+      raw_tcp_opt(@tcp_keepidle, ms_to_sec(keepalive_idle)) ++
+      raw_tcp_opt(@tcp_keepintvl, ms_to_sec(keepalive_interval)) ++
+      raw_tcp_opt(@tcp_keepcnt, keepalive_count) ++
+      raw_tcp_opt(@tcp_user_timeout, user_timeout)
+  end
+
+  # The raw socket options below are Linux-specific: the option numbers differ
+  # on other platforms and TCP_USER_TIMEOUT has no equivalent at all. Skip them
+  # elsewhere so a developer on macOS gets a working connection rather than an
+  # obscure einval, while :keepalive (a portable inet option) still applies.
+  defp raw_tcp_opt(_opt, nil), do: []
+
+  defp raw_tcp_opt(opt, value) when is_integer(value) do
+    case :os.type() do
+      {:unix, :linux} -> [{:raw, @ipproto_tcp, opt, <<value::native-32>>}]
+      _ -> []
+    end
+  end
+
+  defp ms_to_sec(nil), do: nil
+  defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
 
   defp mutate_based_on_error(%Postgrex.Error{message: "ssl not available"} = error, conn_opts) do
     maybe_fallback_to_no_ssl(conn_opts, error)

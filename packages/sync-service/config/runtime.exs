@@ -265,6 +265,25 @@ config :electric,
   prometheus_port: prometheus_port,
   live_dashboard_port: live_dashboard_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
+  db_tcp_keepalive_idle:
+    env!(
+      "ELECTRIC_DATABASE_TCP_KEEPALIVE_IDLE",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    ),
+  db_tcp_keepalive_interval:
+    env!(
+      "ELECTRIC_DATABASE_TCP_KEEPALIVE_INTERVAL",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    ),
+  db_tcp_keepalive_count: env!("ELECTRIC_DATABASE_TCP_KEEPALIVE_COUNT", :integer, nil),
+  db_tcp_user_timeout:
+    env!(
+      "ELECTRIC_DATABASE_TCP_USER_TIMEOUT",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    ),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
   replication_slot_temporary_random_name?:
