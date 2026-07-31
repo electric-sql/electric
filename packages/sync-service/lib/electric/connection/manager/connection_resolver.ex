@@ -191,16 +191,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     Keyword.put(connection_opts, :socket_options, inet_opts ++ tcp_liveness_opts())
   end
 
-  # Options that let the kernel notice a connection whose peer has gone away
-  # without closing it.
-  #
-  # The replication connection can sit idle for long stretches and only writes a
-  # StandbyStatusUpdate every `wal_sender_timeout / 3`. If the peer disappears
-  # without a FIN or an RST -- a hard-killed container or proxy, a dropped route
-  # -- the socket stays ESTABLISHED here and those writes are simply
-  # retransmitted. Nothing surfaces an error until the kernel gives up, which on
-  # Linux takes `net.ipv4.tcp_retries2` retries (~15 minutes by default). Until
-  # then replication is stalled with no indication that anything is wrong.
+  # Options for configuring TCP keepalives and TCP user timeout.
   #
   # SO_KEEPALIVE makes the kernel probe an idle connection, and TCP_USER_TIMEOUT
   # caps how long unacknowledged data may stay outstanding before the connection
