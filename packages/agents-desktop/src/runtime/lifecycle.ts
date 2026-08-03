@@ -118,6 +118,31 @@ export function refreshPowerSaveBlocker(deps: RuntimeLifecycleDeps): void {
   powerSaveBlockerId = null
 }
 
+export function reconnectPullWakesAfterResume(
+  deps: RuntimeLifecycleDeps
+): void {
+  for (const entry of deps.runtimeEntries.values()) {
+    const server = deps.findServer(entry.serverId)
+    if (
+      !server?.localRuntimeEnabled ||
+      entry.desiredState !== `connected` ||
+      entry.localRuntimeStatus !== `running` ||
+      !entry.runtime
+    ) {
+      continue
+    }
+
+    try {
+      entry.runtime.reconnectPullWake()
+    } catch (error) {
+      console.warn(
+        `[agents-desktop] Failed to reconnect pull-wake after resume for ${entry.serverId}:`,
+        error
+      )
+    }
+  }
+}
+
 export async function restartConnectedRuntimes(
   deps: RuntimeLifecycleDeps
 ): Promise<void> {
@@ -185,7 +210,7 @@ export async function stopRuntimeEntry(
   }
 }
 
-export async function startRuntime(
+async function startRuntimeAttempt(
   deps: RuntimeLifecycleDeps,
   serverId: string
 ): Promise<void> {
@@ -376,17 +401,45 @@ export async function startRuntime(
       error,
       activeServer.url
     )
+    const message =
+      startupNetworkError ??
+      (error instanceof Error ? error.message : String(error))
     entry.status = `error`
     entry.localRuntimeStatus = `error`
     entry.runtimeUrl = null
-    entry.runtimeError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
-    entry.lastError =
-      startupNetworkError ??
-      (error instanceof Error ? error.message : String(error))
+    entry.runtimeError = message
+    entry.lastError = message
     entry.reconnectAttempt += 1
     refreshPowerSaveBlocker(deps)
+    scheduleReconnect(deps, serverId)
+  }
+}
+
+export async function startRuntime(
+  deps: RuntimeLifecycleDeps,
+  serverId: string
+): Promise<void> {
+  try {
+    await startRuntimeAttempt(deps, serverId)
+  } catch (error) {
+    const activeServer = deps.findServer(serverId)
+    if (!activeServer) return
+    const entry = deps.ensureRuntimeEntry(activeServer)
+    if (entry.desiredState !== `connected`) return
+
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(
+      `[agents-desktop] Failed to start built-in agents runtime for ${activeServer.url}:`,
+      error
+    )
+    entry.status = `error`
+    entry.localRuntimeStatus = `error`
+    entry.runtimeUrl = null
+    entry.runtimeError = message
+    entry.lastError = message
+    entry.reconnectAttempt += 1
+    refreshPowerSaveBlocker(deps)
+    deps.refreshDesktopState()
     scheduleReconnect(deps, serverId)
   }
 }

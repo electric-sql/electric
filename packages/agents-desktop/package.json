@@ -9,7 +9,7 @@
   "type": "module",
   "main": "./dist/main.cjs",
   "scripts": {
-    "build": "pnpm --filter @electric-ax/agents build && pnpm --filter electric-ax build:desktop && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
+    "build": "pnpm --filter @electric-ax/agents-runtime build && pnpm --filter @electric-ax/agents build && pnpm --filter electric-ax build:desktop && pnpm --filter @electric-ax/agents-server-ui build:desktop && vite build",
     "dev": "pnpm run ensure:electron && concurrently -k -n ui,desktop -c cyan,green \"pnpm run dev:ui\" \"pnpm run dev:desktop\"",
     "dev:ui": "pnpm --filter @electric-ax/agents-server-ui dev:desktop",
     "dev:desktop": "wait-on -d 200 http-get://localhost:${ELECTRIC_DESKTOP_UI_PORT:-5183} && vite",
@@ -24,7 +24,8 @@
     "rebuild:native": "electron-builder install-app-deps",
     "start": "pnpm run ensure:electron && electron .",
     "coverage": "true",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@electric-sql/client": "^1.5.22",
@@ -53,6 +54,7 @@
     "typescript": "^5.8.3",
     "vite": "^7.1.7",
     "vite-plugin-electron": "^0.29.1",
-    "wait-on": "^9.0.1"
+    "wait-on": "^9.0.1",
+    "vitest": "^3.2.4"
   }
 }

@@ -1,155 +1,141 @@
-import { describe, expect, it, vi } from 'vitest'
+import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { promisify } from 'node:util'
+import postgres from 'postgres'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { eq } from 'drizzle-orm'
+import { createDb, runMigrations } from '../src/db'
+import { wakeRegistrations } from '../src/db/schema'
 import { WakeRegistry } from '../src/wake-registry'
+import {
+  ELECTRIC_AGENTS_COMPOSE_FILE,
+  getElectricAgentsComposeProject,
+  getElectricAgentsDevPorts,
+} from './electric-agents-compose-utils'
 
-const { shapeStreamState } = vi.hoisted(() => ({
-  shapeStreamState: {
-    latest: null as null | {
-      emit: (messages: Array<Record<string, unknown>>) => Promise<void>
-      signal?: AbortSignal
-    },
-  },
-}))
-
-vi.mock(`@electric-sql/client`, () => ({
-  isControlMessage: (message: { headers?: Record<string, unknown> }) =>
-    typeof message.headers?.control === `string`,
-  isChangeMessage: (message: { headers?: Record<string, unknown> }) =>
-    typeof message.headers?.operation === `string`,
-  ShapeStream: class MockShapeStream {
-    private onMessages:
-      | ((messages: Array<Record<string, unknown>>) => Promise<void> | void)
-      | null = null
-
-    constructor(options: { signal?: AbortSignal }) {
-      shapeStreamState.latest = {
-        signal: options.signal,
-        emit: async (messages) => {
-          await this.onMessages?.(messages)
-        },
-      }
-    }
-
-    subscribe(
-      callback: (messages: Array<Record<string, unknown>>) => Promise<void>,
-      _onError?: (error: Error) => void
-    ): () => void {
-      this.onMessages = callback
-      return () => {
-        this.onMessages = null
-      }
-    }
-  },
-}))
-
-function createMockDb(): any {
-  return {
-    insert: () => ({
-      values: () => ({
-        onConflictDoNothing: () => ({
-          returning: () => Promise.resolve([{ id: 1 }]),
-        }),
-      }),
-    }),
-    delete: () => ({
-      where: () => Promise.resolve(),
-    }),
-    update: () => ({
-      set: () => ({
-        where: () => Promise.resolve(),
-      }),
-    }),
-    select: () => ({
-      from: () => Promise.resolve([]),
-    }),
-  }
+const execFileAsync = promisify(execFile)
+const { postgresPort, electricPort } = getElectricAgentsDevPorts()
+const TEST_POSTGRES_PORT = postgresPort + 40
+const TEST_ELECTRIC_PORT = electricPort + 40
+const TEST_COMPOSE_PROJECT = `${getElectricAgentsComposeProject()}-wake-registry-sync`
+const TEST_POSTGRES_URL = `postgres://electric_agents:electric_agents@localhost:${TEST_POSTGRES_PORT}/electric_agents`
+const TEST_ELECTRIC_URL = `http://localhost:${TEST_ELECTRIC_PORT}`
+const TEST_BACKEND_ENV = {
+  ...process.env,
+  ELECTRIC_AGENTS_COMPOSE_PROJECT: TEST_COMPOSE_PROJECT,
+  PG_HOST_PORT: String(TEST_POSTGRES_PORT),
+  ELECTRIC_HOST_PORT: String(TEST_ELECTRIC_PORT),
+  JAEGER_UI_PORT: `0`,
+  JAEGER_OTLP_HTTP_PORT: `0`,
+  JAEGER_OTLP_GRPC_PORT: `0`,
+  DATABASE_URL: TEST_POSTGRES_URL,
+  ELECTRIC_URL: TEST_ELECTRIC_URL,
+  ELECTRIC_AGENTS_TEST_BACKEND_MANAGED: `1`,
 }
 
-describe(`WakeRegistry Electric sync`, () => {
-  it(`ignores malformed shape messages without headers while waiting for up-to-date`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+async function startTestBackend(): Promise<void> {
+  await execFileAsync(
+    `docker`,
+    [
+      `compose`,
+      `-p`,
+      TEST_COMPOSE_PROJECT,
+      `-f`,
+      ELECTRIC_AGENTS_COMPOSE_FILE,
+      `up`,
+      `-d`,
+      `--wait`,
+    ],
+    { env: TEST_BACKEND_ENV }
+  )
+}
 
-    const startPromise = registry.startSync(`http://electric.test`)
+async function stopTestBackend(): Promise<void> {
+  await execFileAsync(
+    `docker`,
+    [
+      `compose`,
+      `-p`,
+      TEST_COMPOSE_PROJECT,
+      `-f`,
+      ELECTRIC_AGENTS_COMPOSE_FILE,
+      `down`,
+      `-v`,
+    ],
+    { env: TEST_BACKEND_ENV }
+  )
+}
 
-    await expect(
-      shapeStreamState.latest!.emit([
-        {
-          key: `ignored-malformed-message`,
-        },
-        {
-          headers: {
-            control: `up-to-date`,
-          },
-        },
-      ])
-    ).resolves.toBeUndefined()
+async function resetTestBackend(): Promise<void> {
+  await startTestBackend()
+  const pg = postgres(TEST_POSTGRES_URL, { max: 1, onnotice: () => {} })
+  try {
+    await pg.unsafe(`
+      DROP SCHEMA IF EXISTS drizzle CASCADE;
+      DROP SCHEMA IF EXISTS public CASCADE;
+      CREATE SCHEMA public AUTHORIZATION CURRENT_USER;
+    `)
+  } finally {
+    await pg.end()
+  }
+  await runMigrations(TEST_POSTGRES_URL)
+}
 
-    await expect(startPromise).resolves.toBeUndefined()
+type DbConnection = ReturnType<typeof createDb>
 
-    await registry.stopSync()
-  })
+let connection: DbConnection
+let db: DbConnection[`db`]
 
-  it(`hydrates and updates the cache from shape changes`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+describe(`WakeRegistry Electric collection sync`, () => {
+  beforeAll(async () => {
+    await resetTestBackend()
+    connection = createDb(TEST_POSTGRES_URL)
+    db = connection.db
+  }, 120_000)
 
-    const startPromise = registry.startSync(`http://electric.test`)
+  afterAll(async () => {
+    await Promise.allSettled([connection?.client.end(), stopTestBackend()])
+  }, 120_000)
 
-    await shapeStreamState.latest!.emit([
-      {
-        key: `1`,
-        value: {
-          id: 1,
-          subscriber_url: `/parent/p1`,
-          source_url: `/child/c1`,
-          condition: `runFinished`,
-          debounce_ms: 0,
-          timeout_ms: 0,
-          one_shot: false,
-          timeout_consumed: false,
-          include_response: true,
-          manifest_key: null,
-          created_at: new Date(),
-        },
-        headers: {
-          operation: `insert`,
-        },
-      },
-      {
-        headers: {
-          control: `up-to-date`,
-        },
-      },
-    ])
+  it(`syncs wake rows from Postgres through Electric`, async () => {
+    const suffix = randomUUID()
+    const subscriberUrl = `/parent/sync-${suffix}`
+    const sourceUrl = `/child/sync-${suffix}`
+    const registry = new WakeRegistry(db as any)
+    await registry.startSync(TEST_ELECTRIC_URL)
 
-    await startPromise
+    const rows = await db
+      .insert(wakeRegistrations)
+      .values({
+        subscriberUrl,
+        sourceUrl,
+        condition: `runFinished`,
+        oneShot: false,
+      })
+      .returning()
 
-    expect(
-      registry.evaluate(`/child/c1`, {
+    try {
+      let results: Awaited<ReturnType<WakeRegistry[`evaluate`]>> = []
+      const event = {
         type: `run`,
         key: `run-1`,
         value: { status: `completed` },
         headers: { operation: `update` },
-      })
-    ).toHaveLength(1)
+      }
+      const deadline = Date.now() + 15_000
+      do {
+        results = await registry.evaluate(sourceUrl, event)
+        if (results.length > 0) break
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      } while (Date.now() < deadline)
 
-    await shapeStreamState.latest!.emit([
-      {
-        key: `1`,
-        headers: {
-          operation: `delete`,
-        },
-      },
-    ])
-
-    expect(
-      registry.evaluate(`/child/c1`, {
-        type: `run`,
-        key: `run-2`,
-        value: { status: `completed` },
-        headers: { operation: `update` },
-      })
-    ).toHaveLength(0)
-
-    await registry.stopSync()
-    expect(shapeStreamState.latest!.signal?.aborted).toBe(true)
-  })
+      expect(results).toHaveLength(1)
+      expect(results[0]!.registrationDbId).toBe(rows[0]!.id)
+    } finally {
+      await registry.stopSync()
+      await db
+        .delete(wakeRegistrations)
+        .where(eq(wakeRegistrations.sourceUrl, sourceUrl))
+    }
+  }, 25_000)
 })

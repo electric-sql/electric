@@ -31,7 +31,7 @@ import type {
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
 import type { DurableStreamsFetchCacheOptions } from './durable-streams-cache.js'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string
@@ -112,6 +112,11 @@ export class BuiltinAgentsServer {
   /** Embedded MCP registry. `null` until `start()` has run. */
   get mcpRegistry(): McpRegistry | null {
     return this._mcpRegistry
+  }
+
+  /** Reconnect only the pull-wake subscription, preserving active wake work. */
+  reconnectPullWake(): void {
+    this.pullWakeRunner?.reconnect()
   }
 
   /**

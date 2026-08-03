@@ -10,10 +10,11 @@ import {
   waitFor,
 } from './test-utils'
 import {
+  TEST_ELECTRIC_URL,
   TEST_POSTGRES_URL,
   resetElectricAgentsTestBackend,
 } from './test-backend'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 function createMockStreamFn(responseText: string): StreamFn {
   return vi.fn(((model) => {
@@ -266,7 +267,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
       durableStreamsUrl: durableStreamTestServerUrl(dsServer.url),
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
-      electricUrl: undefined,
+      electricUrl: TEST_ELECTRIC_URL,
       authenticateRequest: (req) =>
         req.headers.get(`authorization`) === authHeaders.authorization
           ? testPrincipal
@@ -276,6 +277,7 @@ describe(`pull-wake Horton e2e with mocked LLM`, () => {
     streamBaseUrl = electricAgentsServer.streamClient.baseUrl
     builtinAgentsServer = new BuiltinAgentsServer({
       agentServerUrl: baseUrl,
+      durableStreamsFetchCache: false,
       mockStreamFn,
       pullWake: {
         runnerId,
