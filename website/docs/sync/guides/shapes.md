@@ -551,7 +551,7 @@ Electric does not yet automatically delete shapes when tables are dropped becaus
 
 ## Why shape handles get deleted
 
-When a shape handle is deleted, clients receive a `409 Conflict` response or a [`must-refetch`](/docs/api/http#control-messages) control message. This tells the client to discard its local data and re-sync the shape from scratch. Understanding why this happens can help you reduce how often shapes need to be recreated — especially important for large shapes where re-syncing is expensive.
+When a shape handle is deleted, clients receive a `409 Conflict` response or a [`must-refetch`](/docs/sync/api/http#control-messages) control message. This tells the client to discard its local data and re-sync the shape from scratch. Understanding why this happens can help you reduce how often shapes need to be recreated — especially important for large shapes where re-syncing is expensive.
 
 ### Replication slot or timeline changes
 
@@ -559,12 +559,12 @@ Electric uses a Postgres [replication slot](https://www.postgresql.org/docs/curr
 
 Common causes:
 
-- **Replication slot invalidated** — if the WAL retained by Electric's replication slot exceeds the [`max_slot_wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-MAX-SLOT-WAL-KEEP-SIZE) limit in Postgres, the slot is invalidated. Electric must drop and recreate the slot, which triggers a full shape purge. See the [troubleshooting guide](/docs/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up) for how to monitor and configure WAL retention.
+- **Replication slot invalidated** — if the WAL retained by Electric's replication slot exceeds the [`max_slot_wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-MAX-SLOT-WAL-KEEP-SIZE) limit in Postgres, the slot is invalidated. Electric must drop and recreate the slot, which triggers a full shape purge. See the [troubleshooting guide](/docs/sync/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up) for how to monitor and configure WAL retention.
 - **Server restart with a new slot** — if the Electric server restarts and cannot reuse its previous replication slot (e.g. the slot was temporary or was dropped externally), a new slot is created and all shapes are purged.
 - **Postgres timeline change** — restoring from a backup or performing Point-in-Time Recovery changes the Postgres system identifier or timeline, which also triggers a full purge.
 
 > [!Tip] Preserving shapes across restarts
-> Electric persists shape data to disk by default (under [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir), which defaults to `./persistent`). As long as the storage directory is on persistent volume and the replication slot is preserved, shapes will survive server restarts without needing to re-sync.
+> Electric persists shape data to disk by default (under [`ELECTRIC_STORAGE_DIR`](/docs/sync/api/config#electric-storage-dir), which defaults to `./persistent`). As long as the storage directory is on persistent volume and the replication slot is preserved, shapes will survive server restarts without needing to re-sync.
 
 ### Schema changes
 
@@ -576,7 +576,7 @@ Electric detects schema changes in two ways:
 
 ### Shape eviction (max shapes limit)
 
-If you've configured [`ELECTRIC_MAX_SHAPES`](/docs/api/config#electric-max-shapes), Electric periodically evicts the least recently used shapes when the limit is exceeded. Clients subscribed to an evicted shape will receive a `409 Conflict` response and will need to start a new subscription.
+If you've configured [`ELECTRIC_MAX_SHAPES`](/docs/sync/api/config#electric-max-shapes), Electric periodically evicts the least recently used shapes when the limit is exceeded. Clients subscribed to an evicted shape will receive a `409 Conflict` response and will need to start a new subscription.
 
 ### Explicit deletion via the API
 
@@ -590,4 +590,4 @@ When a shape is deleted, the Electric client handles it automatically:
 2. The client discards its local copy of the shape data.
 3. The client starts a new shape subscription and re-syncs from scratch.
 
-This is handled transparently by the [TypeScript client](/docs/api/clients/typescript) and [TanStack DB](/primitives/tanstack-db). No manual intervention is required — but the re-sync may take time for large shapes.
+This is handled transparently by the [TypeScript client](/docs/sync/api/clients/typescript) and [TanStack DB](/sync/tanstack-db). No manual intervention is required — but the re-sync may take time for large shapes.
