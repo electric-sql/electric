@@ -5,16 +5,13 @@ defmodule Electric.Shapes.Consumer.Subqueries.ShapeInfo do
   alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
 
-  @type dependency_move_policy :: :stream_dependency_moves | :invalidate_on_dependency_move
-
   @enforce_keys [
     :shape,
     :stack_id,
     :shape_handle,
     :dnf_plan,
     :ref_resolver,
-    :buffer_max_transactions,
-    :dependency_move_policy
+    :buffer_max_transactions
   ]
   defstruct [
     :shape,
@@ -22,8 +19,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.ShapeInfo do
     :shape_handle,
     :dnf_plan,
     :ref_resolver,
-    :buffer_max_transactions,
-    :dependency_move_policy
+    :buffer_max_transactions
   ]
 
   @type t() :: %__MODULE__{
@@ -32,7 +28,6 @@ defmodule Electric.Shapes.Consumer.Subqueries.ShapeInfo do
           shape_handle: String.t(),
           dnf_plan: DnfPlan.t(),
           ref_resolver: RefResolver.t(),
-          buffer_max_transactions: pos_integer(),
-          dependency_move_policy: dependency_move_policy()
+          buffer_max_transactions: pos_integer()
         }
 end

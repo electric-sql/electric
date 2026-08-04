@@ -42,38 +42,6 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
              ] = plan
     end
 
-    test "still converts root transactions when dependency moves are configured to invalidate" do
-      handler =
-        new_handler(
-          subquery_view: MapSet.new([1]),
-          dependency_move_policy: :invalidate_on_dependency_move
-        )
-
-      assert {:ok, %Steady{}, plan} =
-               EventHandler.handle_event(
-                 handler,
-                 txn(50, [child_insert("1", "1"), child_insert("2", "2")])
-               )
-
-      assert [
-               %Effects.AppendChanges{
-                 changes: [%Changes.NewRecord{record: %{"id" => "1"}, last?: true}]
-               },
-               %Effects.NotifyFlushed{log_offset: _}
-             ] = plan
-    end
-
-    test "returns unsupported_subquery when dependency moves are configured to invalidate" do
-      handler = new_handler(dependency_move_policy: :invalidate_on_dependency_move)
-      dep_handle = dep_handle(handler)
-
-      assert {:error, :unsupported_subquery} =
-               EventHandler.handle_event(
-                 handler,
-                 {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
-               )
-    end
-
     test "negated subquery turns dependency move-in into an outer move-out" do
       handler = new_handler(shape: negated_shape())
       dep_handle = dep_handle(handler)
@@ -876,9 +844,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
         dnf_plan: dnf_plan,
         ref_resolver:
           RefResolver.new(%{dep_handle => {0, ["$sublink", "0"]}}, %{0 => ["$sublink", "0"]}),
-        buffer_max_transactions: Keyword.get(opts, :buffer_max_transactions, 1000),
-        dependency_move_policy:
-          Keyword.get(opts, :dependency_move_policy, :stream_dependency_moves)
+        buffer_max_transactions: Keyword.get(opts, :buffer_max_transactions, 1000)
       },
       views: %{["$sublink", "0"] => Keyword.get(opts, :subquery_view, MapSet.new())}
     }
@@ -895,8 +861,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
   defp shape do
     Shape.new!("child",
       where: "parent_id IN (SELECT id FROM public.parent WHERE value = 'keep')",
-      inspector: @inspector,
-      feature_flags: ["allow_subqueries"]
+      inspector: @inspector
     )
     |> fill_handles()
   end
@@ -904,8 +869,7 @@ defmodule Electric.Shapes.Consumer.EventHandler.SubqueriesTest do
   defp negated_shape do
     Shape.new!("child",
       where: "parent_id NOT IN (SELECT id FROM public.parent WHERE value = 'keep')",
-      inspector: @inspector,
-      feature_flags: ["allow_subqueries"]
+      inspector: @inspector
     )
     |> fill_handles()
   end

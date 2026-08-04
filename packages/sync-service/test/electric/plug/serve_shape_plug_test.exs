@@ -267,7 +267,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       ctx =
         ctx
         |> Map.put(:inspector, @subquery_inspector)
-        |> Map.put(:feature_flags, ["allow_subqueries"])
 
       Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _, _ ->
         flunk("should reject before checking whether the shape already exists")

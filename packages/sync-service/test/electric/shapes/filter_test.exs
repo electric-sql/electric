@@ -55,8 +55,7 @@ defmodule Electric.Shapes.FilterTest do
         shape =
           Shape.new!("table",
             where: where,
-            inspector: @inspector,
-            feature_flags: ["allow_subqueries"]
+            inspector: @inspector
           )
 
         assert Filter.indexed_shape?(shape), "#{where} should be indexed"
@@ -617,23 +616,19 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector),
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table) OR id = 1",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
+        inspector: @inspector
       ),
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table) OR number > 5",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
+        inspector: @inspector
       ),
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table)",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
+        inspector: @inspector
       ),
       Shape.new!("table",
         where: "NOT id IN (SELECT id FROM another_table)",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
+        inspector: @inspector
       )
     ]
 
@@ -673,8 +668,7 @@ defmodule Electric.Shapes.FilterTest do
       shape =
         Shape.new!("table",
           where: "id IN (SELECT id FROM another_table)",
-          inspector: @inspector,
-          feature_flags: ["allow_subqueries"]
+          inspector: @inspector
         )
 
       Filter.add_shape(filter, id, shape)
@@ -695,8 +689,7 @@ defmodule Electric.Shapes.FilterTest do
     shape =
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table)",
-        inspector: @inspector,
-        feature_flags: ["allow_subqueries"]
+        inspector: @inspector
       )
 
     Filter.add_shape(filter, shape_id, shape)
@@ -1011,8 +1004,7 @@ defmodule Electric.Shapes.FilterTest do
         shape =
           Shape.new!("table",
             where: "number = #{i} AND id IN (SELECT id FROM another_table)",
-            inspector: @inspector,
-            feature_flags: ["allow_subqueries"]
+            inspector: @inspector
           )
 
         Filter.add_shape(filter, i, shape)
@@ -1036,8 +1028,7 @@ defmodule Electric.Shapes.FilterTest do
         shape =
           Shape.new!("table",
             where: "id IN (SELECT id FROM another_table)",
-            inspector: @inspector,
-            feature_flags: ["allow_subqueries"]
+            inspector: @inspector
           )
 
         Filter.add_shape(filter, i, shape)
@@ -1819,8 +1810,7 @@ defmodule Electric.Shapes.FilterTest do
       sample_shape =
         Shape.new!("table",
           where: "id IN (SELECT id FROM another_table)",
-          inspector: @inspector,
-          feature_flags: ["allow_subqueries"]
+          inspector: @inspector
         )
 
       {_hash, real_handle} = Shape.generate_id(sample_shape)
@@ -1878,8 +1868,7 @@ defmodule Electric.Shapes.FilterTest do
       shape =
         Shape.new!("table",
           where: where_fun.(i),
-          inspector: @inspector,
-          feature_flags: ["allow_subqueries"]
+          inspector: @inspector
         )
 
       handle = realistic_handle(shape, i)

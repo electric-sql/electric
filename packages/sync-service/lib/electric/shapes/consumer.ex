@@ -1026,10 +1026,6 @@ defmodule Electric.Shapes.Consumer do
     handle_txn_with_truncate(xid, state)
   end
 
-  defp handle_event_error(state, :unsupported_subquery) do
-    mark_for_removal(state)
-  end
-
   defp handle_event_error(state, :buffer_overflow) do
     Logger.warning("Subquery buffer overflow for #{state.shape_handle} - terminating shape")
 
