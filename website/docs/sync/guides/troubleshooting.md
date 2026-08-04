@@ -169,6 +169,8 @@ This indicates that your client library or proxy layer is caching requests to El
 
 The problem will resolve itself as client/proxy caches empty. You can force this by clearing your client or proxy cache. See [Control messages](/docs/sync/api/http#control-messages) for more context on 409 messages.
 
+For a full taxonomy of why shape handles get deleted (replication slot changes, schema changes, shape eviction, explicit API deletion, client-side behavior) see [Why shape handles get deleted](/docs/sync/guides/shapes#why-shape-handles-get-deleted) in the Shapes guide.
+
 ## Production
 
 ### 503 &mdash; concurrent request limit exceeded
@@ -414,6 +416,8 @@ This means all existing shapes are invalidated. Clients will receive `409` (must
 - Ensure your clients handle `409` responses gracefully (the official [TypeScript client](/docs/sync/api/clients/typescript) does this automatically)
 - Monitor your replication slot health with the [diagnostic checklist](#quick-diagnostic-checklist) above
 - Set `max_slot_wal_keep_size` conservatively to avoid unexpected slot invalidation
+
+For the broader taxonomy of shape-handle deletion causes (replication slot or timeline changes, schema changes, shape eviction, explicit API deletion) see [Why shape handles get deleted](/docs/sync/guides/shapes#why-shape-handles-get-deleted) in the Shapes guide.
 
 ### Rolling upgrades &mdash; why is my second instance stuck in 'waiting' state?
 
