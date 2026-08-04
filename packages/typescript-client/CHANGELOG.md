@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.25
+
+### Patch Changes
+
+- fb06dd3: Subqueries in shape WHERE clauses are now generally available and always enabled, including incremental move handling for compound `AND`/`OR`/`NOT` expressions. The `allow_subqueries` and `tagged_subqueries` feature flags have been removed — they no longer need to be set via `ELECTRIC_FEATURE_FLAGS`.
+
 ## 1.5.24
 
 ### Patch Changes

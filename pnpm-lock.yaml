@@ -1019,7 +1019,7 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.5.24
+        specifier: 1.5.25
         version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
@@ -1601,7 +1601,7 @@ importers:
   packages/agents-desktop:
     dependencies:
       '@electric-sql/client':
-        specifier: ^1.5.22
+        specifier: ^1.5.25
         version: link:../typescript-client
       '@mixmark-io/domino':
         specifier: ^2.2.0
@@ -1941,7 +1941,7 @@ importers:
         specifier: workspace:*
         version: link:../agents-runtime
       '@electric-sql/client':
-        specifier: ^1.5.22
+        specifier: ^1.5.25
         version: link:../typescript-client
       '@mariozechner/pi-agent-core':
         specifier: ^0.70.2
@@ -2026,7 +2026,7 @@ importers:
         specifier: ^0.2.6
         version: 0.2.6
       '@electric-sql/client':
-        specifier: ^1.5.22
+        specifier: ^1.5.25
         version: link:../typescript-client
       fast-check:
         specifier: ^4.6.0
@@ -4920,11 +4920,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.19.12':
     resolution: {integrity: sha512-bmoCYyWdEL3wDQIVbcyzRyeKLgk2WtWLTWz1ZIAZF/EGbNOwSA6ew3PftJ1PqMiOOGu0OyFMzG53L0zqIpPeNA==}
@@ -8809,8 +8809,8 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@react-grab/cli@0.1.48':
-    resolution: {integrity: sha512-KXRZFN0b78BeVa4Tq1FC9kiXPpC5lS4pQp/mvQ1azy9dZUJ3zfc7Ei84+yvGh+WoYdceMCFxXfBp6qhU/G056g==}
+  '@react-grab/cli@0.1.50':
+    resolution: {integrity: sha512-Px/Hwhhyk2PubCA4ZaRFsfvwxhbxXsetJyvqC6aFFi8WhJhA+oVC33aTzuAeWmM3fhb4/8ce8YsHXI1d6ChcKg==}
     hasBin: true
 
   '@react-native-async-storage/async-storage@2.2.0':
@@ -12147,8 +12147,8 @@ packages:
     peerDependencies:
       react: '>=17.0.1'
 
-  bippy@0.5.43:
-    resolution: {integrity: sha512-Tvu7b1M7+d8b9/YHaCeODEsi2CgbuoBql+dWSBrNnCuqJ1gMUeY3i0r+319hvjjl5GVBP6FFWxrKnq3fhZER0w==}
+  bippy@0.6.1:
+    resolution: {integrity: sha512-ky4m94Y/KfsddjGkKTsV4uFjZqkJjpOjQ2t5gKPdX6XH1MNxMNX5FrVefsxV4lpjemEmEdwe0e0YbzAMNs3oUQ==}
     peerDependencies:
       react: '>=17.0.1'
 
@@ -18602,8 +18602,8 @@ packages:
     peerDependencies:
       react: '>=17.0.0'
 
-  react-grab@0.1.48:
-    resolution: {integrity: sha512-p3WnmK9LLvXE/c4ITPLlXcP1fkXo2VFEQqK94tIfcHIWKNdqdhYYFyNVioO50HR+uyHIwT63Z4txZDqJlVcD/Q==}
+  react-grab@0.1.50:
+    resolution: {integrity: sha512-zRkHKq/8a1msCpEOp8BDROeQZT50m0OH2XPrP6jk5op+JAHrlsm3pj7eAQMOsct87EZDeGNnu4r+sGsJJzyw1Q==}
     hasBin: true
     peerDependencies:
       react: '>=17.0.0'
@@ -29977,7 +29977,7 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@react-grab/cli@0.1.48':
+  '@react-grab/cli@0.1.50':
     dependencies:
       agent-install: 0.0.6
       commander: 14.0.3
@@ -34789,7 +34789,7 @@ snapshots:
     dependencies:
       react: 19.1.0
 
-  bippy@0.5.43(react@19.1.0):
+  bippy@0.6.1(react@19.1.0):
     dependencies:
       react: 19.1.0
 
@@ -42924,10 +42924,10 @@ snapshots:
     dependencies:
       react: 19.1.0
 
-  react-grab@0.1.48(react@19.1.0):
+  react-grab@0.1.50(react@19.1.0):
     dependencies:
-      '@react-grab/cli': 0.1.48
-      bippy: 0.5.43(react@19.1.0)
+      '@react-grab/cli': 0.1.50
+      bippy: 0.6.1(react@19.1.0)
     optionalDependencies:
       react: 19.1.0
 
@@ -43280,7 +43280,7 @@ snapshots:
       prompts: 2.4.2
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
-      react-grab: 0.1.48(react@19.1.0)
+      react-grab: 0.1.50(react@19.1.0)
     optionalDependencies:
       esbuild: 0.27.7
       unplugin: 2.1.0
