@@ -21,7 +21,7 @@ defmodule Electric.Plug.DeleteShapePlug do
 
     all_params =
       Map.merge(conn.query_params, conn.path_params)
-      |> Map.take(["table" | "handle" | "where" | "params" | "columns" | "queryable_columns" | "replica" | "log" | "experimental_compaction"])
+      |> Map.take(["table", "handle", "where", "params", "columns", "queryable_columns", "replica", "log", "experimental_compaction"])
       |> Map.put("offset", "-1")
 
     case Api.validate_for_delete(api, all_params) do
