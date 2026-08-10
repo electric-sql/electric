@@ -20,6 +20,7 @@ defmodule ElectricTelemetry.MixProject do
     List.flatten(
       [
         {:otel_metric_exporter, "~> 0.4.1"},
+        {:recon, "~> 2.5"},
         {:req, "~> 0.5"},
         {:telemetry, "~> 1.3"},
         {:telemetry_metrics, "~> 1.1"},

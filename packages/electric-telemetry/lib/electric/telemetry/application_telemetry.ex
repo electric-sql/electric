@@ -86,7 +86,16 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           :get_system_memory_usage
         ],
         &{__MODULE__, &1, [telemetry_opts]}
-      )
+      ) ++
+      [
+        # System metrics (vm.alloc.*, cgroup.*, host.*); each measurement no-ops
+        # where unsupported (no cgroup v2, non-Linux). The expensive
+        # vm.alloc.fragmentation.* breakdown is sampled by SystemMonitor on a
+        # one-minute timer instead of this poller.
+        {ElectricTelemetry.SystemMetrics, :recon_alloc_measurement, [telemetry_opts]},
+        {ElectricTelemetry.SystemMetrics.Cgroup, :measurement, [telemetry_opts]},
+        {ElectricTelemetry.SystemMetrics.Proc, :measurement, [telemetry_opts]}
+      ]
   end
 
   def metrics(telemetry_opts) do
@@ -117,6 +126,35 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.system", unit: :byte),
       last_value("vm.memory.total", unit: :byte),
+      # BEAM allocator metrics (emitted by ElectricTelemetry.SystemMetrics).
+      last_value("vm.alloc.allocated", unit: :byte),
+      last_value("vm.alloc.used", unit: :byte),
+      last_value("vm.alloc.unused", unit: :byte),
+      last_value("vm.alloc.carrier_usage"),
+      last_value("vm.alloc.fragmentation.unused", tags: [:allocator], unit: :byte),
+      # cgroup v2 accounting metrics (emitted by
+      # ElectricTelemetry.SystemMetrics.Cgroup).
+      last_value("cgroup.memory.current", unit: :byte),
+      last_value("cgroup.memory.anon", unit: :byte),
+      last_value("cgroup.memory.file", unit: :byte),
+      last_value("cgroup.memory.working_set", unit: :byte),
+      last_value("cgroup.memory.max", unit: :byte),
+      # PSI "full avg10" stall percentage (v2 only).
+      last_value("cgroup.memory.pressure.full.avg10"),
+      last_value("cgroup.cpu.usage_usec", unit: :microsecond),
+      last_value("cgroup.cpu.nr_throttled"),
+      last_value("cgroup.cpu.throttled_usec", unit: :microsecond),
+      last_value("cgroup.cpu.pressure.full.avg10"),
+      last_value("cgroup.io.rbytes", unit: :byte),
+      last_value("cgroup.io.wbytes", unit: :byte),
+      # per-process /proc metrics (emitted by
+      # ElectricTelemetry.SystemMetrics.Proc).
+      last_value("host.proc.beam.rss_anon", unit: :byte),
+      last_value("host.proc.beam.rss_file", unit: :byte),
+      last_value("host.proc.beam.rss_shmem", unit: :byte),
+      last_value("host.proc.beam.vm_rss", unit: :byte),
+      last_value("host.proc.beam.io.read_bytes", unit: :byte),
+      last_value("host.proc.beam.io.write_bytes", unit: :byte),
       sum("vm.monitor.long_message_queue.length", tags: [:process_type]),
       distribution("vm.monitor.long_schedule.timeout",
         tags: [:process_type],

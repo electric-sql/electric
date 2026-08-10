@@ -67,9 +67,20 @@ defmodule ElectricTelemetry.StackTelemetry do
     ]
   end
 
+  # `:disk_usage_group_depth` is supplied by the caller since it depends on the
+  # deployment's storage layout (sync-service derives it from the real shape
+  # storage path, keeping this package layout-agnostic). When set, the disk walk
+  # additionally buckets per-directory subtotals at that depth — for Electric
+  # these are shape dirs, emitted as `electric.storage.dir.bytes` for the top-N
+  # largest. When `nil`, only the aggregate total is measured.
   defp disk_usage_child_specs(%{stack_id: stack_id} = opts) do
     if storage_dir = Map.get(opts, :storage_dir) do
-      [{ElectricTelemetry.DiskUsage, stack_id: stack_id, storage_dir: storage_dir}]
+      [
+        {ElectricTelemetry.DiskUsage,
+         stack_id: stack_id,
+         storage_dir: storage_dir,
+         group_depth: Map.get(opts, :disk_usage_group_depth)}
+      ]
     else
       []
     end
@@ -113,6 +124,7 @@ defmodule ElectricTelemetry.StackTelemetry do
       distribution("electric.storage.transaction_stored.replication_lag", unit: :millisecond),
       last_value("electric.storage.used.bytes", unit: :byte),
       distribution("electric.storage.used.measurement_duration", unit: :millisecond),
+      last_value("electric.storage.dir.bytes", unit: :byte, tags: [:stack_id, :shape]),
       counter("electric.postgres.replication.transaction_received.count"),
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte),
