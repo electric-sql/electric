@@ -21,6 +21,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     flags: %{selects_all_columns: true}
   }
   @test_pg_id "12345"
+  @inspector {__MODULE__, []}
 
   def load_column_info(@users_oid, _),
     do:
@@ -38,6 +39,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     Plug.Test.conn(method, "/" <> query_string)
   end
 
+  def query_string(params), do: "?" <> URI.encode_query(params)
+
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
     config =
       Electric.Shapes.Api.plug_opts(
@@ -47,7 +50,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         pg_id: @test_pg_id,
         shape_cache: {Electric.ShapeCache, []},
         storage: {Mock.Storage, []},
-        inspector: {__MODULE__, []},
+        inspector: @inspector,
         registry: @registry,
         long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
         max_age: Access.get(ctx, :max_age, 60),
@@ -154,14 +157,14 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "should clean shape based on shape definition with a where clause", ctx do
       %{stack_id: stack_id} = ctx
 
-      shape = Shape.new!("public.users", where: "id = 1", inspector: {__MODULE__, []})
+      shape = Shape.new!("public.users", where: "id = 1", inspector: @inspector)
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?table=public.users&where=#{URI.encode_www_form("id = 1")}")
+        |> conn(:delete, query_string(table: "public.users", where: "id = 1"))
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
@@ -174,7 +177,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         Shape.new!("public.users",
           where: "id = $1",
           params: %{"1" => "1"},
-          inspector: {__MODULE__, []}
+          inspector: @inspector
         )
 
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
@@ -185,7 +188,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         ctx
         |> conn(
           :delete,
-          "?table=public.users&where=#{URI.encode_www_form("id = $1")}&params[1]=1"
+          query_string([{"table", "public.users"}, {"where", "id = $1"}, {"params[1]", "1"}])
         )
         |> call_delete_shape_plug(ctx)
 
@@ -195,14 +198,14 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "should clean shape based on shape definition with a column selection", ctx do
       %{stack_id: stack_id} = ctx
 
-      shape = Shape.new!("public.users", columns: ["id"], inspector: {__MODULE__, []})
+      shape = Shape.new!("public.users", columns: ["id"], inspector: @inspector)
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?table=public.users&columns=id")
+        |> conn(:delete, query_string(table: "public.users", columns: "id"))
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202

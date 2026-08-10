@@ -307,7 +307,7 @@ defmodule Electric.Plug.RouterTest do
 
       # The shape must be resolvable by its definition, not just by its handle.
       assert %{status: 202} =
-               conn("DELETE", "/v1/shape?table=items&where=#{URI.encode_www_form(where)}")
+               conn("DELETE", "/v1/shape?" <> URI.encode_query(table: "items", where: where))
                |> Router.call(opts)
 
       conn =
