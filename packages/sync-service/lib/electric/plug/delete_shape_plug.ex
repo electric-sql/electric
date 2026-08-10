@@ -15,23 +15,13 @@ defmodule Electric.Plug.DeleteShapePlug do
   # list narrow (rather than passing the query params through wholesale) means
   # request-only parameters such as `offset` and `live`, which
   # `validate_for_delete/2` deliberately does not validate, stay out.
-  @shape_definition_params ~w(
-    table
-    where
-    params
-    columns
-    queryable_columns
-    replica
-    log
-    experimental_compaction
-  )
 
   defp validate_request(%Plug.Conn{assigns: %{config: config}} = conn, _) do
     api = Access.fetch!(config, :api)
 
     all_params =
       Map.merge(conn.query_params, conn.path_params)
-      |> Map.take(["handle" | @shape_definition_params])
+      |> Map.take(["table" | "handle" | "where" | "params" | "columns" | "queryable_columns" | "replica" | "log" | "experimental_compaction"])
       |> Map.put("offset", "-1")
 
     case Api.validate_for_delete(api, all_params) do
