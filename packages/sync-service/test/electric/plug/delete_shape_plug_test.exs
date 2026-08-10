@@ -151,6 +151,63 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
     end
 
+    test "should clean shape based on shape definition with a where clause", ctx do
+      %{stack_id: stack_id} = ctx
+
+      shape = Shape.new!("public.users", where: "id = 1", inspector: {__MODULE__, []})
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
+
+      expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
+
+      conn =
+        ctx
+        |> conn(:delete, "?table=public.users&where=#{URI.encode_www_form("id = 1")}")
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 202
+    end
+
+    test "should clean shape based on shape definition with a parameterised where clause", ctx do
+      %{stack_id: stack_id} = ctx
+
+      shape =
+        Shape.new!("public.users",
+          where: "id = $1",
+          params: %{"1" => "1"},
+          inspector: {__MODULE__, []}
+        )
+
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
+
+      expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
+
+      conn =
+        ctx
+        |> conn(
+          :delete,
+          "?table=public.users&where=#{URI.encode_www_form("id = $1")}&params[1]=1"
+        )
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 202
+    end
+
+    test "should clean shape based on shape definition with a column selection", ctx do
+      %{stack_id: stack_id} = ctx
+
+      shape = Shape.new!("public.users", columns: ["id"], inspector: {__MODULE__, []})
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, shape)
+
+      expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
+
+      conn =
+        ctx
+        |> conn(:delete, "?table=public.users&columns=id")
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 202
+    end
+
     test "should clean shape based only on shape_handle", ctx do
       %{stack_id: stack_id} = ctx
 
