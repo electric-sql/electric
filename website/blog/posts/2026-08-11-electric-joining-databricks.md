@@ -12,13 +12,13 @@ post: true
 published: true
 ---
 
-[Electric is joining Databricks](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) to add our data primitives and reactivity to [Lakebase](https://www.databricks.com/product/lakebase) and help make it the best platform for building
+[Electric is joining Databricks](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) to add our data primitives and reactivity to [Lakebase](https://www.databricks.com/product/lakebase) and help make it the best platform for building
 <span class="no-wrap">apps and agents</span>.
 
 It's a big change for Electric. There are [implications for Cloud users](#what-this-means-for-electric-users) but everything we've previously [open sourced](https://github.com/electric-sql) stays open source. Ultimately, by joining [Neon](https://neon.com) at Databricks, we'll have the platform to [take sync to the next level](#electrifying-neon).
 
 > [!Warning] ✨ Key links
-> See the [Databricks announcement](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) and [what this means for Electric users](#what-this-means-for-electric-users).
+> See the [Databricks announcement](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) and [what this means for Electric users](#what-this-means-for-electric-users).
 
 ## Aligned from day one
 
@@ -64,7 +64,7 @@ This is the stack of the future. We were always aligned with Neon but the opport
 
 Everything Electric has previously open sourced stays open source: [Postgres&nbsp;Sync](https://electric.ax/sync/postgres-sync), [PGlite](https://pglite.dev), [TanStack&nbsp;DB](https://tanstack.com/db), [Durable&nbsp;Streams](https://durablestreams.com).
 
-[Electric Cloud](/cloud) is winding down. Cloud users will need to self-host or move to another provider. We've contacted every existing cloud user directly. If you're affected, we'll support you through the transition and there are a number of options available for seamless continuity of hosting with professional support.
+[Electric Cloud](/cloud/) is winding down. Cloud users will need to self-host or move to another provider. We've contacted every existing cloud user directly. If you're affected, we'll support you through the transition and there are a number of options available for seamless continuity of hosting with professional support.
 
 Moving forward, Electric will be building with Neon inside Databricks. You can see how a [Neon backend fits together](https://neon.com/docs/get-started/backend-overview) and [how the platform is evolving](https://neon.com/blog).
 
@@ -74,7 +74,7 @@ To everyone who has adopted and contributed to Electric, we want to say a huge t
 
 Now, as part of Databricks, we have the platform to take sync to the next level.
 
-For more on this news, read the [Databricks announcement](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes). If you haven't already, now is a great time to [start something on Neon](https://neon.com) and follow along as we ship:
+For more on this news, read the [Databricks announcement](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes). If you haven't already, now is a great time to [start something on Neon](https://neon.com) and follow along as we ship:
 
 ```sh
 npx neon@latest init
