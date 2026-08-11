@@ -2,11 +2,7 @@
 title: "Electric Circuits: turn any database query live"
 description: "Electric Circuits turn static database queries into live ones: registered on shared incremental circuits, maintained as the data changes, and delivered over Durable Streams."
 excerpt: >-
-  Electric Circuits is a new primitive that turns any static database query
-  into a live one. Register a query and a circuit — an incremental
-  computation graph shared across queries with the same statement — keeps
-  its result updated as the database changes, with memory that scales with
-  your live queries, not your data.
+  Electric Circuits is a new primitive that turns any static database query into a live one. Register a query and a circuit keeps its result updated as the database changes.
 authors: [balegas]
 tags: [electric, circuits, dbsp, ivm, durable-streams]
 image: /img/blog/electric-circuits/header.png
