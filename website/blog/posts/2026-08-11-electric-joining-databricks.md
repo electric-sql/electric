@@ -54,7 +54,7 @@ That's what we do at Electric. That's what Databricks is building around Lakebas
 
 ## The stack of the future
 
-[Lakebase](https://www.databricks.com/product/lakebase) is serverless Postgres for apps and agents. With [scale-to-zero](https://docs.databricks.com/aws/en/oltp/projects/scale-to-zero), native [branching](https://docs.databricks.com/aws/en/oltp/projects/branches) and support for both OLTP and OLAP.
+[Lakebase](https://www.databricks.com/product/lakebase) is serverless Postgres for apps and agents. With [scale-to-zero](https://docs.databricks.com/aws/en/oltp/projects/scale-to-zero), [native&nbsp;branching](https://docs.databricks.com/aws/en/oltp/projects/branches) and support for both OLTP and OLAP.
 
 By combining Electric’s sync and local execution with the scalability and capabilities of Lakebase, apps and agents get a supercharged Postgres stack for optimal fast, reactive development, local query execution at machine speed and deployment at scale, for workloads of any scale.
 
@@ -62,17 +62,17 @@ This is the stack of the future. We were always aligned with Neon but the opport
 
 ## What this means for you
 
-Everything Electric has previously open sourced stays open source: Electric's [Postgres Sync](https://electric.ax/sync/postgres-sync), [PGlite](https://pglite.dev), [TanStack DB](https://tanstack.com/db), [Durable Streams](https://durablestreams.com).
+Everything Electric has previously open sourced stays open source: [Postgres&nbsp;Sync](https://electric.ax/sync/postgres-sync), [PGlite](https://pglite.dev), [TanStack&nbsp;DB](https://tanstack.com/db), [Durable&nbsp;Streams](https://durablestreams.com).
 
 [Electric Cloud](/cloud) is winding down. Cloud users will need to self-host or move to another provider. We've contacted every existing cloud user directly. If you're affected, we'll support you through the transition and there are a number of options available for seamless continuity of hosting with professional support.
 
-Moving forward, Electric will be building with Neon inside Databricks. You can see [how a Neon backend fits together here](https://neon.com/docs/get-started/backend-overview) and you can see [how the platform is evolving here](https://neon.com/blog).
+Moving forward, Electric will be building with Neon inside Databricks. You can see how a [Neon backend fits together](https://neon.com/docs/get-started/backend-overview) and [how the platform is evolving](https://neon.com/blog).
 
 ## What's next
 
-To everyone who has adopted Electric and contributed to it: we want to say a huge thank you. We couldn't have done this without you.
+To everyone who has adopted and contributed to Electric, we want to say a huge thank&nbsp;you. Together, we proved that sync is the future. Not just [for&nbsp;apps](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) but also [for&nbsp;agents](/blog/2026/04/29/introducing-electric-agents). We couldn't have done this without you.
 
-Together, we proved that sync is the future. Now, as part of Databricks, we have the platform to take that to the next level.
+Now, as part of Databricks, we have the platform to take sync to the next level.
 
 For more on the acquisition, read the [Databricks announcement](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes). If you haven't already, now is a great time to [start something on Neon](https://neon.com) and follow along as we ship:
 
