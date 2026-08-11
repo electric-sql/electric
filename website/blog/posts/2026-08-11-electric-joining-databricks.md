@@ -15,10 +15,10 @@ published: true
 [Electric is joining Databricks](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) to add our data primitives and reactivity to [Lakebase](https://www.databricks.com/product/lakebase) and help make it the best platform for building
 <span class="no-wrap">apps and agents</span>.
 
-It's a big change for Electric. There are [implications for Cloud users](#what-this-means-for-electric-users) but everything we've previously [open sourced](https://github.com/electric-sql) stays open source. Ultimately, by joining [Neon](https://neon.com) at Databricks, we'll have the platform to [take sync to the next level](#electrifying-neon).
+It's a big change for Electric. There are [implications for Cloud users](#what-this-means-for-you) but everything we've previously [open sourced](https://github.com/electric-sql) stays open source. Ultimately, by joining [Neon](https://neon.com) at Databricks, we'll have the platform to [take sync to the next level](#electrifying-neon).
 
 > [!Warning] ✨ Key links
-> See the [Databricks announcement](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) and [what this means for Electric users](#what-this-means-for-electric-users).
+> See the [Databricks announcement](https://www.databricks.com/blog/electric-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) and [what this means for Electric users](#what-this-means-for-you).
 
 ## Aligned from day one
 
