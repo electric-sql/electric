@@ -1,9 +1,9 @@
 ---
 title: 'Electric is joining Databricks'
 description: >-
-  Databricks has acquired Electric. We're joining Neon to make Lakebase the best platform for building apps and agents. Everything we've open sourced stays open source.
+  Electric is now part of Databricks. We're joining Neon to make Lakebase the best platform for building apps and agents. Everything we've open sourced stays open source.
 excerpt: >-
-  Databricks has acquired Electric. We're joining Neon to make Lakebase the best platform for building apps and agents. Everything we've open sourced stays open source.
+  Electric is now part of Databricks. We're joining Neon to make Lakebase the best platform for building apps and agents. Everything we've open sourced stays open source.
 authors: [thruflo, balegas]
 image: /img/blog/electric-joining-databricks/header2.jpg
 tags: [electric, neon, databricks, sync, announcement]
@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-[Databricks has acquired Electric](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) to add our data primitives and reactivity to [Lakebase](https://www.databricks.com/product/lakebase) and help make it the best platform for building
+[Electric is joining Databricks](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes) to add our data primitives and reactivity to [Lakebase](https://www.databricks.com/product/lakebase) and help make it the best platform for building
 <span class="no-wrap">apps and agents</span>.
 
 It's a big change for Electric. There are [implications for Cloud users](#what-this-means-for-electric-users) but everything we've previously [open sourced](https://github.com/electric-sql) stays open source. Ultimately, by joining [Neon](https://neon.com) at Databricks, we'll have the platform to [take sync to the next level](#electrifying-neon).
@@ -74,7 +74,7 @@ To everyone who has adopted and contributed to Electric, we want to say a huge t
 
 Now, as part of Databricks, we have the platform to take sync to the next level.
 
-For more on the acquisition, read the [Databricks announcement](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes). If you haven't already, now is a great time to [start something on Neon](https://neon.com) and follow along as we ship:
+For more on this news, read the [Databricks announcement](https://www.databricks.com/blog/electric-makers-pglite-joins-databricks-bring-wasm-postgres-ai-agent-sandboxes). If you haven't already, now is a great time to [start something on Neon](https://neon.com) and follow along as we ship:
 
 ```sh
 npx neon@latest init
