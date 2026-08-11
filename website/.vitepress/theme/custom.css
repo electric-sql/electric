@@ -351,6 +351,16 @@
   display: none !important;
 }
 
+/* The release banner adds ~66px of in-flow height above the relative
+   nav. The doc aside ("On this page", e.g. on blog posts) is
+   viewport-fixed and offsets itself by --vp-layout-top-height, which
+   nothing else sets — without this it starts under the nav. Scoped to
+   the aside because VPNav / VPNavScreen also read the variable and
+   must not shift. */
+.has-release-banner .VPDoc .aside {
+  --vp-layout-top-height: 66px;
+}
+
 .og-page .VPPage {
   padding: 0 !important;
   margin: 0 !important;

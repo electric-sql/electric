@@ -101,11 +101,17 @@ onMounted(() => {
     { immediate: true }
   )
 })
-const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
+
+// Show the release banner on all non-sidebar pages, unless the
+// page opts out with `hideReleaseBanner: true` frontmatter.
+const shouldShowReleaseBanner = computed(
+  () => !hasSidebar.value && !frontmatter.value?.hideReleaseBanner
+)
 
 const layoutClass = computed(() => {
   const classes = []
   if (!hasSidebar.value) classes.push('nav-relative')
+  if (shouldShowReleaseBanner.value) classes.push('has-release-banner')
   if (frontmatter.value?.pageClass) classes.push(frontmatter.value.pageClass)
   return classes.join(' ')
 })
@@ -114,7 +120,7 @@ const layoutClass = computed(() => {
 <template>
   <Layout :class="layoutClass">
     <template #layout-top>
-      <template v-if="shouldShowReleasebanner">
+      <template v-if="shouldShowReleaseBanner">
         <ReleaseBanner />
       </template>
     </template>
