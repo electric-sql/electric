@@ -47,10 +47,6 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     prometheus_metrics = metrics ++ Map.get(opts, :additional_prometheus_metrics, [])
 
     [
-      Reporters.CallHomeReporter.child_spec(
-        opts,
-        metrics: Reporters.CallHomeReporter.application_metrics()
-      ),
       Reporters.Otel.child_spec(opts, metrics: metrics),
       Reporters.Prometheus.child_spec(opts, metrics: prometheus_metrics),
       Reporters.Statsd.child_spec(opts, metrics: metrics)

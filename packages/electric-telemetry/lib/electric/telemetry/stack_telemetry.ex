@@ -51,12 +51,6 @@ defmodule ElectricTelemetry.StackTelemetry do
     metrics = metrics(opts)
 
     [
-      Reporters.CallHomeReporter.child_spec(
-        opts,
-        stack_id: stack_id,
-        name: :"stack_call_home_telemetry_#{stack_id}",
-        metrics: Reporters.CallHomeReporter.stack_metrics(stack_id)
-      ),
       Reporters.Otel.child_spec(opts,
         name: :"stack_otel_telemetry_#{stack_id}",
         metrics: metrics

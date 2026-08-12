@@ -243,7 +243,7 @@ defmodule ElectricTelemetry.EtsTables do
       String.contains?(name_string, ":") ->
         extract_type_with_separator(name_string, ":", @uuid_pattern)
 
-      # Pattern 2: name_stack_id (e.g., "stack_call_home_telemetry_6dd7c00b-8")
+      # Pattern 2: name_stack_id (e.g., "stack_otel_telemetry_6dd7c00b-8")
       # Extract everything before the last underscore that precedes a UUID-like pattern
       String.contains?(name_string, "_") ->
         extract_type_with_separator(name_string, "_", @uuid_pattern)

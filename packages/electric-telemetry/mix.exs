@@ -20,7 +20,6 @@ defmodule ElectricTelemetry.MixProject do
     List.flatten(
       [
         {:otel_metric_exporter, "~> 0.4.1"},
-        {:req, "~> 0.5"},
         {:telemetry, "~> 1.3"},
         {:telemetry_metrics, "~> 1.1"},
         {:telemetry_metrics_prometheus_core, "~> 1.2"},
@@ -33,10 +32,8 @@ defmodule ElectricTelemetry.MixProject do
 
   defp dev_and_test_deps do
     [
-      {:bypass, "~> 2.1", only: [:test]},
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:ex_json_schema, "~> 0.10", only: [:test]},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:jason, "~> 1.4"},
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false}

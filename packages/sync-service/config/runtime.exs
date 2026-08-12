@@ -158,13 +158,6 @@ replication_stream_id =
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 live_dashboard_port = env!("ELECTRIC_LIVE_DASHBOARD_PORT", :integer, nil)
 
-call_home_telemetry_url =
-  env!(
-    "ELECTRIC_TELEMETRY_URL",
-    &Electric.Config.parse_telemetry_url!/1,
-    nil
-  )
-
 shape_hibernate_after =
   env!("ELECTRIC_SHAPE_HIBERNATE_AFTER", &Electric.Config.parse_human_readable_time!/1, nil)
 
@@ -232,8 +225,6 @@ config :electric,
   long_poll_timeout: env!("ELECTRIC_LONG_POLL_TIMEOUT", :integer, nil),
   # Used in telemetry
   instance_id: instance_id,
-  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, false),
-  telemetry_url: call_home_telemetry_url,
   system_metrics_poll_interval: system_metrics_poll_interval,
   stack_telemetry_init_delay: stack_telemetry_init_delay,
   otel_export_period: otel_export_period,

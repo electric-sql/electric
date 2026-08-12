@@ -236,17 +236,17 @@ defmodule ElectricTelemetry.EtsTablesTest do
     end
 
     test "extracts type from underscore-separated stack_id pattern" do
-      _table1 = :ets.new(:stack_call_home_telemetry_6dd7c00b, [:public])
+      _table1 = :ets.new(:stack_otel_telemetry_6dd7c00b, [:public])
 
       results = EtsTables.top_tables(100)
 
       result =
         Enum.find(results, fn %{name: name} ->
-          name == :stack_call_home_telemetry_6dd7c00b
+          name == :stack_otel_telemetry_6dd7c00b
         end)
 
-      assert result != nil, "Expected to find stack_call_home_telemetry table in results"
-      assert result.type == "stack_call_home_telemetry"
+      assert result != nil, "Expected to find stack_otel_telemetry table in results"
+      assert result.type == "stack_otel_telemetry"
     end
 
     test "uses full name when no pattern is detected" do
