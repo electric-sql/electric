@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.3.5
+
+### Patch Changes
+
+- 5c5ba9d: Remove the call-home reporter that sent anonymous usage data to checkpoint.electric-sql.com. Electric no longer phones home; the `ELECTRIC_USAGE_REPORTING` and `ELECTRIC_TELEMETRY_URL` environment variables are gone, along with the `call_home_telemetry?` and `telemetry_url` configuration options for embedded use.
+
 ## 0.3.4
 
 ### Patch Changes
