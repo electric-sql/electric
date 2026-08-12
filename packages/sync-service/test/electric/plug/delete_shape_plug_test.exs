@@ -138,6 +138,24 @@ defmodule Electric.Plug.DeleteShapePlugTest do
              }
     end
 
+    test "returns 400 for a malformed request-only param", ctx do
+      # Request-only params such as `live` are ignored by delete validation,
+      # but they still go through schema casting, so malformed values are
+      # rejected rather than silently dropped.
+      conn =
+        ctx
+        |> conn("DELETE", query_string(table: "public.users", live: "banana"))
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Invalid request",
+               "errors" => %{"live" => ["is invalid"]}
+             }
+    end
+
     test "should clean shape based on shape definition", ctx do
       %{stack_id: stack_id} = ctx
 
