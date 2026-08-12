@@ -670,18 +670,3 @@ By default, coloring is enabled when Electric's stdout is connected to a termina
 Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
 
 </EnvVarConfig>
-
-## Usage reporting
-
-### ELECTRIC_USAGE_REPORTING
-
-These environment variables allow configuration of anonymous usage data reporting back to https://electric-sql.com
-
-<EnvVarConfig
-    name="ELECTRIC_USAGE_REPORTING"
-    defaultValue="true"
-    example="true">
-
-Configure anonymous usage data about the instance being sent to a central checkpoint service. Collected information is anonymised and doesn't contain any information from the replicated data. You can read more about it in our [telemetry docs](../reference/telemetry.md#anonymous-usage-data).
-
-</EnvVarConfig>

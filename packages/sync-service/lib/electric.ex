@@ -64,8 +64,6 @@ defmodule Electric do
         instance_id: #{default.(:instance_id)},
         telemetry_statsd_host: #{default.(:telemetry_statsd_host)},
         prometheus_port: #{default.(:prometheus_port)},
-        call_home_telemetry?: #{default.(:call_home_telemetry?)},
-        telemetry_url: #{default.(:telemetry_url)},
 
   Only the `connection_opts` are required.
 
@@ -104,10 +102,6 @@ defmodule Electric do
     randomly generated at boot (default: a randomly generated UUID).
   - `telemetry_statsd_host` (`t:String.t/0`) - If set, send telemetry data to the given StatsD reporting endpoint (default: `#{default.(:telemetry_statsd_host)}`)
   - `prometheus_port` (`t:integer/0`) - If set, expose a prometheus reporter for telemetry data on the specified port (default: `#{default.(:prometheus_port)}`). The `/metrics` endpoint must be scraped regularly when enabled: distribution metrics buffer in memory between scrapes, so an enabled-but-unscraped endpoint grows without bound and can eventually crash the service. Leave unset if nothing is scraping it.
-  - `call_home_telemetry?` (`t:boolean/0`) - Allow [anonymous usage
-    data](https://electric-sql.com/docs/reference/telemetry#anonymous-usage-data)
-    about the instance being sent to a central checkpoint service (default: `true` for production)
-  - `telemetry_url` (`t:URI.t/0`) - Where to send the usage data (default: `#{default.(:telemetry_url)}`)
 
   ### Deprecated
 

@@ -2,7 +2,6 @@ defmodule ElectricTelemetry.Opts do
   def schema do
     [
       instance_id: [type: :string, required: true],
-      installation_id: [type: :string],
       stack_id: [type: :string],
       storage_dir: [type: :string],
       version: [type: :string, required: true],
@@ -11,7 +10,6 @@ defmodule ElectricTelemetry.Opts do
         default: [],
         keys: [
           statsd_host: [type: {:or, [:string, nil]}, default: nil],
-          call_home_url: [type: {:or, [:string, {:struct, URI}, nil]}, default: nil],
           otel_metrics?: [type: :boolean, default: false],
           prometheus?: [type: :boolean, default: false],
           otel_resource_attributes: [type: :map, default: %{}]
@@ -78,7 +76,7 @@ defmodule ElectricTelemetry.Opts do
       ],
       # Metrics exported only via the Prometheus reporter, in addition to the shared
       # `additional_metrics`. Used to expose stack-level metrics on the `/metrics` endpoint
-      # without double-reporting them through the OTel/StatsD/Call-Home reporters.
+      # without double-reporting them through the OTel/StatsD reporters.
       additional_prometheus_metrics: [
         type:
           {:list,
@@ -103,20 +101,6 @@ defmodule ElectricTelemetry.Opts do
           otlp_headers: [type: :map, default: %{}],
           export_period: [type: :integer, default: :timer.seconds(30)],
           resource: [type: :map, default: %{}]
-        ],
-        default: []
-      ],
-      call_home_reporter_opts: [
-        type: :keyword_list,
-        keys: [
-          first_report_in: [
-            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
-            default: {2, :minute}
-          ],
-          reporting_period: [
-            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
-            default: {30, :minute}
-          ]
         ],
         default: []
       ]

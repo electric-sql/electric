@@ -35,7 +35,6 @@ defmodule ElectricTelemetry do
   def export_enabled?(%{reporters: reporters}) do
     truthy?(
       reporters.statsd_host ||
-        reporters.call_home_url ||
         reporters.otel_metrics? ||
         reporters.prometheus?
     )

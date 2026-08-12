@@ -36,8 +36,6 @@ defmodule Electric.Config do
 
   @type instance_id :: String.t()
 
-  @build_env Mix.env()
-
   @known_feature_flags ~w[]
   @default_storage_dir "./persistent"
 
@@ -86,9 +84,7 @@ defmodule Electric.Config do
     ## Telemetry
     instance_id: nil,
     prometheus_port: nil,
-    call_home_telemetry?: @build_env == :prod,
     telemetry_statsd_host: nil,
-    telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
     otel_sampling_ratio: 0.01,
     metrics_sampling_ratio: 1,
     # When true, the OTel spans of empty/up-to-date shape-GET responses are tail-dropped
@@ -480,21 +476,6 @@ defmodule Electric.Config do
 
   def parse_log_level!(_str) do
     raise Dotenvy.Error, message: "Must be one of #{inspect(@public_log_levels)}"
-  end
-
-  @spec parse_telemetry_url(binary) :: {:ok, binary} | {:error, binary}
-  def parse_telemetry_url(str) do
-    case URI.new(str) do
-      {:ok, %URI{scheme: scheme}} when scheme in ["http", "https"] -> {:ok, str}
-      _ -> {:error, "invalid URL format: \"#{str}\""}
-    end
-  end
-
-  def parse_telemetry_url!(str) do
-    case parse_telemetry_url(str) do
-      {:ok, url} -> url
-      {:error, message} -> raise Dotenvy.Error, message: message
-    end
   end
 
   @time_units ~w[ms msec s sec m min]

@@ -93,7 +93,7 @@ defmodule Electric.Application do
     core_config = core_configuration(opts)
 
     persistent_kv = Keyword.fetch!(core_config, :persistent_kv)
-    installation_id = Electric.Config.persist_installation_id(persistent_kv, instance_id)
+    Electric.Config.persist_installation_id(persistent_kv, instance_id)
 
     replication_stream_id = get_env(opts, :replication_stream_id)
 
@@ -141,8 +141,7 @@ defmodule Electric.Application do
       pool_opts:
         get_env_lazy(opts, :pool_opts, fn -> [pool_size: get_env(opts, :db_pool_size)] end),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
-      telemetry_opts:
-        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
+      telemetry_opts: telemetry_opts([instance_id: instance_id] ++ opts),
       max_shapes: get_env(opts, :max_shapes),
       tweaks: [
         publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
@@ -403,7 +402,6 @@ defmodule Electric.Application do
   defp telemetry_opts(opts) do
     [
       instance_id: Keyword.fetch!(opts, :instance_id),
-      installation_id: Keyword.fetch!(opts, :installation_id),
       version: Electric.version(),
       intervals_and_thresholds:
         get_opts(opts,
@@ -418,8 +416,6 @@ defmodule Electric.Application do
       reporters: [
         statsd_host: get_env(opts, :telemetry_statsd_host),
         prometheus?: not is_nil(get_env(opts, :prometheus_port)),
-        call_home_url:
-          if(get_env(opts, :call_home_telemetry?), do: get_env(opts, :telemetry_url)),
         otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
       ],
       # Export the key stack-level metrics (shapes, replication lag, retained WAL) to the
