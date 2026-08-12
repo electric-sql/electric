@@ -292,6 +292,32 @@ defmodule Electric.Plug.RouterTest do
              ] = response
     end
 
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "DELETE deletes a shape that was defined with a where clause", %{opts: opts} do
+      where = "value = 'test value 1'"
+
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape1_handle = get_resp_shape_handle(conn)
+
+      # The shape must be resolvable by its definition, not just by its handle.
+      assert %{status: 202} =
+               conn("DELETE", "/v1/shape?" <> URI.encode_query(table: "items", where: where))
+               |> Router.call(opts)
+
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert get_resp_shape_handle(conn) != shape1_handle
+    end
+
     @tag with_sql: ["INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"]
     test "follows a table and returns last-seen lsn", %{
       opts: opts,
