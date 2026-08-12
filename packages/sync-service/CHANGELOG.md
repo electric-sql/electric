@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.7.11
+
+### Patch Changes
+
+- 2171ca1: Fix `DELETE /v1/shape` so a shape can be deleted by its definition. The delete plug discarded every shape parameter other than `table` and `handle`, so any shape with a `where`, `columns`, `params`, `replica` or `log` could only ever be deleted by handle.
+- 5c5ba9d: Remove the call-home reporter that sent anonymous usage data to checkpoint.electric-sql.com. Electric no longer phones home; the `ELECTRIC_USAGE_REPORTING` and `ELECTRIC_TELEMETRY_URL` environment variables are gone, along with the `call_home_telemetry?` and `telemetry_url` configuration options for embedded use.
+
 ## 1.7.10
 
 ### Patch Changes
