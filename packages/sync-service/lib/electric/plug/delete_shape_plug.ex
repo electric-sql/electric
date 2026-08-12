@@ -12,26 +12,11 @@ defmodule Electric.Plug.DeleteShapePlug do
   defp validate_request(%Plug.Conn{assigns: %{config: config}} = conn, _) do
     api = Access.fetch!(config, :api)
 
-    # Deletion by shape definition needs every parameter that
-    # `Electric.Shapes.Api.Params.define_shape/2` reads, otherwise the shape we
-    # look the handle up with is not the shape the client created. Keeping the
-    # list narrow (rather than passing the query params through wholesale) means
-    # request-only parameters such as `offset` and `live`, which
-    # `validate_for_delete/2` deliberately does not validate, stay out.
-    all_params =
-      Map.merge(conn.query_params, conn.path_params)
-      |> Map.take([
-        "table",
-        "handle",
-        "where",
-        "params",
-        "columns",
-        "queryable_columns",
-        "replica",
-        "log",
-        "experimental_compaction"
-      ])
-      |> Map.put("offset", "-1")
+    # No filtering here: `Api.Params` casting drops unknown parameters and
+    # `validate_for_delete/2` ignores request-only ones such as `offset` and
+    # `live`, so the shape definition is built from the same parameters a GET
+    # request would use.
+    all_params = Map.merge(conn.query_params, conn.path_params)
 
     case Api.validate_for_delete(api, all_params) do
       {:ok, request} ->
