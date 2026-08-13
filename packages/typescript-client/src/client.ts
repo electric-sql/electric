@@ -1573,6 +1573,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (isChangeMessage(message)) {
         return !this.#snapshotTracker.shouldRejectMessage(message)
       }
+
+      if (isUpToDateMessage(message)) {
+        const lastSeenLsn = message.headers.global_last_seen_lsn
+        if (typeof lastSeenLsn === `string` && lastSeenLsn) {
+          // Process this in message order: changes before the up-to-date
+          // boundary still need snapshot deduplication, while later changes do
+          // not once the database has passed the snapshot's LSN.
+          this.#snapshotTracker.lastSeenUpdate(BigInt(lastSeenLsn))
+        }
+      }
+
       return true // Always process control messages
     })
 

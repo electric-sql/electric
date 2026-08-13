@@ -126,6 +126,17 @@ describe(`SnapshotTracker`, () => {
       }
 
       expect(tracker.shouldRejectMessage(message)).toBe(false)
+
+      const olderMessage: ChangeMessage<Row<unknown>> = {
+        key: `user:1`,
+        value: { id: 1, name: `Alice` },
+        headers: {
+          operation: `update`,
+          txids: [679_800_000],
+        },
+      }
+
+      expect(tracker.shouldRejectMessage(olderMessage)).toBe(false)
     })
   })
 

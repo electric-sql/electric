@@ -94,9 +94,9 @@ export class SnapshotTracker {
   /**
    * Resolves a 32-bit xid against an epoch-aware xid8.
    *
-   * PostgreSQL keeps transaction IDs within 2^31 of each other through regular
-   * autovacuuming. The signed modulo-2^32 difference therefore identifies the
-   * correct xid8 epoch.
+   * This signed modulo-2^32 calculation requires the reference and xid to be
+   * within 2^31 transactions. ShapeStream enforces that lifetime bound by
+   * retiring snapshots as global_last_seen_lsn passes their database_lsn.
    *
    * Mirrors `Electric.Postgres.Xid`
    * (`packages/sync-service/lib/electric/postgres/xid.ex`).
