@@ -92,6 +92,31 @@ export class SnapshotTracker {
   }
 
   /**
+   * Resolves a 32-bit xid against an epoch-aware xid8.
+   *
+   * PostgreSQL keeps transaction IDs within 2^31 of each other through regular
+   * autovacuuming. The signed modulo-2^32 difference therefore identifies the
+   * correct xid8 epoch.
+   *
+   * Mirrors `Electric.Postgres.Xid`
+   * (`packages/sync-service/lib/electric/postgres/xid.ex`).
+   */
+  #toXid8(xid: number, referenceXid8: bigint): bigint {
+    return referenceXid8 + BigInt.asIntN(32, BigInt(xid) - referenceXid8)
+  }
+
+  /**
+   * Resolves each contributing xid into the epoch nearest `referenceXid8` and
+   * returns the latest. Snapshot callers use `xmax` as the reference.
+   */
+  #resolveLatestXid8(xids: number[], referenceXid8: bigint): bigint {
+    return xids.reduce((latest, xid) => {
+      const xid8 = this.#toXid8(xid, referenceXid8)
+      return xid8 > latest ? xid8 : latest
+    }, BigInt(-1))
+  }
+
+  /**
    * Check if a change message should be filtered because its already in an active snapshot
    * Returns true if the message should be filtered out (not processed)
    */
@@ -99,19 +124,20 @@ export class SnapshotTracker {
     const txids = message.headers.txids || []
     if (txids.length === 0) return false
 
-    const xid = Math.max(...txids) // Use the maximum transaction ID
-
     for (const [xmax, snapshots] of this.xmaxSnapshots.entries()) {
-      if (xid >= xmax) {
+      const xid8 = this.#resolveLatestXid8(txids, xmax)
+      if (xid8 >= xmax) {
         for (const snapshot of snapshots) {
           this.removeSnapshot(snapshot)
         }
       }
     }
 
-    return [...this.activeSnapshots.values()].some(
-      (x) => x.keys.has(message.key) && isVisibleInSnapshot(xid, x)
-    )
+    return [...this.activeSnapshots.values()].some((snapshot) => {
+      if (!snapshot.keys.has(message.key)) return false
+      const xid8 = this.#resolveLatestXid8(txids, snapshot.xmax)
+      return isVisibleInSnapshot(xid8, snapshot)
+    })
   }
 
   lastSeenUpdate(newDatabaseLsn: bigint): void {

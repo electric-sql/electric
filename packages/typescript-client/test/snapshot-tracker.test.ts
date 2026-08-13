@@ -105,6 +105,28 @@ describe(`SnapshotTracker`, () => {
 
       expect(tracker.shouldRejectMessage(message)).toBe(false)
     })
+
+    it(`should NOT reject a wrapped xid newer than an xid8 snapshot`, () => {
+      const metadata: SnapshotMetadata = {
+        snapshot_mark: 1,
+        xmin: `9269800000`,
+        xmax: `9269801000`,
+        xip_list: [],
+        database_lsn: `123`,
+      }
+      tracker.addSnapshot(metadata, new Set([`user:1`]))
+
+      const message: ChangeMessage<Row<unknown>> = {
+        key: `user:1`,
+        value: { id: 1, name: `Alice` },
+        headers: {
+          operation: `update`,
+          txids: [679_907_981], // xid8 9_269_842_573 in epoch 2
+        },
+      }
+
+      expect(tracker.shouldRejectMessage(message)).toBe(false)
+    })
   })
 
   describe(`Keys not in snapshots are always let through`, () => {
