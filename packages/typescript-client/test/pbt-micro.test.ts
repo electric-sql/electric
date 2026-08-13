@@ -546,12 +546,16 @@ describe(`SnapshotTracker database LSN retirement`, () => {
             {
               key: `k1`,
               value: { id: 1, version: `duplicate` },
-              headers: { operation: `update`, txids: [679_865_407] },
+              headers: {
+                operation: `update`,
+                txids: [679_865_407],
+                lsn: `122`,
+              },
             },
             {
               headers: {
                 control: `up-to-date`,
-                global_last_seen_lsn: `123`,
+                global_last_seen_lsn: `100`,
               },
             },
           ]),
@@ -565,7 +569,11 @@ describe(`SnapshotTracker database LSN retirement`, () => {
             {
               key: `k1`,
               value: { id: 1, version: `future` },
-              headers: { operation: `update`, txids: [2_827_350_156] },
+              headers: {
+                operation: `update`,
+                txids: [2_827_350_156],
+                lsn: `124`,
+              },
             },
             {
               headers: {

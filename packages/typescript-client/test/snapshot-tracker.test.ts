@@ -116,7 +116,7 @@ describe(`SnapshotTracker`, () => {
       }
       tracker.addSnapshot(metadata, new Set([`user:1`]))
 
-      const message: ChangeMessage<Row<unknown>> = {
+      const newerMessage: ChangeMessage<Row<unknown>> = {
         key: `user:1`,
         value: { id: 1, name: `Alice` },
         headers: {
@@ -125,9 +125,11 @@ describe(`SnapshotTracker`, () => {
         },
       }
 
-      expect(tracker.shouldRejectMessage(message)).toBe(false)
+      expect(tracker.shouldRejectMessage(newerMessage)).toBe(false)
 
-      const olderMessage: ChangeMessage<Row<unknown>> = {
+      // This would be rejected if the newer message had not retired the
+      // snapshot after resolving its wrapped xid against xmax.
+      const messageAfterRetirement: ChangeMessage<Row<unknown>> = {
         key: `user:1`,
         value: { id: 1, name: `Alice` },
         headers: {
@@ -136,7 +138,7 @@ describe(`SnapshotTracker`, () => {
         },
       }
 
-      expect(tracker.shouldRejectMessage(olderMessage)).toBe(false)
+      expect(tracker.shouldRejectMessage(messageAfterRetirement)).toBe(false)
     })
   })
 

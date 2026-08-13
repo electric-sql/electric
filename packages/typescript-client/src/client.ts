@@ -1571,6 +1571,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Filter messages using snapshot tracker
     const messagesToProcess = batch.filter((message) => {
       if (isChangeMessage(message)) {
+        const changeLsn = message.headers.lsn
+        if (typeof changeLsn === `string` && changeLsn) {
+          // A quiet SSE stream may deliver its first later change before the
+          // next up-to-date boundary. Retire snapshots against that change's
+          // WAL position before resolving its wrapped transaction ID.
+          this.#snapshotTracker.lastSeenUpdate(BigInt(changeLsn))
+        }
         return !this.#snapshotTracker.shouldRejectMessage(message)
       }
 
