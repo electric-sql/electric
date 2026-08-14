@@ -35,6 +35,10 @@ defmodule Electric.Plug.Router do
     to: PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.ServeShapePlug, assign_key: :config]
 
+  get "/v1/shape/multiplex",
+    to: PassAssignToOptsPlug,
+    init_opts: [plug: Electric.Plug.ShapeMultiplexPlug, assign_key: :config]
+
   post "/v1/shape",
     to: PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.ServeShapePlug, assign_key: :config]
@@ -55,7 +59,8 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+  def authenticate(%Plug.Conn{request_path: request_path} = conn, _opts)
+      when request_path in ["/v1/shape", "/v1/shape/multiplex"] do
     api_secret = conn.assigns.config[:secret]
 
     if is_nil(api_secret) do

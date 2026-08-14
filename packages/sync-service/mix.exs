@@ -106,6 +106,7 @@ defmodule Electric.MixProject do
         {:req, "~> 0.5"},
         {:stream_split, "~> 0.1"},
         {:tz, "~> 0.28"},
+        {:websock_adapter, "~> 0.5.9"},
         {:phoenix_live_dashboard, "~> 0.8"}
       ],
       dev_and_test_deps(),

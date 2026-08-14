@@ -123,6 +123,16 @@ defmodule Electric.Shapes do
     ShapeCache.has_shape?(shape_handle, stack_id)
   end
 
+  @doc false
+  @spec fetch_latest_offset(stack_id(), shape_handle()) :: {:ok, LogOffset.t()} | :error
+  def fetch_latest_offset(stack_id, shape_handle) do
+    if ShapeCache.has_shape?(shape_handle, stack_id) do
+      ShapeCache.fetch_latest_offset(stack_id, shape_handle)
+    else
+      :error
+    end
+  end
+
   @doc """
   Remove and clean up all data (meta data and shape log + snapshot) associated with
   the given shape handle
