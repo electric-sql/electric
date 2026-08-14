@@ -1571,8 +1571,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Filter messages using snapshot tracker
     const messagesToProcess = batch.filter((message) => {
       if (isChangeMessage(message)) {
+        const changeLsn = message.headers.lsn
+        if (typeof changeLsn === `string` && changeLsn) {
+          // A quiet SSE stream may deliver its first later change before the
+          // next up-to-date boundary. Retire snapshots against that change's
+          // WAL position before resolving its wrapped transaction ID.
+          this.#snapshotTracker.lastSeenUpdate(BigInt(changeLsn))
+        }
         return !this.#snapshotTracker.shouldRejectMessage(message)
       }
+
+      if (isUpToDateMessage(message)) {
+        const lastSeenLsn = message.headers.global_last_seen_lsn
+        if (typeof lastSeenLsn === `string` && lastSeenLsn) {
+          // Process this in message order: changes before the up-to-date
+          // boundary still need snapshot deduplication, while later changes do
+          // not once the database has passed the snapshot's LSN.
+          this.#snapshotTracker.lastSeenUpdate(BigInt(lastSeenLsn))
+        }
+      }
+
       return true // Always process control messages
     })
 

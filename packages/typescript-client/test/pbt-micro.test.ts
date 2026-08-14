@@ -263,21 +263,14 @@ describe(`isVisibleInSnapshot PBT`, () => {
 // TARGET 3: SnapshotTracker (stateful / model-based)
 // ═══════════════════════════════════════════════════════════════════
 //
-// SnapshotTracker keeps two reverse indexes (`xmaxSnapshots`,
-// `snapshotsByDatabaseLsn`) that are *populated* on addSnapshot but
-// *never cleaned up* on removeSnapshot. Any sequence that:
-//   1. add a snapshot
-//   2. remove it (or let shouldRejectMessage evict it)
-//   3. add a different snapshot that happens to reuse the same xmax
-//      or database_lsn as #1
-// leaves stale entries in the reverse index. Later eviction loops
-// then mutate the reverse index unexpectedly, potentially causing the
-// wrong snapshot to be removed.
-//
-// We run commands against the real tracker AND a simple oracle model,
-// and check that shouldRejectMessage agrees at every step.
+// We run commands against the real tracker and an independent oracle model.
+// Snapshot values span xid8 epochs, while wire txids cover wrap boundaries
+// and may contain several contributing transactions.
 
 describe(`SnapshotTracker stateful PBT`, () => {
+  const XID_MODULUS = BigInt(2) ** BigInt(32)
+  const XID_HALF_RANGE = BigInt(2) ** BigInt(31)
+
   type ModelSnap = {
     mark: number
     xmin: bigint
@@ -289,6 +282,24 @@ describe(`SnapshotTracker stateful PBT`, () => {
 
   class OracleModel {
     snapshots = new Map<number, ModelSnap>()
+
+    #toXid8(xid: number, reference: bigint): bigint {
+      const epochStart = reference - (reference % XID_MODULUS)
+      let candidate = epochStart + BigInt(xid)
+      const difference = candidate - reference
+
+      if (difference >= XID_HALF_RANGE) candidate -= XID_MODULUS
+      if (difference < -XID_HALF_RANGE) candidate += XID_MODULUS
+
+      return candidate
+    }
+
+    #latestXid8(txids: number[], reference: bigint): bigint {
+      return txids.reduce((latest, txid) => {
+        const xid8 = this.#toXid8(txid, reference)
+        return xid8 > latest ? xid8 : latest
+      }, BigInt(-1))
+    }
 
     add(s: ModelSnap) {
       this.snapshots.set(s.mark, s)
@@ -304,13 +315,14 @@ describe(`SnapshotTracker stateful PBT`, () => {
     shouldReject(msg: ChangeMessage<Row<unknown>>): boolean {
       const txids = msg.headers.txids || []
       if (txids.length === 0) return false
-      const xid = BigInt(Math.max(...txids))
-      // Evict any snapshot whose xmax <= xid — matches real tracker behavior.
+
       for (const [mark, s] of this.snapshots) {
+        const xid = this.#latestXid8(txids, s.xmax)
         if (xid >= s.xmax) this.snapshots.delete(mark)
       }
       for (const s of this.snapshots.values()) {
         if (!s.keys.has(msg.key)) continue
+        const xid = this.#latestXid8(txids, s.xmax)
         if (xid < s.xmin) return true
         if (xid < s.xmax && !s.xip.includes(xid)) return true
       }
@@ -322,24 +334,36 @@ describe(`SnapshotTracker stateful PBT`, () => {
   const keyArb = fc.constantFrom(`k1`, `k2`, `k3`)
 
   const bi = (n: number) => BigInt(n)
+  const wireXidArb = fc.oneof(
+    fc.integer({ min: 0, max: 2 ** 32 - 1 }),
+    fc.constantFrom(0, 1, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1)
+  )
   const addCmdArb = fc
     .record({
       mark: fc.integer({ min: 1, max: 6 }), // small range → collisions possible
-      xmin: fc.bigInt({ min: bi(1), max: bi(50) }),
+      epoch: fc.integer({ min: 0, max: 3 }),
+      xmin: wireXidArb,
       xmaxDelta: fc.bigInt({ min: bi(1), max: bi(50) }),
-      xip: fc.array(fc.bigInt({ min: bi(1), max: bi(100) }), { maxLength: 3 }),
+      xipOffsets: fc.array(fc.bigInt({ min: bi(0), max: bi(49) }), {
+        maxLength: 3,
+      }),
       keys: fc.array(keyArb, { minLength: 1, maxLength: 3 }),
       dbLsn: fc.bigInt({ min: bi(1), max: bi(20) }),
     })
-    .map((r) => ({
-      kind: `add` as const,
-      mark: r.mark,
-      xmin: r.xmin,
-      xmax: r.xmin + r.xmaxDelta,
-      xip: r.xip,
-      keys: new Set(r.keys),
-      dbLsn: r.dbLsn,
-    }))
+    .map((r) => {
+      const xmin = BigInt(r.epoch) * XID_MODULUS + BigInt(r.xmin)
+      return {
+        kind: `add` as const,
+        mark: r.mark,
+        xmin,
+        xmax: xmin + r.xmaxDelta,
+        xip: r.xipOffsets
+          .filter((offset) => offset < r.xmaxDelta)
+          .map((offset) => xmin + offset),
+        keys: new Set(r.keys),
+        dbLsn: r.dbLsn,
+      }
+    })
 
   const removeCmdArb = fc
     .integer({ min: 1, max: 6 })
@@ -352,7 +376,7 @@ describe(`SnapshotTracker stateful PBT`, () => {
   const rejectCmdArb = fc
     .record({
       key: keyArb,
-      txid: fc.integer({ min: 1, max: 100 }),
+      txids: fc.array(wireXidArb, { minLength: 1, maxLength: 3 }),
     })
     .map((r) => ({ kind: `reject` as const, ...r }))
 
@@ -399,7 +423,7 @@ describe(`SnapshotTracker stateful PBT`, () => {
               const msg: ChangeMessage<Row<unknown>> = {
                 key: cmd.key,
                 value: { id: 1 },
-                headers: { operation: `insert`, txids: [cmd.txid] },
+                headers: { operation: `insert`, txids: cmd.txids },
               }
               const realResult = real.shouldRejectMessage(msg)
               const oracleResult = oracle.shouldReject(msg)
@@ -415,6 +439,212 @@ describe(`SnapshotTracker stateful PBT`, () => {
       }),
       pbtOpts
     )
+  })
+
+  it(`deterministic: oracle agrees with SnapshotTracker across an xid epoch boundary`, () => {
+    const real = new SnapshotTracker()
+    const oracle = new OracleModel()
+    const snapshot = {
+      mark: 1,
+      xmin: BigInt(9_269_800_000),
+      xmax: BigInt(9_269_801_000),
+      xip: [] as bigint[],
+      keys: new Set([`k1`]),
+      dbLsn: BigInt(123),
+    }
+
+    real.addSnapshot(
+      {
+        snapshot_mark: snapshot.mark,
+        xmin: `${snapshot.xmin}`,
+        xmax: `${snapshot.xmax}`,
+        xip_list: [],
+        database_lsn: `${snapshot.dbLsn}`,
+      },
+      snapshot.keys
+    )
+    oracle.add(snapshot)
+
+    const message: ChangeMessage<Row<unknown>> = {
+      key: `k1`,
+      value: { id: 1 },
+      headers: { operation: `update`, txids: [679_907_981] },
+    }
+
+    expect(oracle.shouldReject(message)).toBe(real.shouldRejectMessage(message))
+  })
+})
+
+describe(`SnapshotTracker database LSN retirement`, () => {
+  it(`does not reject a future wrapped xid after the stream passes the snapshot LSN`, async () => {
+    const aborter = new AbortController()
+    let mainRequestCount = 0
+
+    const responseHeaders = (offset: string, cursor: string) => ({
+      'electric-handle': `h1`,
+      'electric-offset': offset,
+      'electric-schema': JSON.stringify({ id: `int4`, version: `text` }),
+      'electric-cursor': cursor,
+      'electric-up-to-date': ``,
+    })
+
+    const fetchClient = async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      const url = new URL(input.toString())
+      if (url.searchParams.has(`subset__limit`)) {
+        return new Response(
+          JSON.stringify({
+            metadata: {
+              snapshot_mark: 1,
+              xmin: `9269800000`,
+              xmax: `9269801000`,
+              xip_list: [],
+              database_lsn: `123`,
+            },
+            data: [
+              {
+                key: `k1`,
+                value: { id: 1, version: `snapshot` },
+                headers: { operation: `insert` },
+              },
+            ],
+          }),
+          { status: 200, headers: responseHeaders(`10_0`, `snapshot`) }
+        )
+      }
+
+      mainRequestCount += 1
+      if (mainRequestCount === 1) {
+        return new Response(
+          JSON.stringify([
+            {
+              headers: {
+                control: `up-to-date`,
+                global_last_seen_lsn: `100`,
+              },
+            },
+          ]),
+          { status: 200, headers: responseHeaders(`5_0`, `initial`) }
+        )
+      }
+
+      if (mainRequestCount === 2) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            `abort`,
+            () => reject(new Error(`AbortError`)),
+            { once: true }
+          )
+        })
+      }
+
+      if (mainRequestCount === 3) {
+        return new Response(
+          JSON.stringify([
+            {
+              key: `k1`,
+              value: { id: 1, version: `duplicate` },
+              headers: {
+                operation: `update`,
+                txids: [679_865_407],
+                lsn: `122`,
+              },
+            },
+            {
+              headers: {
+                control: `up-to-date`,
+                global_last_seen_lsn: `100`,
+              },
+            },
+          ]),
+          { status: 200, headers: responseHeaders(`10_0`, `caught-up`) }
+        )
+      }
+
+      if (mainRequestCount === 4) {
+        return new Response(
+          JSON.stringify([
+            {
+              key: `k1`,
+              value: { id: 1, version: `future` },
+              headers: {
+                operation: `update`,
+                txids: [2_827_350_156],
+                lsn: `124`,
+              },
+            },
+            {
+              headers: {
+                control: `up-to-date`,
+                global_last_seen_lsn: `124`,
+              },
+            },
+          ]),
+          { status: 200, headers: responseHeaders(`11_0`, `future`) }
+        )
+      }
+
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          `abort`,
+          () => reject(new Error(`AbortError`)),
+          { once: true }
+        )
+      })
+    }
+
+    const stream = new ShapeStream<{ id: number; version: string }>({
+      url: `https://example.com/v1/shape`,
+      params: { table: `test_table` },
+      log: `changes_only`,
+      fetchClient,
+      signal: aborter.signal,
+    })
+    const seen: Array<Message<{ id: number; version: string }>> = []
+    const initialUpToDate = new Promise<void>((resolve) => {
+      stream.subscribe((messages) => {
+        seen.push(...messages)
+        if (
+          messages.some(
+            (message) =>
+              `control` in message.headers &&
+              message.headers.control === `up-to-date`
+          )
+        ) {
+          resolve()
+        }
+      })
+    })
+
+    try {
+      await initialUpToDate
+      await vi.waitFor(() => expect(mainRequestCount).toBe(2))
+      await stream.requestSnapshot({ limit: 1, orderBy: `id ASC` })
+
+      await vi.waitFor(() => {
+        expect(
+          seen.some(
+            (message) =>
+              `operation` in message.headers &&
+              `value` in message &&
+              message.value.version === `future`
+          ),
+          JSON.stringify({ mainRequestCount, seen })
+        ).toBe(true)
+        expect(
+          seen.some(
+            (message) =>
+              `operation` in message.headers &&
+              `value` in message &&
+              message.value.version === `duplicate`
+          )
+        ).toBe(false)
+      })
+    } finally {
+      aborter.abort()
+    }
   })
 })
 
