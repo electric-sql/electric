@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.5.26
+
+### Patch Changes
+
+- 1983bf1: Fix subset snapshot filtering after PostgreSQL transaction ID wraparound and
+  retire filters once the stream passes each snapshot's database LSN.
+
 ## 1.5.25
 
 ### Patch Changes
