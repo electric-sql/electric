@@ -946,6 +946,7 @@ function buildInboxMessages(
     order: message.order,
     from: message.from ?? `unknown`,
     payload: message.payload,
+    message_type: message.message_type,
     timestamp: message.timestamp ?? new Date(0).toISOString(),
     mode: message.mode ?? `immediate`,
     status: message.status ?? `processed`,
