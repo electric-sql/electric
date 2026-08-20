@@ -11,6 +11,7 @@ import { Agent } from '@mariozechner/pi-agent-core'
 import { getModel, streamSimple } from '@mariozechner/pi-ai'
 import { createOutboundBridge } from './outbound-bridge'
 import { MOONSHOT_PROVIDER, getMoonshotModel } from './moonshot-models'
+import { ORCAROUTER_PROVIDER, getOrcaRouterModel } from './orcarouter-models'
 import { runtimeLog } from './log'
 import { approxTokens } from './token-budget'
 import type { AgentMessageLike, CompactContextFn } from './compaction-midturn'
@@ -130,10 +131,12 @@ export function resolvePiModel(opts: {
   const model =
     provider === MOONSHOT_PROVIDER
       ? getMoonshotModel(opts.model)
-      : getModel(
-          provider as KnownProvider,
-          opts.model as Parameters<typeof getModel>[1]
-        )
+      : provider === ORCAROUTER_PROVIDER
+        ? getOrcaRouterModel(opts.model)
+        : getModel(
+            provider as KnownProvider,
+            opts.model as Parameters<typeof getModel>[1]
+          )
 
   if (!model) {
     throw new Error(

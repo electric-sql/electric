@@ -173,6 +173,7 @@ export const MODEL_PROVIDER_LABELS: Record<string, string> = {
   'openai-codex': `OpenAI Codex`,
   deepseek: `DeepSeek`,
   moonshot: `Kimi`,
+  orcarouter: `OrcaRouter`,
 }
 
 /** The provider prefix of a `provider:model` id, or `other` when unprefixed. */

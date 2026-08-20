@@ -900,6 +900,18 @@ describe(`resolvePiModel`, () => {
     expect(model.baseUrl).toBe(`https://api.moonshot.ai/v1`)
   })
 
+  it(`resolves OrcaRouter string model ids to OpenAI-compatible models`, () => {
+    const model = resolvePiModel({
+      provider: `orcarouter`,
+      model: `orcarouter/auto`,
+    })
+
+    expect(model.provider).toBe(`orcarouter`)
+    expect(model.id).toBe(`orcarouter/auto`)
+    expect(model.api).toBe(`openai-completions`)
+    expect(model.baseUrl).toBe(`https://api.orcarouter.ai/v1`)
+  })
+
   it(`accepts custom Model objects directly`, () => {
     const customModel: Model<`openai-completions`> = {
       id: `deepseek-v4-flash`,
