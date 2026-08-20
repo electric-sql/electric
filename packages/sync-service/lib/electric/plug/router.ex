@@ -55,7 +55,15 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+  # Gate on the route the router already resolved (`conn.private.plug_route`,
+  # set by `plug :match` before this plug runs) rather than on the raw
+  # `request_path`. `match/2` dispatches on the percent-decoded,
+  # empty-segment-stripped path, so any request whose decoded path routes to
+  # "/v1/shape" — e.g. "/v1/shape/", "/v1//shape", "/v1/%73hape" — must be
+  # authenticated here, even though its raw request target is not exactly
+  # "/v1/shape". Matching `request_path` or `path_info` (which is never decoded)
+  # would leave those variants as an authentication bypass.
+  def authenticate(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts) do
     api_secret = conn.assigns.config[:secret]
 
     if is_nil(api_secret) do

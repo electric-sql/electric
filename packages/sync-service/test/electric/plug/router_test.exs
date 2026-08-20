@@ -4063,6 +4063,34 @@ defmodule Electric.Plug.RouterTest do
 
       # Note: Returns 400 because shape params are required, but authentication passed
     end
+
+    test "requires secret for path-normalization variants of /v1/shape", %{
+      secret: secret,
+      api_opts: api_opts
+    } do
+      # Each of these raw request targets routes to the shape handler once
+      # `match/2` percent-decodes and empty-segment-strips the path, but its raw
+      # request_path is not exactly "/v1/shape". Authentication must gate on the
+      # resolved route, so all of them still require the secret.
+      #
+      # `//v1/shape` is provable only over the wire: Plug.Test runs paths through
+      # URI.parse, which reads a leading "//" as an authority (host=v1) and 404s
+      # regardless of the fix, so it's intentionally omitted here.
+      for path <- ["/v1/shape/", "/v1//shape", "/v1/shape//", "/v1/%73hape"] do
+        opts = Keyword.merge([secret: secret], api_opts)
+
+        assert %{status: 401} = Router.call(conn("GET", path), opts),
+               "expected 401 for GET #{path}"
+
+        assert %{status: 401} = Router.call(conn("DELETE", path), opts),
+               "expected 401 for DELETE #{path}"
+
+        # And the secret still grants access via the normalized path (proving we
+        # gate on the resolved route rather than rejecting these outright).
+        assert %{status: 400} = Router.call(conn("GET", path <> "?secret=#{secret}"), opts),
+               "expected 400 (authenticated) for GET #{path} with secret"
+      end
+    end
   end
 
   defp get_resp_shape_handle(conn), do: get_resp_header(conn, "electric-handle")
