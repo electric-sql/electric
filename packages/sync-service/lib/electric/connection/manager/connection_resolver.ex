@@ -4,14 +4,6 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
   require Logger
 
-  # Socket option numbers from the Linux headers, for use with :inet's `:raw`
-  # option. IPPROTO_TCP is from netinet/in.h, the rest from netinet/tcp.h.
-  @ipproto_tcp 6
-  @tcp_keepidle 4
-  @tcp_keepintvl 5
-  @tcp_keepcnt 6
-  @tcp_user_timeout 18
-
   defmodule Connection do
     @moduledoc false
     @behaviour Postgrex.SimpleConnection
@@ -209,6 +201,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   # inherit the OS defaults.
   #
   # Time values are in milliseconds, as produced by parse_human_readable_time!.
+  # TCP_KEEPIDLE and TCP_KEEPINTVL are expressed in seconds by the kernel, while
+  # TCP_USER_TIMEOUT takes milliseconds.
   @doc false
   def tcp_liveness_opts(config, os_type) do
     keepalive_idle = Keyword.get(config, :keepalive_idle)
@@ -224,23 +218,18 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       end
 
     keepalive_opt ++
-      raw_tcp_opt(@tcp_keepidle, ms_to_sec(keepalive_idle), os_type) ++
-      raw_tcp_opt(@tcp_keepintvl, ms_to_sec(keepalive_interval), os_type) ++
-      raw_tcp_opt(@tcp_keepcnt, keepalive_count, os_type) ++
-      raw_tcp_opt(@tcp_user_timeout, user_timeout, os_type)
+      linux_tcp_opt(:keepidle, ms_to_sec(keepalive_idle), os_type) ++
+      linux_tcp_opt(:keepintvl, ms_to_sec(keepalive_interval), os_type) ++
+      linux_tcp_opt(:keepcnt, keepalive_count, os_type) ++
+      linux_tcp_opt(:user_timeout, user_timeout, os_type)
   end
 
-  # The raw socket options below are Linux-specific: the option numbers differ
-  # on other platforms and TCP_USER_TIMEOUT has no equivalent at all. Skip them
-  # elsewhere so a developer on macOS gets a working connection rather than an
-  # obscure einval, while :keepalive (a portable inet option) still applies.
-  defp raw_tcp_opt(_opt, nil, _os_type), do: []
-
-  defp raw_tcp_opt(opt, value, {:unix, :linux}) when is_integer(value) do
-    [{:raw, @ipproto_tcp, opt, <<value::native-32>>}]
-  end
-
-  defp raw_tcp_opt(_opt, _value, _os_type), do: []
+  # :inet documents keepidle, keepintvl, keepcnt and user_timeout as
+  # Linux-specific. Skip them elsewhere so that a developer on macOS still gets
+  # a working connection, while :keepalive (a portable option) still applies.
+  defp linux_tcp_opt(_opt, nil, _os_type), do: []
+  defp linux_tcp_opt(opt, value, {:unix, :linux}) when is_integer(value), do: [{opt, value}]
+  defp linux_tcp_opt(_opt, _value, _os_type), do: []
 
   defp ms_to_sec(nil), do: nil
   defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
