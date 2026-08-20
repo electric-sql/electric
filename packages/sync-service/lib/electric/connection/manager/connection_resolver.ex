@@ -188,7 +188,18 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
         []
       end
 
-    Keyword.put(connection_opts, :socket_options, inet_opts ++ tcp_liveness_opts())
+    liveness_config = [
+      keepalive_idle: Electric.Config.get_env(:db_tcp_keepalive_idle),
+      keepalive_interval: Electric.Config.get_env(:db_tcp_keepalive_interval),
+      keepalive_count: Electric.Config.get_env(:db_tcp_keepalive_count),
+      user_timeout: Electric.Config.get_env(:db_tcp_user_timeout)
+    ]
+
+    Keyword.put(
+      connection_opts,
+      :socket_options,
+      inet_opts ++ tcp_liveness_opts(liveness_config, :os.type())
+    )
   end
 
   # Options for configuring TCP keepalives and TCP user timeout.
@@ -200,11 +211,14 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   #
   # Everything here is opt-in: with no configuration we emit no options and
   # inherit the OS defaults.
-  defp tcp_liveness_opts do
-    keepalive_idle = Electric.Config.get_env(:db_tcp_keepalive_idle)
-    keepalive_interval = Electric.Config.get_env(:db_tcp_keepalive_interval)
-    keepalive_count = Electric.Config.get_env(:db_tcp_keepalive_count)
-    user_timeout = Electric.Config.get_env(:db_tcp_user_timeout)
+  #
+  # Time values are in milliseconds, as produced by parse_human_readable_time!.
+  @doc false
+  def tcp_liveness_opts(config, os_type) do
+    keepalive_idle = Keyword.get(config, :keepalive_idle)
+    keepalive_interval = Keyword.get(config, :keepalive_interval)
+    keepalive_count = Keyword.get(config, :keepalive_count)
+    user_timeout = Keyword.get(config, :user_timeout)
 
     keepalive_opt =
       if is_nil(keepalive_idle) and is_nil(keepalive_interval) and is_nil(keepalive_count) do
@@ -214,24 +228,23 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       end
 
     keepalive_opt ++
-      raw_tcp_opt(@tcp_keepidle, ms_to_sec(keepalive_idle)) ++
-      raw_tcp_opt(@tcp_keepintvl, ms_to_sec(keepalive_interval)) ++
-      raw_tcp_opt(@tcp_keepcnt, keepalive_count) ++
-      raw_tcp_opt(@tcp_user_timeout, user_timeout)
+      raw_tcp_opt(@tcp_keepidle, ms_to_sec(keepalive_idle), os_type) ++
+      raw_tcp_opt(@tcp_keepintvl, ms_to_sec(keepalive_interval), os_type) ++
+      raw_tcp_opt(@tcp_keepcnt, keepalive_count, os_type) ++
+      raw_tcp_opt(@tcp_user_timeout, user_timeout, os_type)
   end
 
   # The raw socket options below are Linux-specific: the option numbers differ
   # on other platforms and TCP_USER_TIMEOUT has no equivalent at all. Skip them
   # elsewhere so a developer on macOS gets a working connection rather than an
   # obscure einval, while :keepalive (a portable inet option) still applies.
-  defp raw_tcp_opt(_opt, nil), do: []
+  defp raw_tcp_opt(_opt, nil, _os_type), do: []
 
-  defp raw_tcp_opt(opt, value) when is_integer(value) do
-    case :os.type() do
-      {:unix, :linux} -> [{:raw, @ipproto_tcp, opt, <<value::native-32>>}]
-      _ -> []
-    end
+  defp raw_tcp_opt(opt, value, {:unix, :linux}) when is_integer(value) do
+    [{:raw, @ipproto_tcp, opt, <<value::native-32>>}]
   end
+
+  defp raw_tcp_opt(_opt, _value, _os_type), do: []
 
   defp ms_to_sec(nil), do: nil
   defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
