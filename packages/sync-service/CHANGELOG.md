@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.7.12
+
+### Patch Changes
+
+- 6e917b9: Add `ELECTRIC_DATABASE_TCP_KEEPALIVE_IDLE`, `ELECTRIC_DATABASE_TCP_KEEPALIVE_INTERVAL`, `ELECTRIC_DATABASE_TCP_KEEPALIVE_COUNT` and `ELECTRIC_DATABASE_TCP_USER_TIMEOUT` for configuring TCP keepalive and user timeout on database connections. All of them are opt-in; when unset the OS defaults are kept.
+- c9e8a68: Fix an authentication bypass on `/v1/shape` in secure mode. Authentication now gates on the route resolved by the router rather than on the raw request path, so requests whose target normalizes to `/v1/shape` (e.g. a trailing slash, a doubled slash, or a percent-encoded character) can no longer skip the secret check. CORS headers for shape routes are matched the same way.
+
 ## 1.7.11
 
 ### Patch Changes
