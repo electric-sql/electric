@@ -98,6 +98,30 @@ defmodule Electric.Plug.RouterTest do
              ] = response
     end
 
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "GET on path-normalization variants still routes to the shape handler", %{opts: opts} do
+      # In insecure mode (no secret) these variants must still be dispatched to
+      # the shape handler and served — gating auth on `plug_route` must not
+      # over-block or break routing for paths that normalize to "/v1/shape".
+      for path <- ["/v1/shape/", "/v1//shape", "/v1/shape//", "/v1/%73hape"] do
+        conn =
+          conn("GET", path <> "?table=items&offset=-1")
+          |> Router.call(opts)
+
+        assert %{status: 200} = conn, "expected 200 (routed to shape handler) for GET #{path}"
+
+        assert [
+                 %{
+                   "headers" => %{"operation" => "insert"},
+                   "value" => %{"value" => "test value 1"}
+                 },
+                 %{"headers" => %{"control" => "snapshot-end"}}
+               ] = Jason.decode!(conn.resp_body)
+      end
+    end
+
     test "GET returns an error when table is not found", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape?table=nonexistent&offset=-1")
