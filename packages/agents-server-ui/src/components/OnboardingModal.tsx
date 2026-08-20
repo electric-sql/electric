@@ -81,6 +81,7 @@ const MODEL_PROVIDER_IDS: ReadonlyArray<ProviderId> = [
   `openai`,
   `deepseek`,
   `moonshot`,
+  `orcarouter`,
 ]
 
 const MODEL_PROVIDERS: ReadonlyArray<{
@@ -116,6 +117,13 @@ const MODEL_PROVIDERS: ReadonlyArray<{
     name: `Kimi / Moonshot API`,
     description: `Kimi models from Moonshot's OpenAI-compatible API.`,
     placeholder: `sk-…`,
+    kind: `model`,
+  },
+  {
+    id: `orcarouter`,
+    name: `OrcaRouter API`,
+    description: `Smart-routed gateway for open models via OpenAI-compatible API.`,
+    placeholder: `sk-orca-…`,
     kind: `model`,
   },
 ]
@@ -866,6 +874,7 @@ function ProviderItem({
         openai: keysStatus.saved.openai ?? null,
         deepseek: keysStatus.saved.deepseek ?? null,
         moonshot: keysStatus.saved.moonshot ?? null,
+        orcarouter: keysStatus.saved.orcarouter ?? null,
         brave: keysStatus.saved.brave ?? null,
         // e2b is configured in Settings → Credentials, not onboarding;
         // preserve any saved value so editing another key here can't wipe it.

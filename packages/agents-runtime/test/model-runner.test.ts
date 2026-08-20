@@ -18,6 +18,7 @@ describe(`completeWithLowCostModel`, () => {
     vi.clearAllMocks()
     process.env = { ...originalEnv }
     delete process.env.MOONSHOT_API_KEY
+    delete process.env.ORCAROUTER_API_KEY
     completeSimple.mockResolvedValue({
       content: [{ type: `text`, text: `ok` }],
       stopReason: `stop`,
@@ -97,6 +98,37 @@ describe(`completeWithLowCostModel`, () => {
       apiKey: `moonshot-key`,
     })
   })
+
+  test(`passes ORCAROUTER_API_KEY for orcarouter low-cost models`, async () => {
+    process.env.ORCAROUTER_API_KEY = `orcarouter-key`
+
+    await completeWithLowCostModel({
+      catalog: {
+        choices: [
+          { provider: `orcarouter`, id: `orcarouter/auto`, reasoning: true },
+        ],
+        defaultChoice: {
+          provider: `orcarouter`,
+          id: `orcarouter/auto`,
+          reasoning: true,
+        },
+      },
+      purpose: `URL extraction`,
+      systemPrompt: `Custom instructions`,
+      prompt: `Extract the title`,
+      maxTokens: 128,
+    })
+
+    expect(completeSimple).toHaveBeenCalledOnce()
+    expect(completeSimple.mock.calls[0][0]).toMatchObject({
+      provider: `orcarouter`,
+      id: `orcarouter/auto`,
+      baseUrl: `https://api.orcarouter.ai/v1`,
+    })
+    expect(completeSimple.mock.calls[0][2]).toMatchObject({
+      apiKey: `orcarouter-key`,
+    })
+  })
 })
 
 describe(`detectAvailableProviders`, () => {
@@ -106,6 +138,7 @@ describe(`detectAvailableProviders`, () => {
     delete process.env.OPENAI_API_KEY
     delete process.env.DEEPSEEK_API_KEY
     delete process.env.MOONSHOT_API_KEY
+    delete process.env.ORCAROUTER_API_KEY
     process.env.CODEX_AUTH_PATH = `/nonexistent/auth.json`
   })
 
@@ -131,14 +164,25 @@ describe(`detectAvailableProviders`, () => {
     expect(detectAvailableProviders()).not.toContain(`moonshot`)
   })
 
+  test(`detects orcarouter when ORCAROUTER_API_KEY is set`, () => {
+    process.env.ORCAROUTER_API_KEY = `test-key`
+    expect(detectAvailableProviders()).toContain(`orcarouter`)
+  })
+
+  test(`does not include orcarouter when ORCAROUTER_API_KEY is absent`, () => {
+    expect(detectAvailableProviders()).not.toContain(`orcarouter`)
+  })
+
   test(`detects multiple providers simultaneously`, () => {
     process.env.ANTHROPIC_API_KEY = `ant-key`
     process.env.DEEPSEEK_API_KEY = `ds-key`
     process.env.MOONSHOT_API_KEY = `moonshot-key`
+    process.env.ORCAROUTER_API_KEY = `orcarouter-key`
     const providers = detectAvailableProviders()
     expect(providers).toContain(`anthropic`)
     expect(providers).toContain(`deepseek`)
     expect(providers).toContain(`moonshot`)
+    expect(providers).toContain(`orcarouter`)
   })
 })
 
@@ -183,5 +227,35 @@ describe(`selectLowCostModelChoice with moonshot`, () => {
     })
     expect(choice.provider).toBe(`moonshot`)
     expect(choice.id).toBe(`kimi-k2.6`)
+  })
+})
+
+describe(`selectLowCostModelChoice with orcarouter`, () => {
+  test(`selects orcarouter/auto as preferred orcarouter low-cost model`, () => {
+    const catalog = {
+      choices: [
+        {
+          provider: `orcarouter`,
+          id: `orcarouter/fusion`,
+          reasoning: true,
+        },
+        {
+          provider: `orcarouter`,
+          id: `orcarouter/auto`,
+          reasoning: true,
+        },
+      ],
+      defaultChoice: {
+        provider: `orcarouter`,
+        id: `orcarouter/fusion`,
+        reasoning: true,
+      },
+    }
+    const choice = selectLowCostModelChoice(catalog, {
+      provider: `orcarouter`,
+      model: `orcarouter/fusion`,
+    })
+    expect(choice.provider).toBe(`orcarouter`)
+    expect(choice.id).toBe(`orcarouter/auto`)
   })
 })
