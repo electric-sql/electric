@@ -90,4 +90,61 @@ defmodule Electric.Connection.Manager.ConnectionResolverTcpOptsTest do
       assert ConnectionResolver.tcp_liveness_opts([user_timeout: 60_000], @darwin) == []
     end
   end
+
+  # The raw option numbers and value encoding are hand-copied from the Linux
+  # kernel headers, so unit tests alone can't catch a wrong constant, byte
+  # width, or unit. These tests apply the generated options to a real loopback
+  # socket and read them back from the kernel.
+  describe "kernel read-back: portable options" do
+    test "SO_KEEPALIVE is enabled on a connected socket on any platform" do
+      opts = ConnectionResolver.tcp_liveness_opts([keepalive_idle: 33_000], :os.type())
+
+      assert {:ok, [keepalive: true]} = :inet.getopts(connect_loopback(opts), [:keepalive])
+    end
+  end
+
+  describe "kernel read-back: raw options" do
+    if :os.type() != {:unix, :linux} do
+      @describetag skip: "raw TCP socket options are only applied on Linux"
+    end
+
+    test "the kernel stores the configured raw option values" do
+      config = [
+        keepalive_idle: 33_000,
+        keepalive_interval: 7_000,
+        keepalive_count: 5,
+        user_timeout: 45_678
+      ]
+
+      socket = connect_loopback(ConnectionResolver.tcp_liveness_opts(config, :os.type()))
+
+      assert {:ok,
+              [
+                {:raw, @ipproto_tcp, @tcp_keepidle, <<33::native-32>>},
+                {:raw, @ipproto_tcp, @tcp_keepintvl, <<7::native-32>>},
+                {:raw, @ipproto_tcp, @tcp_keepcnt, <<5::native-32>>},
+                {:raw, @ipproto_tcp, @tcp_user_timeout, <<45_678::native-32>>}
+              ]} =
+               :inet.getopts(socket, [
+                 {:raw, @ipproto_tcp, @tcp_keepidle, 4},
+                 {:raw, @ipproto_tcp, @tcp_keepintvl, 4},
+                 {:raw, @ipproto_tcp, @tcp_keepcnt, 4},
+                 {:raw, @ipproto_tcp, @tcp_user_timeout, 4}
+               ])
+    end
+  end
+
+  # Opens a loopback connection with the given socket options and returns the
+  # client-side socket, mirroring how Postgrex passes :socket_options to
+  # :gen_tcp.connect. Sockets are closed automatically when the test process
+  # exits.
+  defp connect_loopback(socket_options) do
+    {:ok, listen} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+    {:ok, port} = :inet.port(listen)
+
+    {:ok, socket} =
+      :gen_tcp.connect({127, 0, 0, 1}, port, socket_options ++ [active: false])
+
+    socket
+  end
 end
