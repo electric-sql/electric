@@ -51,6 +51,10 @@ defmodule Electric.Connection.Manager.ConnectionResolverTest do
       assert Keyword.get(resolved_db_config, k) == v
     end
 
+    # with no TCP liveness settings configured, the default behaviour is to
+    # emit no socket options and leave the OS defaults in place
+    assert Keyword.get(resolved_db_config, :socket_options) == []
+
     assert_obfuscated_password(resolved_db_config)
   end
 
@@ -125,6 +129,10 @@ defmodule Electric.Connection.Manager.ConnectionResolverTest do
     for {k, v} <- expected do
       assert Keyword.get(resolved_db_config, k) == v
     end
+
+    # the ipv4 fallback rebuilds the socket options without :inet6; with no
+    # TCP liveness settings configured that leaves them empty
+    assert Keyword.get(resolved_db_config, :socket_options) == []
 
     assert_obfuscated_password(resolved_db_config)
   end

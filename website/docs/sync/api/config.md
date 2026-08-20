@@ -96,6 +96,56 @@ How many connections Electric opens as a pool for handling shape queries.
 
 </EnvVarConfig>
 
+### ELECTRIC_DATABASE_TCP_KEEPALIVE_IDLE
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_TCP_KEEPALIVE_IDLE"
+    optional="true"
+    example="30s">
+
+Enable TCP keepalive on database connections and set how long a connection may sit idle before the kernel starts sending probes.
+
+By default Electric leaves the operating system's settings in place. Setting this lets an idle replication connection detect the loss and reconnect sooner.
+
+See also `ELECTRIC_DATABASE_TCP_USER_TIMEOUT`, which bounds detection while data is actually in flight.
+
+</EnvVarConfig>
+
+### ELECTRIC_DATABASE_TCP_KEEPALIVE_INTERVAL
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_TCP_KEEPALIVE_INTERVAL"
+    optional="true"
+    example="10s">
+
+How long to wait between individual TCP keepalive probes. Enables keepalive if set on its own.
+
+</EnvVarConfig>
+
+### ELECTRIC_DATABASE_TCP_KEEPALIVE_COUNT
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_TCP_KEEPALIVE_COUNT"
+    optional="true"
+    example="3">
+
+How many unanswered TCP keepalive probes before the connection is dropped. Enables keepalive if set on its own.
+
+</EnvVarConfig>
+
+### ELECTRIC_DATABASE_TCP_USER_TIMEOUT
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_TCP_USER_TIMEOUT"
+    optional="true"
+    example="60s">
+
+The maximum time data may remain unacknowledged before the connection is dropped (Linux `TCP_USER_TIMEOUT`).
+
+This complements the keepalive settings above. Keepalive probes only run while a connection is idle, whereas this bounds how long Electric keeps retransmitting a write to a peer that has stopped responding.
+
+</EnvVarConfig>
+
 ### ELECTRIC_DATABASE_CA_CERTIFICATE_FILE
 
 <EnvVarConfig

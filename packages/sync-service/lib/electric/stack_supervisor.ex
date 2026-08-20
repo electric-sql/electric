@@ -102,6 +102,18 @@ defmodule Electric.StackSupervisor do
                    doc:
                      "will be passed on to the Postgrex connection pool. See `t:Postgrex.start_option()`, apart from the connection options."
                  ],
+                 tcp_opts: [
+                   type: :keyword_list,
+                   default: [],
+                   doc:
+                     "TCP-level liveness settings applied to every database connection socket. Any option left unset keeps the OS default.",
+                   keys: [
+                     keepalive_idle: [type: {:or, [:pos_integer, nil]}, default: nil],
+                     keepalive_interval: [type: {:or, [:pos_integer, nil]}, default: nil],
+                     keepalive_count: [type: {:or, [:pos_integer, nil]}, default: nil],
+                     user_timeout: [type: {:or, [:pos_integer, nil]}, default: nil]
+                   ]
+                 ],
                  storage: [type: :mod_arg, required: true],
                  storage_dir: [type: :string, required: true],
                  chunk_bytes_threshold: [
@@ -383,6 +395,7 @@ defmodule Electric.StackSupervisor do
           handle_event: {Electric.Replication.ShapeLogCollector, :handle_event_async, [stack_id]}
         ] ++ config.replication_opts,
       pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
+      tcp_opts: config.tcp_opts,
       timeline_opts: [
         stack_id: stack_id,
         persistent_kv: config.persistent_kv

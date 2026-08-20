@@ -140,6 +140,7 @@ defmodule Electric.Application do
       ],
       pool_opts:
         get_env_lazy(opts, :pool_opts, fn -> [pool_size: get_env(opts, :db_pool_size)] end),
+      tcp_opts: tcp_opts(opts),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts: telemetry_opts([instance_id: instance_id] ++ opts),
       max_shapes: get_env(opts, :max_shapes),
@@ -238,6 +239,39 @@ defmodule Electric.Application do
       feature_flags: get_env(opts, :feature_flags),
       max_concurrent_requests: get_env(opts, :max_concurrent_requests)
     ]
+  end
+
+  # The keepidle, keepintvl, keepcnt and user_timeout socket options are only
+  # compiled into Erlang's inet driver where the OS headers define the
+  # corresponding TCP_* constants. Where they are missing, setting any of them
+  # makes the driver reject the connection with einval. They are all available
+  # on Linux; elsewhere we drop them, so that the database connection still
+  # works, and tell the user.
+  defp tcp_opts(opts) do
+    tcp_opts = [
+      keepalive_idle: get_env(opts, :db_tcp_keepalive_idle),
+      keepalive_interval: get_env(opts, :db_tcp_keepalive_interval),
+      keepalive_count: get_env(opts, :db_tcp_keepalive_count),
+      user_timeout: get_env(opts, :db_tcp_user_timeout)
+    ]
+
+    configured = Enum.reject(tcp_opts, fn {_key, val} -> is_nil(val) end)
+
+    cond do
+      configured == [] ->
+        []
+
+      :os.type() == {:unix, :linux} ->
+        configured
+
+      true ->
+        Logger.warning(
+          "Ignoring database TCP keepalive/user timeout settings " <>
+            "#{inspect(Keyword.keys(configured))}: they are only supported on Linux."
+        )
+
+        []
+    end
   end
 
   defp get_env(opts, key) do

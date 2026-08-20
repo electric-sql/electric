@@ -51,7 +51,10 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       connection_mod =
       Keyword.get(opts, :connection_mod, {Postgrex.SimpleConnection, :start_link, []})
 
-    {:ok, %{connection_mod: connection_mod, stack_id: stack_id}, {:continue, :notify_ready}}
+    tcp_opts = Keyword.get(opts, :tcp_opts, [])
+
+    {:ok, %{connection_mod: connection_mod, stack_id: stack_id, tcp_opts: tcp_opts},
+     {:continue, :notify_ready}}
   end
 
   @impl GenServer
@@ -64,7 +67,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   @impl GenServer
   def handle_call({:validate, connection}, _from, state) do
     # convert to postgrex style for return to conn.manager
-    connection = populate_connection_opts(connection)
+    connection = populate_connection_opts(connection, state.tcp_opts)
 
     result = attempt_connection({:cont, connection}, state)
 
@@ -100,7 +103,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
       {:error, error} ->
         error
-        |> mutate_based_on_error(conn_opts)
+        |> mutate_based_on_error(conn_opts, state.tcp_opts)
         |> attempt_connection(state)
     end
   end
@@ -109,8 +112,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     {:error, error}
   end
 
-  defp populate_connection_opts(conn_opts) do
-    conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
+  defp populate_connection_opts(conn_opts, tcp_opts) do
+    conn_opts |> populate_ssl_opts() |> populate_tcp_opts(tcp_opts)
   end
 
   defp populate_ssl_opts(connection_opts) do
@@ -172,36 +175,87 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     ]
   end
 
-  defp populate_tcp_opts(connection_opts) do
-    tcp_opts =
+  defp populate_tcp_opts(connection_opts, tcp_opts) do
+    inet_opts =
       if connection_opts[:ipv6] do
         [:inet6]
       else
         []
       end
 
-    Keyword.put(connection_opts, :socket_options, tcp_opts)
+    Keyword.put(
+      connection_opts,
+      :socket_options,
+      inet_opts ++ tcp_liveness_opts(tcp_opts)
+    )
   end
 
-  defp mutate_based_on_error(%Postgrex.Error{message: "ssl not available"} = error, conn_opts) do
+  # Options for configuring TCP keepalives and TCP user timeout.
+  #
+  # SO_KEEPALIVE makes the kernel probe an idle connection, and TCP_USER_TIMEOUT
+  # caps how long unacknowledged data may stay outstanding before the connection
+  # is dropped -- the latter also bounds detection while data *is* being sent,
+  # which keepalive alone does not.
+  #
+  # Everything here is opt-in: with no configuration we emit no options and
+  # inherit the OS defaults. Platform support is checked upstream, in
+  # Electric.Application, before these options reach us.
+  #
+  # Time values are in milliseconds, as produced by parse_human_readable_time!.
+  # TCP_KEEPIDLE and TCP_KEEPINTVL are expressed in seconds by the kernel, while
+  # TCP_USER_TIMEOUT takes milliseconds.
+  @doc false
+  def tcp_liveness_opts(config) do
+    keepalive_idle = Keyword.get(config, :keepalive_idle)
+    keepalive_interval = Keyword.get(config, :keepalive_interval)
+    keepalive_count = Keyword.get(config, :keepalive_count)
+    user_timeout = Keyword.get(config, :user_timeout)
+
+    keepalive_opt =
+      if is_nil(keepalive_idle) and is_nil(keepalive_interval) and is_nil(keepalive_count) do
+        []
+      else
+        [{:keepalive, true}]
+      end
+
+    keepalive_opt ++
+      tcp_opt(:keepidle, ms_to_sec(keepalive_idle)) ++
+      tcp_opt(:keepintvl, ms_to_sec(keepalive_interval)) ++
+      tcp_opt(:keepcnt, keepalive_count) ++
+      tcp_opt(:user_timeout, user_timeout)
+  end
+
+  defp tcp_opt(_opt, nil), do: []
+  defp tcp_opt(opt, value) when is_integer(value), do: [{opt, value}]
+
+  defp ms_to_sec(nil), do: nil
+  defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
+
+  defp mutate_based_on_error(
+         %Postgrex.Error{message: "ssl not available"} = error,
+         conn_opts,
+         _tcp_opts
+       ) do
     maybe_fallback_to_no_ssl(conn_opts, error)
   end
 
   defp mutate_based_on_error(
          %DBConnection.ConnectionError{message: "ssl connect: closed"} = error,
-         conn_opts
+         conn_opts,
+         _tcp_opts
        ) do
     maybe_fallback_to_no_ssl(conn_opts, error)
   end
 
   defp mutate_based_on_error(
          %DBConnection.ConnectionError{severity: :error} = error,
-         conn_opts
+         conn_opts,
+         tcp_opts
        ) do
-    maybe_fallback_to_ipv4(error, conn_opts)
+    maybe_fallback_to_ipv4(error, conn_opts, tcp_opts)
   end
 
-  defp mutate_based_on_error(error, _conn_opts) do
+  defp mutate_based_on_error(error, _conn_opts, _tcp_opts) do
     {:halt, error}
   end
 
@@ -225,7 +279,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
   defp maybe_fallback_to_ipv4(
          %DBConnection.ConnectionError{message: message, severity: :error} = error,
-         conn_opts
+         conn_opts,
+         tcp_opts
        ) do
     # If network is unreachable, IPv6 is not enabled on the machine
     # If domain cannot be resolved, assume there is no AAAA record for it
@@ -239,7 +294,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
         "Database connection failed to find valid IPv6 address for #{conn_opts[:hostname]} - falling back to IPv4"
       )
 
-      {:cont, conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()}
+      {:cont, conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts(tcp_opts)}
     else
       {:halt, error}
     end

@@ -43,6 +43,13 @@ defmodule Electric.Config do
     ## Database
     provided_database_id: "single_stack",
     db_pool_size: 20,
+    # TCP-level liveness detection for database connections. All nil by
+    # default, leaving the OS defaults in place. See
+    # Electric.Connection.Manager.ConnectionResolver for what these do.
+    db_tcp_keepalive_idle: nil,
+    db_tcp_keepalive_interval: nil,
+    db_tcp_keepalive_count: nil,
+    db_tcp_user_timeout: nil,
     replication_stream_id: "default",
     replication_slot_temporary?: false,
     replication_slot_temporary_random_name?: false,
