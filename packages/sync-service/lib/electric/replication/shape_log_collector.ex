@@ -899,11 +899,6 @@ defmodule Electric.Replication.ShapeLogCollector do
            Map.merge(delivered_acc, layer_delivered)}
       end
 
-    OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
-
-    lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
-    LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
-
     delivered_shapes =
       MapSet.difference(affected_shapes, undeliverable |> Map.keys() |> MapSet.new())
 
@@ -925,6 +920,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     case event do
       %TransactionFragment{commit: commit} when not is_nil(commit) ->
+        OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
+
+        lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
+        LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
         LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
         flush_tracker =
