@@ -55,14 +55,10 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  # Gate on the route the router already resolved (`conn.private.plug_route`,
-  # set by `plug :match` before this plug runs) rather than on the raw
-  # `request_path`. `match/2` dispatches on the percent-decoded,
-  # empty-segment-stripped path, so any request whose decoded path routes to
-  # "/v1/shape" — e.g. "/v1/shape/", "/v1//shape", "/v1/%73hape" — must be
-  # authenticated here, even though its raw request target is not exactly
-  # "/v1/shape". Matching `request_path` or `path_info` (which is never decoded)
-  # would leave those variants as an authentication bypass.
+  # `conn.private.plug_route` is set by `plug :match` before this plug runs, turning e.g.
+  # "/v1/shape/", "/v1//shape", "/v1/%73hape" into the same normalized path.
+  # Matching `request_path` or `path_info` (which is never decoded) would leave those variants
+  # as an authentication bypass.
   def authenticate(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts) do
     api_secret = conn.assigns.config[:secret]
 
@@ -90,10 +86,7 @@ defmodule Electric.Plug.Router do
   def authenticate(conn, _opts), do: conn
 
   # Match the resolved route rather than the never-decoded `path_info`, for the
-  # same reason as `authenticate/2` above: `path_info` still holds the raw,
-  # percent-encoded segments at this point, so a request like "/v1/%73hape"
-  # would route to the shape handler yet miss this clause and get the default
-  # CORS method list.
+  # same reason as `authenticate/2` above.
   def put_cors_headers(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "POST", "HEAD", "DELETE", "OPTIONS"]})
 
