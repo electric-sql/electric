@@ -186,7 +186,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     Keyword.put(
       connection_opts,
       :socket_options,
-      inet_opts ++ tcp_liveness_opts(tcp_opts, :os.type())
+      inet_opts ++ tcp_liveness_opts(tcp_opts)
     )
   end
 
@@ -198,13 +198,14 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   # which keepalive alone does not.
   #
   # Everything here is opt-in: with no configuration we emit no options and
-  # inherit the OS defaults.
+  # inherit the OS defaults. Platform support is checked upstream, in
+  # Electric.Application, before these options reach us.
   #
   # Time values are in milliseconds, as produced by parse_human_readable_time!.
   # TCP_KEEPIDLE and TCP_KEEPINTVL are expressed in seconds by the kernel, while
   # TCP_USER_TIMEOUT takes milliseconds.
   @doc false
-  def tcp_liveness_opts(config, os_type) do
+  def tcp_liveness_opts(config) do
     keepalive_idle = Keyword.get(config, :keepalive_idle)
     keepalive_interval = Keyword.get(config, :keepalive_interval)
     keepalive_count = Keyword.get(config, :keepalive_count)
@@ -218,18 +219,14 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       end
 
     keepalive_opt ++
-      linux_tcp_opt(:keepidle, ms_to_sec(keepalive_idle), os_type) ++
-      linux_tcp_opt(:keepintvl, ms_to_sec(keepalive_interval), os_type) ++
-      linux_tcp_opt(:keepcnt, keepalive_count, os_type) ++
-      linux_tcp_opt(:user_timeout, user_timeout, os_type)
+      tcp_opt(:keepidle, ms_to_sec(keepalive_idle)) ++
+      tcp_opt(:keepintvl, ms_to_sec(keepalive_interval)) ++
+      tcp_opt(:keepcnt, keepalive_count) ++
+      tcp_opt(:user_timeout, user_timeout)
   end
 
-  # :inet documents keepidle, keepintvl, keepcnt and user_timeout as
-  # Linux-specific. Skip them elsewhere so that a developer on macOS still gets
-  # a working connection, while :keepalive (a portable option) still applies.
-  defp linux_tcp_opt(_opt, nil, _os_type), do: []
-  defp linux_tcp_opt(opt, value, {:unix, :linux}) when is_integer(value), do: [{opt, value}]
-  defp linux_tcp_opt(_opt, _value, _os_type), do: []
+  defp tcp_opt(_opt, nil), do: []
+  defp tcp_opt(opt, value) when is_integer(value), do: [{opt, value}]
 
   defp ms_to_sec(nil), do: nil
   defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
