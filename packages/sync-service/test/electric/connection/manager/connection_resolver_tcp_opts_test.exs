@@ -1,150 +1,124 @@
 defmodule Electric.Connection.Manager.ConnectionResolverTcpOptsTest do
+  # Verifies that the TCP liveness options configured via `tcp_opts` reach the
+  # kernel with the expected values, and that leaving them unset keeps the OS
+  # defaults untouched. Values are read back through raw `getsockopt` calls, so
+  # the test only runs on Linux where the option numbers below are valid.
   use ExUnit.Case, async: true
 
   alias Electric.Connection.Manager.ConnectionResolver
 
-  # IPPROTO_TCP and the TCP_* option numbers from the Linux headers, as used
-  # by ConnectionResolver.
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+
+  # IPPROTO_TCP from netinet/in.h, TCP_* from netinet/tcp.h.
   @ipproto_tcp 6
   @tcp_keepidle 4
   @tcp_keepintvl 5
   @tcp_keepcnt 6
   @tcp_user_timeout 18
 
-  @linux {:unix, :linux}
-  @darwin {:unix, :darwin}
+  @raw_opts [
+    {:raw, @ipproto_tcp, @tcp_keepidle, 4},
+    {:raw, @ipproto_tcp, @tcp_keepintvl, 4},
+    {:raw, @ipproto_tcp, @tcp_keepcnt, 4},
+    {:raw, @ipproto_tcp, @tcp_user_timeout, 4}
+  ]
 
-  describe "tcp_liveness_opts/2" do
-    test "returns no options when nothing is configured" do
-      for os_type <- [@linux, @darwin, {:win32, :nt}] do
-        assert ConnectionResolver.tcp_liveness_opts([], os_type) == []
-      end
-    end
+  if :os.type() != {:unix, :linux} do
+    @moduletag skip: "raw TCP socket option numbers are Linux-specific"
+  end
 
-    test "emits keepalive and raw options for a full configuration on Linux" do
-      config = [
-        keepalive_idle: 30_000,
-        keepalive_interval: 5_000,
-        keepalive_count: 3,
-        user_timeout: 60_000
-      ]
+  setup :with_stack_id_from_test
 
-      assert ConnectionResolver.tcp_liveness_opts(config, @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepidle, <<30::native-32>>},
-               {:raw, @ipproto_tcp, @tcp_keepintvl, <<5::native-32>>},
-               {:raw, @ipproto_tcp, @tcp_keepcnt, <<3::native-32>>},
-               {:raw, @ipproto_tcp, @tcp_user_timeout, <<60_000::native-32>>}
-             ]
-    end
-
-    test "setting any single keepalive value enables keepalive and emits only its raw option" do
-      assert ConnectionResolver.tcp_liveness_opts([keepalive_idle: 30_000], @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepidle, <<30::native-32>>}
-             ]
-
-      assert ConnectionResolver.tcp_liveness_opts([keepalive_interval: 5_000], @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepintvl, <<5::native-32>>}
-             ]
-
-      assert ConnectionResolver.tcp_liveness_opts([keepalive_count: 3], @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepcnt, <<3::native-32>>}
-             ]
-    end
-
-    test "user timeout alone does not enable keepalive and stays in milliseconds" do
-      assert ConnectionResolver.tcp_liveness_opts([user_timeout: 60_000], @linux) == [
-               {:raw, @ipproto_tcp, @tcp_user_timeout, <<60_000::native-32>>}
-             ]
-    end
-
-    test "keepalive idle and interval are converted to seconds, clamped to a minimum of 1" do
-      assert ConnectionResolver.tcp_liveness_opts([keepalive_idle: 500], @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepidle, <<1::native-32>>}
-             ]
-
-      assert ConnectionResolver.tcp_liveness_opts([keepalive_interval: 1_500], @linux) == [
-               {:keepalive, true},
-               {:raw, @ipproto_tcp, @tcp_keepintvl, <<1::native-32>>}
-             ]
-    end
-
-    test "non-Linux platforms get the portable keepalive flag but no raw options" do
-      config = [
-        keepalive_idle: 30_000,
-        keepalive_interval: 5_000,
-        keepalive_count: 3,
-        user_timeout: 60_000
-      ]
-
-      for os_type <- [@darwin, {:win32, :nt}] do
-        assert ConnectionResolver.tcp_liveness_opts(config, os_type) == [{:keepalive, true}]
-      end
-    end
-
-    test "user timeout alone on non-Linux emits no options at all" do
-      assert ConnectionResolver.tcp_liveness_opts([user_timeout: 60_000], @darwin) == []
+  # Stands in for Postgrex.SimpleConnection: reports the socket options the
+  # resolver would pass to the real connection, then fails so the resolver
+  # returns without connecting anywhere.
+  defmodule CapturingConnection do
+    def start_link(_handler, _args, conn_opts, test_pid) do
+      send(test_pid, {:socket_options, Keyword.fetch!(conn_opts, :socket_options)})
+      {:error, %DBConnection.ConnectionError{message: "captured", severity: :info}}
     end
   end
 
-  # The raw option numbers and value encoding are hand-copied from the Linux
-  # kernel headers, so unit tests alone can't catch a wrong constant, byte
-  # width, or unit. These tests apply the generated options to a real loopback
-  # socket and read them back from the kernel.
-  describe "kernel read-back: portable options" do
-    test "SO_KEEPALIVE is enabled on a connected socket on any platform" do
-      opts = ConnectionResolver.tcp_liveness_opts([keepalive_idle: 33_000], :os.type())
+  defp resolved_socket_options(ctx, tcp_opts) do
+    start_supervised!(
+      {ConnectionResolver,
+       stack_id: ctx.stack_id,
+       tcp_opts: tcp_opts,
+       connection_mod: {CapturingConnection, :start_link, [self()]}}
+    )
 
-      assert {:ok, [keepalive: true]} = :inet.getopts(connect_loopback(opts), [:keepalive])
-    end
-  end
+    conn_opts = [
+      hostname: "localhost",
+      port: 5432,
+      database: "db",
+      username: "user",
+      password: fn -> "pass" end,
+      sslmode: :disable
+    ]
 
-  describe "kernel read-back: raw options" do
-    if :os.type() != {:unix, :linux} do
-      @describetag skip: "raw TCP socket options are only applied on Linux"
-    end
-
-    test "the kernel stores the configured raw option values" do
-      config = [
-        keepalive_idle: 33_000,
-        keepalive_interval: 7_000,
-        keepalive_count: 5,
-        user_timeout: 45_678
-      ]
-
-      socket = connect_loopback(ConnectionResolver.tcp_liveness_opts(config, :os.type()))
-
-      assert {:ok,
-              [
-                {:raw, @ipproto_tcp, @tcp_keepidle, <<33::native-32>>},
-                {:raw, @ipproto_tcp, @tcp_keepintvl, <<7::native-32>>},
-                {:raw, @ipproto_tcp, @tcp_keepcnt, <<5::native-32>>},
-                {:raw, @ipproto_tcp, @tcp_user_timeout, <<45_678::native-32>>}
-              ]} =
-               :inet.getopts(socket, [
-                 {:raw, @ipproto_tcp, @tcp_keepidle, 4},
-                 {:raw, @ipproto_tcp, @tcp_keepintvl, 4},
-                 {:raw, @ipproto_tcp, @tcp_keepcnt, 4},
-                 {:raw, @ipproto_tcp, @tcp_user_timeout, 4}
-               ])
-    end
+    assert {:error, _} = ConnectionResolver.validate(ctx.stack_id, conn_opts)
+    assert_receive {:socket_options, socket_options}
+    socket_options
   end
 
   # Opens a loopback connection with the given socket options and returns the
   # client-side socket, mirroring how Postgrex passes :socket_options to
-  # :gen_tcp.connect. Sockets are closed automatically when the test process
-  # exits.
+  # :gen_tcp.connect/3.
   defp connect_loopback(socket_options) do
     {:ok, listen} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
     {:ok, port} = :inet.port(listen)
-
-    {:ok, socket} =
-      :gen_tcp.connect({127, 0, 0, 1}, port, socket_options ++ [active: false])
-
+    {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, socket_options ++ [active: false])
     socket
+  end
+
+  defp kernel_values(socket) do
+    {:ok, values} = :inet.getopts(socket, [:keepalive | @raw_opts])
+    values
+  end
+
+  test "configured values are applied to the socket", ctx do
+    socket_options =
+      resolved_socket_options(ctx,
+        keepalive_idle: 33_000,
+        keepalive_interval: 7_000,
+        keepalive_count: 5,
+        user_timeout: 45_678
+      )
+
+    assert [
+             {:keepalive, true},
+             {:raw, @ipproto_tcp, @tcp_keepidle, <<33::native-32>>},
+             {:raw, @ipproto_tcp, @tcp_keepintvl, <<7::native-32>>},
+             {:raw, @ipproto_tcp, @tcp_keepcnt, <<5::native-32>>},
+             {:raw, @ipproto_tcp, @tcp_user_timeout, <<45_678::native-32>>}
+           ] = socket_options |> connect_loopback() |> kernel_values()
+  end
+
+  test "unset options leave the OS defaults in place", ctx do
+    socket_options = resolved_socket_options(ctx, [])
+    assert socket_options == []
+
+    # Compare against a socket opened with no options at all rather than
+    # against hard-coded numbers: the defaults come from the host's sysctls.
+    assert socket_options |> connect_loopback() |> kernel_values() ==
+             [] |> connect_loopback() |> kernel_values()
+  end
+
+  test "setting a single keepalive option enables keepalive and leaves the rest at defaults",
+       ctx do
+    [{:keepalive, false} | defaults] = [] |> connect_loopback() |> kernel_values()
+
+    [{:keepalive, true} | values] =
+      resolved_socket_options(ctx, keepalive_count: 2) |> connect_loopback() |> kernel_values()
+
+    expected =
+      List.keyreplace(
+        defaults,
+        @tcp_keepcnt,
+        2,
+        {:raw, @ipproto_tcp, @tcp_keepcnt, <<2::native-32>>}
+      )
+
+    assert values == expected
   end
 end
