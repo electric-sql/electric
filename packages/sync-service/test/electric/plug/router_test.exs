@@ -1793,6 +1793,28 @@ defmodule Electric.Plug.RouterTest do
       assert allowed_methods == MapSet.new(["GET", "POST", "HEAD", "OPTIONS", "DELETE"])
     end
 
+    test "OPTIONS on a percent-encoded shape path still receives shape methods", %{opts: opts} do
+      # `%73` decodes to `s`, so `match/2` dispatches this to the shape handler.
+      # CORS headers must follow the route the router resolved (plug_route), not
+      # the never-decoded path_info — otherwise this falls back to the default
+      # GET/HEAD method list.
+      conn =
+        conn("OPTIONS", "/v1/%73hape?table=items")
+        |> Router.call(opts)
+
+      assert %{status: 204} = conn
+
+      allowed_methods =
+        conn
+        |> Plug.Conn.get_resp_header("access-control-allow-methods")
+        |> List.first("")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> MapSet.new()
+
+      assert allowed_methods == MapSet.new(["GET", "POST", "HEAD", "OPTIONS", "DELETE"])
+    end
+
     @tag slow: true
     test "GET with a concurrent transaction doesn't crash irrecoverably", %{
       opts: opts,

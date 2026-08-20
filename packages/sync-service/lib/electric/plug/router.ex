@@ -89,7 +89,12 @@ defmodule Electric.Plug.Router do
   # For unmatched routes, just pass through
   def authenticate(conn, _opts), do: conn
 
-  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
+  # Match the resolved route rather than the never-decoded `path_info`, for the
+  # same reason as `authenticate/2` above: `path_info` still holds the raw,
+  # percent-encoded segments at this point, so a request like "/v1/%73hape"
+  # would route to the shape handler yet miss this clause and get the default
+  # CORS method list.
+  def put_cors_headers(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "POST", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),
