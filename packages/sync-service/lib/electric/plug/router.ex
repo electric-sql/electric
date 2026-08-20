@@ -55,7 +55,11 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+  # `conn.private.plug_route` is set by `plug :match` before this plug runs, turning e.g.
+  # "/v1/shape/", "/v1//shape", "/v1/%73hape" into the same normalized path.
+  # Matching `request_path` or `path_info` (which is never decoded) would leave those variants
+  # as an authentication bypass.
+  def authenticate(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts) do
     api_secret = conn.assigns.config[:secret]
 
     if is_nil(api_secret) do
@@ -81,7 +85,9 @@ defmodule Electric.Plug.Router do
   # For unmatched routes, just pass through
   def authenticate(conn, _opts), do: conn
 
-  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
+  # Match the resolved route rather than the never-decoded `path_info`, for the
+  # same reason as `authenticate/2` above.
+  def put_cors_headers(%Plug.Conn{private: %{plug_route: {"/v1/shape", _}}} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "POST", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),

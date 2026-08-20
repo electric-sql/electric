@@ -98,6 +98,30 @@ defmodule Electric.Plug.RouterTest do
              ] = response
     end
 
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "GET on path-normalization variants still routes to the shape handler", %{opts: opts} do
+      # In insecure mode (no secret) these variants must still be dispatched to
+      # the shape handler and served — gating auth on `plug_route` must not
+      # over-block or break routing for paths that normalize to "/v1/shape".
+      for path <- ["/v1/shape/", "/v1//shape", "/v1/shape//", "/v1/%73hape"] do
+        conn =
+          conn("GET", path <> "?table=items&offset=-1")
+          |> Router.call(opts)
+
+        assert %{status: 200} = conn, "expected 200 (routed to shape handler) for GET #{path}"
+
+        assert [
+                 %{
+                   "headers" => %{"operation" => "insert"},
+                   "value" => %{"value" => "test value 1"}
+                 },
+                 %{"headers" => %{"control" => "snapshot-end"}}
+               ] = Jason.decode!(conn.resp_body)
+      end
+    end
+
     test "GET returns an error when table is not found", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape?table=nonexistent&offset=-1")
@@ -1778,6 +1802,28 @@ defmodule Electric.Plug.RouterTest do
     test "OPTIONS receives supported methods", %{opts: opts} do
       conn =
         conn("OPTIONS", "/v1/shape?table=items")
+        |> Router.call(opts)
+
+      assert %{status: 204} = conn
+
+      allowed_methods =
+        conn
+        |> Plug.Conn.get_resp_header("access-control-allow-methods")
+        |> List.first("")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> MapSet.new()
+
+      assert allowed_methods == MapSet.new(["GET", "POST", "HEAD", "OPTIONS", "DELETE"])
+    end
+
+    test "OPTIONS on a percent-encoded shape path still receives shape methods", %{opts: opts} do
+      # `%73` decodes to `s`, so `match/2` dispatches this to the shape handler.
+      # CORS headers must follow the route the router resolved (plug_route), not
+      # the never-decoded path_info — otherwise this falls back to the default
+      # GET/HEAD method list.
+      conn =
+        conn("OPTIONS", "/v1/%73hape?table=items")
         |> Router.call(opts)
 
       assert %{status: 204} = conn
@@ -4062,6 +4108,34 @@ defmodule Electric.Plug.RouterTest do
                )
 
       # Note: Returns 400 because shape params are required, but authentication passed
+    end
+
+    test "requires secret for path-normalization variants of /v1/shape", %{
+      secret: secret,
+      api_opts: api_opts
+    } do
+      # Each of these raw request targets routes to the shape handler once
+      # `match/2` percent-decodes and empty-segment-strips the path, but its raw
+      # request_path is not exactly "/v1/shape". Authentication must gate on the
+      # resolved route, so all of them still require the secret.
+      #
+      # `//v1/shape` is provable only over the wire: Plug.Test runs paths through
+      # URI.parse, which reads a leading "//" as an authority (host=v1) and 404s
+      # regardless of the fix, so it's intentionally omitted here.
+      for path <- ["/v1/shape/", "/v1//shape", "/v1/shape//", "/v1/%73hape"] do
+        opts = Keyword.merge([secret: secret], api_opts)
+
+        assert %{status: 401} = Router.call(conn("GET", path), opts),
+               "expected 401 for GET #{path}"
+
+        assert %{status: 401} = Router.call(conn("DELETE", path), opts),
+               "expected 401 for DELETE #{path}"
+
+        # And the secret still grants access via the normalized path (proving we
+        # gate on the resolved route rather than rejecting these outright).
+        assert %{status: 400} = Router.call(conn("GET", path <> "?secret=#{secret}"), opts),
+               "expected 400 (authenticated) for GET #{path} with secret"
+      end
     end
   end
 
