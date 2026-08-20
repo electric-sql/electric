@@ -59,7 +59,10 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       connection_mod =
       Keyword.get(opts, :connection_mod, {Postgrex.SimpleConnection, :start_link, []})
 
-    {:ok, %{connection_mod: connection_mod, stack_id: stack_id}, {:continue, :notify_ready}}
+    tcp_opts = Keyword.get(opts, :tcp_opts, [])
+
+    {:ok, %{connection_mod: connection_mod, stack_id: stack_id, tcp_opts: tcp_opts},
+     {:continue, :notify_ready}}
   end
 
   @impl GenServer
@@ -72,7 +75,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   @impl GenServer
   def handle_call({:validate, connection}, _from, state) do
     # convert to postgrex style for return to conn.manager
-    connection = populate_connection_opts(connection)
+    connection = populate_connection_opts(connection, state.tcp_opts)
 
     result = attempt_connection({:cont, connection}, state)
 
@@ -108,7 +111,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
       {:error, error} ->
         error
-        |> mutate_based_on_error(conn_opts)
+        |> mutate_based_on_error(conn_opts, state.tcp_opts)
         |> attempt_connection(state)
     end
   end
@@ -117,8 +120,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     {:error, error}
   end
 
-  defp populate_connection_opts(conn_opts) do
-    conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
+  defp populate_connection_opts(conn_opts, tcp_opts) do
+    conn_opts |> populate_ssl_opts() |> populate_tcp_opts(tcp_opts)
   end
 
   defp populate_ssl_opts(connection_opts) do
@@ -180,7 +183,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     ]
   end
 
-  defp populate_tcp_opts(connection_opts) do
+  defp populate_tcp_opts(connection_opts, tcp_opts) do
     inet_opts =
       if connection_opts[:ipv6] do
         [:inet6]
@@ -188,17 +191,10 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
         []
       end
 
-    liveness_config = [
-      keepalive_idle: Electric.Config.get_env(:db_tcp_keepalive_idle),
-      keepalive_interval: Electric.Config.get_env(:db_tcp_keepalive_interval),
-      keepalive_count: Electric.Config.get_env(:db_tcp_keepalive_count),
-      user_timeout: Electric.Config.get_env(:db_tcp_user_timeout)
-    ]
-
     Keyword.put(
       connection_opts,
       :socket_options,
-      inet_opts ++ tcp_liveness_opts(liveness_config, :os.type())
+      inet_opts ++ tcp_liveness_opts(tcp_opts, :os.type())
     )
   end
 
@@ -249,25 +245,31 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   defp ms_to_sec(nil), do: nil
   defp ms_to_sec(ms) when is_integer(ms), do: max(div(ms, 1000), 1)
 
-  defp mutate_based_on_error(%Postgrex.Error{message: "ssl not available"} = error, conn_opts) do
+  defp mutate_based_on_error(
+         %Postgrex.Error{message: "ssl not available"} = error,
+         conn_opts,
+         _tcp_opts
+       ) do
     maybe_fallback_to_no_ssl(conn_opts, error)
   end
 
   defp mutate_based_on_error(
          %DBConnection.ConnectionError{message: "ssl connect: closed"} = error,
-         conn_opts
+         conn_opts,
+         _tcp_opts
        ) do
     maybe_fallback_to_no_ssl(conn_opts, error)
   end
 
   defp mutate_based_on_error(
          %DBConnection.ConnectionError{severity: :error} = error,
-         conn_opts
+         conn_opts,
+         tcp_opts
        ) do
-    maybe_fallback_to_ipv4(error, conn_opts)
+    maybe_fallback_to_ipv4(error, conn_opts, tcp_opts)
   end
 
-  defp mutate_based_on_error(error, _conn_opts) do
+  defp mutate_based_on_error(error, _conn_opts, _tcp_opts) do
     {:halt, error}
   end
 
@@ -291,7 +293,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
   defp maybe_fallback_to_ipv4(
          %DBConnection.ConnectionError{message: message, severity: :error} = error,
-         conn_opts
+         conn_opts,
+         tcp_opts
        ) do
     # If network is unreachable, IPv6 is not enabled on the machine
     # If domain cannot be resolved, assume there is no AAAA record for it
@@ -305,7 +308,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
         "Database connection failed to find valid IPv6 address for #{conn_opts[:hostname]} - falling back to IPv4"
       )
 
-      {:cont, conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()}
+      {:cont, conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts(tcp_opts)}
     else
       {:halt, error}
     end

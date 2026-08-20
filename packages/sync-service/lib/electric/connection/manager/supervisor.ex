@@ -20,7 +20,8 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     children = [
       {Electric.Connection.Manager, opts},
-      {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]}
+      {Electric.Connection.Manager.ConnectionResolver,
+       stack_id: opts[:stack_id], tcp_opts: Keyword.get(opts, :tcp_opts, [])}
     ]
 
     # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the

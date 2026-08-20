@@ -140,6 +140,12 @@ defmodule Electric.Application do
       ],
       pool_opts:
         get_env_lazy(opts, :pool_opts, fn -> [pool_size: get_env(opts, :db_pool_size)] end),
+      tcp_opts: [
+        keepalive_idle: get_env(opts, :db_tcp_keepalive_idle),
+        keepalive_interval: get_env(opts, :db_tcp_keepalive_interval),
+        keepalive_count: get_env(opts, :db_tcp_keepalive_count),
+        user_timeout: get_env(opts, :db_tcp_user_timeout)
+      ],
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts:
         telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
