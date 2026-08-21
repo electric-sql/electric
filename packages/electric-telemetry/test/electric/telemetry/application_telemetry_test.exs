@@ -35,6 +35,37 @@ defmodule ElectricTelemetry.ApplicationTelemetryTest do
     end
   end
 
+  describe "ets.table.* metric routing" do
+    setup do
+      {:ok, opts} =
+        ElectricTelemetry.validate_options(
+          instance_id: "test-instance",
+          version: "1.0.0",
+          reporters: [prometheus?: true, statsd_host: "localhost", otel_metrics?: true]
+        )
+
+      {:ok, {_flags, children}} = ApplicationTelemetry.init(opts)
+      %{children: children}
+    end
+
+    test "reach OTel and StatsD but are kept off the Prometheus registry", %{children: children} do
+      ets_table? = &(&1.name in [[:ets, :table, :memory], [:ets, :table, :size]])
+
+      assert Enum.any?(reporter_metrics(children, OtelMetricExporter), ets_table?)
+      assert Enum.any?(reporter_metrics(children, TelemetryMetricsStatsd), ets_table?)
+      refute Enum.any?(reporter_metrics(children, :prometheus_metrics), ets_table?)
+    end
+
+    test "the bounded ets.memory.total (by table_type) still reaches Prometheus", %{
+      children: children
+    } do
+      assert Enum.any?(
+               reporter_metrics(children, :prometheus_metrics),
+               &(&1.name == [:ets, :memory, :total])
+             )
+    end
+  end
+
   # `Supervisor.init/2` normalises child specs into maps, nesting the reporter's start args
   # (which carry `:metrics`) inside `:start`. Reporters are identified by their child spec id.
   defp reporter_metrics(children, id) do
@@ -70,6 +101,60 @@ defmodule ElectricTelemetry.ApplicationTelemetryTest do
                    used_swap: _
                  } = ApplicationTelemetry.get_system_memory_usage(%{})
       end
+    end
+  end
+
+  describe "ets_table_memory/1" do
+    test "emits a [:ets, :table] event per top table with memory/size and name/type tags" do
+      table = :ets.new(:"ApplicationTelemetryTest:ets_table_memory", [:public, :named_table])
+      for i <- 1..200, do: :ets.insert(table, {i, :binary.copy(<<0>>, 1000)})
+
+      ref = make_ref()
+      test_pid = self()
+      handler_id = {__MODULE__, :ets_table, ref}
+
+      :telemetry.attach(
+        handler_id,
+        [:ets, :table],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {ref, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      ApplicationTelemetry.ets_table_memory(%{
+        intervals_and_thresholds: %{top_ets_individual_count: 100}
+      })
+
+      events = collect_events(ref, [])
+
+      assert events != []
+
+      for {measurements, metadata} <- events do
+        assert %{memory: memory, size: size} = measurements
+        assert is_integer(memory) and memory > 0
+        assert is_integer(size) and size >= 0
+        # Tag values are left as-is (atom name, string type); every reporter
+        # stringifies tag values itself, so no to_string/1 at the call site.
+        assert %{table_name: name, table_type: type} = metadata
+        assert is_atom(name)
+        assert is_binary(type)
+      end
+
+      # Our named test table should be among the emitted tables.
+      assert Enum.any?(events, fn {_measurements, metadata} ->
+               metadata.table_name == :"ApplicationTelemetryTest:ets_table_memory"
+             end)
+    end
+  end
+
+  defp collect_events(ref, acc) do
+    receive do
+      {^ref, measurements, metadata} -> collect_events(ref, [{measurements, metadata} | acc])
+    after
+      0 -> Enum.reverse(acc)
     end
   end
 end
