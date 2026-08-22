@@ -20,7 +20,7 @@ const serve = async ({ request }: { request: Request }) => {
   )
   originUrl.searchParams.set(`params[1]`, session.user.id)
 
-  return proxyElectricRequest(originUrl)
+  return proxyElectricRequest(originUrl, request.signal)
 }
 
 export const Route = createFileRoute(`/api/projects`)({
