@@ -42,10 +42,16 @@ export function prepareElectricUrl(requestUrl: string): URL {
 /**
  * Proxies a request to Electric SQL and returns the response
  * @param originUrl - The prepared Electric SQL URL
+ * @param signal - The incoming request's abort signal. Forwarding it means a client disconnect
+ *   also cancels the upstream request, instead of leaving a `live=true` long-poll holding a
+ *   connection to Electric until it times out.
  * @returns The proxied response
  */
-export async function proxyElectricRequest(originUrl: URL): Promise<Response> {
-  const response = await fetch(originUrl)
+export async function proxyElectricRequest(
+  originUrl: URL,
+  signal?: AbortSignal
+): Promise<Response> {
+  const response = await fetch(originUrl, { signal })
   const headers = new Headers(response.headers)
   headers.delete(`content-encoding`)
   headers.delete(`content-length`)

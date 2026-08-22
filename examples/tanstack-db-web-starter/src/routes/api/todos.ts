@@ -17,7 +17,7 @@ const serve = async ({ request }: { request: Request }) => {
   originUrl.searchParams.set(`where`, `$1 = ANY(user_ids)`)
   originUrl.searchParams.set(`params[1]`, session.user.id)
 
-  return proxyElectricRequest(originUrl)
+  return proxyElectricRequest(originUrl, request.signal)
 }
 
 export const Route = createFileRoute(`/api/todos`)({
