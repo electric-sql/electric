@@ -378,9 +378,13 @@ defmodule Electric.ShapeCache do
     # fetch_handle_by_shape_critical is a slower but guaranteed consistent
     # shape lookup
     with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape_critical(stack_id, shape),
-         {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
+         {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle),
+         :ok <- ensure_inner_consumer_running(shape_handle, opts) do
       {:ok, {shape_handle, offset}}
     else
+      {:error, _reason} = error ->
+        error
+
       :error ->
         with {:ok, shape_handles} <- safe_maybe_create_inner_shapes(shape, opts) do
           shape = %{shape | shape_dependencies_handles: shape_handles}
@@ -402,6 +406,43 @@ defmodule Electric.ShapeCache do
         end
     end
   end
+
+  # An existing inner (subquery dependency) shape may have no running consumer: a
+  # dependency whose parent was removed survives `ShapeStatus.prune_subquery_shapes/1`
+  # on restart as a plain shape, and consumers for restored shapes only start lazily
+  # on transaction routing. `start_shape/3` for the parent assumes its dependencies'
+  # consumers are running (the materializer it starts for each dependency subscribes
+  # to that dependency's consumer), so start any missing one here, before the parent
+  # is started. Going through `restore_shape_and_dependencies/3` with the inner `opts`
+  # keeps the `is_subquery_shape?` flag and covers nested dependencies.
+  defp ensure_inner_consumer_running(
+         shape_handle,
+         %{is_subquery_shape?: true, stack_id: stack_id} = opts
+       ) do
+    if is_nil(Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) do
+      # The shape in hand was parsed from the parent's subquery, so its
+      # `shape_dependencies_handles` aren't filled in. Restore from the persisted
+      # shape, as the transaction-routing restore path does.
+      case ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle) do
+        {:ok, shape} ->
+          with {:ok, _pid} <-
+                 restore_shape_and_dependencies(
+                   shape_handle,
+                   shape,
+                   Map.put(opts, :action, :restore)
+                 ) do
+            :ok
+          end
+
+        :error ->
+          {:error, :no_shape}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp ensure_inner_consumer_running(_shape_handle, _opts), do: :ok
 
   defp safe_maybe_create_inner_shapes(%Shape{shape_dependencies: []}, _opts) do
     {:ok, []}

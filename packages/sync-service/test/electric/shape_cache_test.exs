@@ -1084,9 +1084,10 @@ defmodule Electric.ShapeCacheTest do
       # as a plain shape after its parent was removed (`prune_subquery_shapes/1`
       # only matches dependencies through a surviving parent), with consumers
       # only started lazily on transaction routing. A new parent then resolves
-      # its subquery to this handle, and its dependency materializer must start
-      # the consumer rather than fail and invalidate the parent — which would
-      # repeat on every retry, since the dependency stays registered.
+      # its subquery to this handle, and the ShapeCache must start the missing
+      # consumer before starting the parent — otherwise the parent's materializer
+      # finds no consumer, the parent is invalidated, and that repeats on every
+      # retry, since the dependency stays registered.
       Support.TestUtils.patch_snapshotter(fn parent,
                                              shape_handle,
                                              _shape,
@@ -1139,8 +1140,8 @@ defmodule Electric.ShapeCacheTest do
       assert ShapeStatus.snapshot_started?(ctx.stack_id, dependency_handle)
 
       # A new request for the parent shape resolves the subquery to the same
-      # dependency handle. Its materializer must start the missing consumer,
-      # letting the parent initialize and the request succeed.
+      # dependency handle. The missing consumer must be started, letting the
+      # parent initialize and the request succeed.
       {second_parent_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
@@ -1155,6 +1156,11 @@ defmodule Electric.ShapeCacheTest do
 
       dependency_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, dependency_handle)
       assert is_pid(dependency_pid) and Process.alive?(dependency_pid)
+
+      # The restarted consumer must be initialized as a subquery (inner) shape, i.e.
+      # buffer whole transactions rather than stream fragments, like any other
+      # dependency consumer.
+      assert %{write_unit: :txn} = :sys.get_state(dependency_pid)
     end
 
     test "should wait for consumer to come up", ctx do
