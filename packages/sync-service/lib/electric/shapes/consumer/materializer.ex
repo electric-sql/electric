@@ -153,18 +153,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
     shape_storage = Storage.for_shape(shape_handle, stack_storage)
 
     try do
-      case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
-        :started ->
-          {:ok, subscribed_offset} =
-            Consumer.subscribe_materializer(stack_id, shape_handle, self())
+      with {:ok, _consumer_pid} <- ensure_consumer_running(stack_id, shape_handle),
+           :started <- Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
+        {:ok, subscribed_offset} =
+          Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
-          Process.monitor(Consumer.whereis(stack_id, shape_handle),
-            tag: {:consumer_down, state.shape_handle}
-          )
+        Process.monitor(Consumer.whereis(stack_id, shape_handle),
+          tag: {:consumer_down, state.shape_handle}
+        )
 
-          {:noreply, %{state | subscribed_offset: subscribed_offset},
-           {:continue, {:read_stream, shape_storage}}}
-
+        {:noreply, %{state | subscribed_offset: subscribed_offset},
+         {:continue, {:read_stream, shape_storage}}}
+      else
         {:error, _reason} ->
           {:stop, :shutdown, state}
       end
@@ -173,6 +173,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
       :exit, reason ->
         Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
         {:stop, :shutdown, state}
+    end
+  end
+
+  # A registered shape can have no running consumer: consumers for restored
+  # shapes start lazily on their first transaction, and a dependency shape
+  # orphaned by its parent's removal is restored as a plain shape on restart.
+  # Start the consumer on demand — the same mechanism the transaction routing
+  # path uses — instead of assuming one is running.
+  defp ensure_consumer_running(stack_id, shape_handle) do
+    case Consumer.whereis(stack_id, shape_handle) do
+      pid when is_pid(pid) -> {:ok, pid}
+      nil -> Electric.ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
     end
   end
 
