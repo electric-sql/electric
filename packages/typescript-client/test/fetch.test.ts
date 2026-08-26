@@ -16,7 +16,11 @@ import {
   createFetchWithConsumedMessages,
   parseRetryAfterHeader,
 } from '../src/fetch'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
+import {
+  CHUNK_LAST_OFFSET_HEADER,
+  SHAPE_HANDLE_HEADER,
+  SNAPSHOT_HEADER,
+} from '../src/constants'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -390,6 +394,29 @@ describe(`createFetchWithChunkBuffer`, () => {
       nextUrl,
       expect.objectContaining({ method: `POST` })
     )
+  })
+
+  it(`should not prefetch a snapshot (subset) GET response`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const snapshotUrl = `https://example.com/v1/shape?table=foo&subset__limit=50`
+    const snapshotResponse = new Response(`[]`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SNAPSHOT_HEADER]: `true`,
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce(snapshotResponse)
+
+    const result = await fetchWrapper(snapshotUrl)
+    await sleep()
+
+    expect(result).toBe(snapshotResponse)
+    // Snapshot responses must not trigger a speculative prefetch of the
+    // same subset filters — the client only ever issues one such request.
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
   it(`should not prefetch for non-GET requests`, async () => {
