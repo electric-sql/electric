@@ -51,12 +51,12 @@ defmodule Electric.Postgres.SnapshotQuery do
       span_attrs,
       stack_id,
       fn ->
-        OpenTelemetry.start_interval(:"shape_snapshot.checkout_wait.duration_µs")
+        OpenTelemetry.start_interval(:"shape_snapshot.checkout_wait.duration_us")
 
         Postgrex.transaction(
           pool,
           fn conn ->
-            OpenTelemetry.start_interval(:"shape_snapshot.setup.duration_µs")
+            OpenTelemetry.start_interval(:"shape_snapshot.setup.duration_us")
 
             ctx = %{
               conn: conn,
@@ -79,7 +79,7 @@ defmodule Electric.Postgres.SnapshotQuery do
               span_name: "shape_snapshot.set_display_settings"
             )
 
-            OpenTelemetry.start_interval(:"shape_snapshot.query.duration_µs")
+            OpenTelemetry.start_interval(:"shape_snapshot.query.duration_us")
 
             result =
               OpenTelemetry.with_child_span(
@@ -90,7 +90,7 @@ defmodule Electric.Postgres.SnapshotQuery do
               )
 
             OpenTelemetry.stop_and_save_intervals(
-              total_attribute: :"shape_snapshot.total.duration_µs"
+              total_attribute: :"shape_snapshot.total.duration_us"
             )
 
             result

@@ -302,16 +302,16 @@ defmodule Electric.Telemetry.OpenTelemetry do
   e.g.
 
   ```elixir
-  OpenTelemetry.start_interval(:quick_sleep.duration_µs)
+  OpenTelemetry.start_interval(:quick_sleep.duration_us)
   Process.sleep(1)
-  OpenTelemetry.start_interval(:longer_sleep.duration_µs)
+  OpenTelemetry.start_interval(:longer_sleep.duration_us)
   Process.sleep(2)
-  OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_µs")
+  OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_us")
   ```
   will add the following attributes to the current span:
-    quick_sleep.duration_µs: 1000
-    longer_sleep.duration_µs: 2000
-    total_sleep_µs: 3000
+    quick_sleep.duration_us: 1000
+    longer_sleep.duration_us: 2000
+    total_sleep_us: 3000
   """
   @spec start_interval(atom()) :: :ok
   def start_interval(interval_name) when is_atom(interval_name) do

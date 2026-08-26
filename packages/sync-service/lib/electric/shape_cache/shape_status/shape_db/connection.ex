@@ -204,7 +204,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
     OpenTelemetry.execute(
       [:electric, :shape_db, :pool, :checkout],
-      %{queue_time_μs: enqueued_duration_us},
+      %{queue_time_us: enqueued_duration_us},
       %{label: label, stack_id: Keyword.get(pool_state, :stack_id)}
     )
 
