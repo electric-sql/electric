@@ -342,22 +342,14 @@ defmodule Electric.ShapeCache do
     # from the broadcast.
     if not is_nil(otel_ctx), do: OpenTelemetry.set_current_context(otel_ctx)
 
-    case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
-      {:ok, shape} ->
-        {
-          :reply,
-          restore_shape_and_dependencies(shape_handle, shape, %{
-            stack_id: state.stack_id,
-            action: :restore,
-            otel_ctx: otel_ctx,
-            feature_flags: state.feature_flags
-          }),
-          state
-        }
+    opts = %{
+      stack_id: state.stack_id,
+      otel_ctx: otel_ctx,
+      feature_flags: state.feature_flags
+    }
 
-      :error ->
-        {:reply, {:error, :no_shape}, state}
-    end
+    result = try_restoring_shape_and_dependencies(state.stack_id, shape_handle, opts)
+    {:reply, result, state}
   end
 
   defp safe_maybe_create_shape(shape, opts) do
@@ -407,38 +399,21 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  # An existing inner (subquery dependency) shape may have no running consumer: a
-  # dependency whose parent was removed survives `ShapeStatus.prune_subquery_shapes/1`
-  # on restart as a plain shape, and consumers for restored shapes only start lazily
-  # on transaction routing. `start_shape/3` for the parent assumes its dependencies'
-  # consumers are running (the materializer it starts for each dependency subscribes
-  # to that dependency's consumer), so start any missing one here, before the parent
-  # is started. Going through `restore_shape_and_dependencies/3` with the inner `opts`
-  # keeps the `is_subquery_shape?` flag and covers nested dependencies.
+  # An existing inner shape may have no running consumer: a subquery dependency whose parent
+  # was removed survives `ShapeStatus.prune_subquery_shapes/1` on restart as a plain shape,
+  # and consumers for restored shapes only start lazily on transaction routing.
   defp ensure_inner_consumer_running(
          shape_handle,
          %{is_subquery_shape?: true, stack_id: stack_id} = opts
        ) do
-    if is_nil(Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)) do
-      # The shape in hand was parsed from the parent's subquery, so its
-      # `shape_dependencies_handles` aren't filled in. Restore from the persisted
-      # shape, as the transaction-routing restore path does.
-      case ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle) do
-        {:ok, shape} ->
-          with {:ok, _pid} <-
-                 restore_shape_and_dependencies(
-                   shape_handle,
-                   shape,
-                   Map.put(opts, :action, :restore)
-                 ) do
-            :ok
-          end
+    consumer_pid = Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
 
-        :error ->
-          {:error, :no_shape}
-      end
-    else
+    if consumer_pid do
       :ok
+    else
+      with {:ok, _pid} <- try_restoring_shape_and_dependencies(stack_id, shape_handle, opts) do
+        :ok
+      end
     end
   end
 
@@ -494,6 +469,16 @@ defmodule Electric.ShapeCache do
         # purge because we know the consumer isn't running
         clean_shape(shape_handle, stack_id)
         :error
+    end
+  end
+
+  defp try_restoring_shape_and_dependencies(stack_id, shape_handle, opts) do
+    case ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle) do
+      {:ok, shape} ->
+        restore_shape_and_dependencies(shape_handle, shape, Map.put(opts, :action, :restore))
+
+      :error ->
+        {:error, :no_shape}
     end
   end
 
