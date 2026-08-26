@@ -111,9 +111,9 @@ defmodule Electric.Config do
     # shape is invalidated to unpin the stack-wide flush boundary. The storage
     # contract already says writes slower than this should raise.
     flush_stall_grace_period: :timer.minutes(1),
-    # Sets max_requests for Bandit handler processes:
+    # Sets max_requests for Bandit HTTP/1 handler processes:
     # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
-    # "The maximum number of requests to serve in a single HTTP/{1,2}
+    # "The maximum number of requests to serve in a single HTTP/1
     # connection before closing the connection"
     conn_max_requests: 50,
     # Sets fullsweep_after for Bandit handler processes.
