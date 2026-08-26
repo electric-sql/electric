@@ -8,6 +8,7 @@ import {
   SHAPE_SCHEMA_HEADER,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
+  SNAPSHOT_HEADER,
   SUBSET_PARAM_LIMIT,
   SUBSET_PARAM_OFFSET,
   SUBSET_PARAM_ORDER_BY,
@@ -475,10 +476,13 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   const shapeHandle = res.headers.get(SHAPE_HANDLE_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
   const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
+  const isSnapshot = res.headers.has(SNAPSHOT_HEADER)
 
   // only prefetch if shape handle and offset for next chunk are available, and
   // response is not already up-to-date
-  if (!shapeHandle || !lastOffset || isUpToDate) return
+  // snapshot (subset) responses are one-shot and must never be prefetched:
+  // there is no "next chunk" URL for them, only a repeat of the same request
+  if (!shapeHandle || !lastOffset || isUpToDate || isSnapshot) return
 
   const nextUrl = new URL(url)
 
