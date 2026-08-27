@@ -83,7 +83,7 @@ defmodule Electric.Shapes.Consumer do
   def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
-    |> GenServer.call({:subscribe_materializer, pid})
+    |> GenServer.call({:subscribe_materializer, pid}, :infinity)
   end
 
   @spec whereis(Electric.stack_id(), Electric.shape_handle()) :: pid() | nil
