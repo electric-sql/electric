@@ -118,21 +118,18 @@ defmodule Electric.Shapes.Consumer.StateTest do
       %{state: state}
     end
 
-    test "promotes a standalone consumer to transaction writes", %{state: state} do
+    test "promotes a fragment-streaming consumer to transaction writes", %{state: state} do
+      state = %{state | write_unit: :txn_fragment}
+
       assert %{materializer_subscribed?: true, write_unit: :txn} =
                State.mark_materializer_subscribed(state)
     end
 
-    test "defers promotion until an in-progress transaction completes", %{state: state} do
-      state = %{state | pending_txn: %{}}
+    test "subscribes a transaction-buffering consumer even mid-transaction", %{state: state} do
+      state = %{state | write_unit: :txn, pending_txn: %{}}
 
-      assert %{materializer_subscribed?: true, write_unit: :txn_fragment} =
-               state = State.mark_materializer_subscribed(state)
-
-      assert %{write_unit: :txn} =
-               state
-               |> Map.put(:pending_txn, nil)
-               |> State.maybe_promote_write_unit()
+      assert %{materializer_subscribed?: true, write_unit: :txn, pending_txn: %{}} =
+               State.mark_materializer_subscribed(state)
     end
   end
 
