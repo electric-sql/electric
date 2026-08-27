@@ -103,18 +103,14 @@ defmodule Electric.Shapes.Filter do
   # application default, so that the filter and `indexed_shape?/2` callers in the same stack
   # always agree on it.
   defp max_distributed_leaves(opts) do
-    with :error <- Keyword.fetch(opts, :max_distributed_leaves) do
-      default = Electric.Config.get_env(:shape_filter_max_distributed_leaves)
+    default = Electric.Config.get_env(:shape_filter_max_distributed_leaves)
 
-      case Keyword.fetch(opts, :stack_id) do
-        {:ok, stack_id} ->
-          Electric.StackConfig.lookup(stack_id, :shape_filter_max_distributed_leaves, default)
-
-        :error ->
-          default
-      end
+    with :error <- Keyword.fetch(opts, :max_distributed_leaves),
+         {:ok, stack_id} <- Keyword.fetch(opts, :stack_id) do
+      Electric.StackConfig.lookup(stack_id, :shape_filter_max_distributed_leaves, default)
     else
       {:ok, max_leaves} -> max_leaves
+      :error -> default
     end
   end
 
