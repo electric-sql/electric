@@ -27,6 +27,11 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   require Logger
 
+  # When both sides of an `AND` are `OR` trees, distributing one over the other multiplies the
+  # number of index leaves the shape occupies. Above this many leaves the conjunction is not
+  # distributed and the shape falls back to `other_shapes` for that condition.
+  @max_distributed_leaves 1000
+
   def init(%Filter{where_cond_table: table}, condition_id) do
     :ets.insert(table, {condition_id, {MapSet.new(), %{}}})
   end
@@ -105,7 +110,23 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       {_, %{operation: _} = optimisation} ->
         %{optimisation | and_where: merge_and_where(left, optimisation.and_where)}
 
-      _ ->
+      {{:or, _, _} = or_tree, {:or, _, _}} ->
+        # Distributing over the left OR tree leaves the right OR tree as the residual of every
+        # branch, which the child condition then splits again. The number of index leaves is
+        # the product of both trees' sizes, so guard against it blowing up.
+        if leaf_count(left) * leaf_count(right) <= @max_distributed_leaves do
+          distribute_and_over_or(or_tree, right)
+        else
+          :not_optimised
+        end
+
+      {{:or, _, _} = or_tree, :not_optimised} ->
+        distribute_and_over_or(or_tree, right)
+
+      {:not_optimised, {:or, _, _} = or_tree} ->
+        distribute_and_over_or(or_tree, left)
+
+      {:not_optimised, :not_optimised} ->
         :not_optimised
     end
   end
@@ -179,17 +200,40 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   defp merge_and_where(nil, right), do: normalise_where(right)
 
   defp merge_and_where(left, right) do
-    left_eval = extract_eval(left)
-    right_eval = extract_eval(right)
+    where_expr(and_func(extract_eval(left), extract_eval(right)))
+  end
 
-    where_expr(%Func{
+  # `(a OR b) AND c` => `(a AND c) OR (b AND c)`
+  #
+  # Each resulting branch is `indexable AND residual`, so it lands in the index with `c` as the
+  # `and_where` of that branch instead of the whole conjunction being scanned linearly in
+  # `other_shapes`. `c` is evaluated only for the shapes the index selects.
+  defp distribute_and_over_or({:or, or_left, or_right}, other) do
+    {:or, where_expr(and_func(extract_eval(or_left), other)),
+     where_expr(and_func(extract_eval(or_right), other))}
+  end
+
+  # Upper bound on the number of index leaves a where clause expands to once `AND` is
+  # distributed over `OR`: `OR` adds its sides' leaves together and `AND` multiplies them.
+  defp leaf_count(%Expr{eval: eval}), do: leaf_count(eval)
+
+  defp leaf_count(%Func{name: "or", args: [left, right]}),
+    do: leaf_count(left) + leaf_count(right)
+
+  defp leaf_count(%Func{name: "and", args: [left, right]}),
+    do: leaf_count(left) * leaf_count(right)
+
+  defp leaf_count(_), do: 1
+
+  defp and_func(left_eval, right_eval) do
+    %Func{
       args: [left_eval, right_eval],
       type: :bool,
       implementation: &Casting.pg_and/2,
       name: "and",
       strict?: false,
       location: min(Map.get(left_eval, :location, 0), Map.get(right_eval, :location, 0))
-    })
+    }
   end
 
   defp normalise_where(%Expr{} = expr), do: expr

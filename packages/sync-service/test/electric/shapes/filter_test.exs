@@ -46,6 +46,12 @@ defmodule Electric.Shapes.FilterTest do
         "id = 1 AND (number = 2 OR number = 3)",
         "(id = 1 OR id = 2) AND number = 3",
         "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        "id IN (1, 2, 3) AND number > 5",
+        "number > 5 AND id IN (1, 2, 3)",
+        "id IN (1, 2, 3) AND TRUE",
+        "(id = 1 OR id = 2) AND number > 5",
+        "id IN (1, 2) AND number IN (3, 4)",
+        "id IN (1, 2) AND number > 5 AND number < 10",
         "id IN (SELECT id FROM another_table)",
         "NOT id IN (SELECT id FROM another_table)",
         "id IN (SELECT id FROM another_table) OR id = 1",
@@ -66,6 +72,29 @@ defmodule Electric.Shapes.FilterTest do
       shape = Shape.new!("t1", where: "id = 7 OR number > 5", inspector: @inspector)
 
       refute Filter.indexed_shape?(shape)
+    end
+
+    test "distributes AND over two OR trees while the branch product is within the cap" do
+      # 25 * 40 = 1000 leaf branches, right at the cap
+      where = "id IN (#{in_list(25)}) AND number IN (#{in_list(40)})"
+      shape = Shape.new!("t1", where: where, inspector: @inspector)
+
+      assert Filter.indexed_shape?(shape)
+    end
+
+    test "does not distribute AND over two OR trees when the branch product exceeds the cap" do
+      # 26 * 40 = 1040 leaf branches, just over the cap: falls back to other_shapes
+      where = "id IN (#{in_list(26)}) AND number IN (#{in_list(40)})"
+      shape = Shape.new!("t1", where: where, inspector: @inspector)
+
+      refute Filter.indexed_shape?(shape)
+    end
+
+    test "a single OR tree ANDed with a non-indexed condition is not subject to the cap" do
+      where = "id IN (#{in_list(2000)}) AND number > 5"
+      shape = Shape.new!("t1", where: where, inspector: @inspector)
+
+      assert Filter.indexed_shape?(shape)
     end
 
     test "returns false for shapes without an indexable where clause" do
@@ -529,7 +558,8 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "1", "number" => "6"}, true},
           {%{"id" => "2", "number" => "10"}, true},
           {%{"id" => "1", "number" => "3"}, false},
-          {%{"id" => "3", "number" => "6"}, false}
+          {%{"id" => "3", "number" => "6"}, false},
+          {%{"id" => "1", "number" => nil}, false}
         ]
       },
       %{
@@ -564,6 +594,41 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "1", "number" => "3"}, true},
           {%{"id" => "1", "number" => "0"}, true},
           {%{"id" => "1", "number" => "2"}, false}
+        ]
+      },
+      %{
+        where: "(id = 1 OR id = 2) AND number > 5",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "10"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
+        ]
+      },
+      %{
+        where: "id IN (1, 2) AND number IN (3, 4)",
+        records: [
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "2", "number" => "4"}, true},
+          {%{"id" => "1", "number" => "5"}, false},
+          {%{"id" => "3", "number" => "3"}, false}
+        ]
+      },
+      %{
+        where: "number = 3 AND id IN (1, 2) AND id > 1",
+        records: [
+          {%{"id" => "2", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "2", "number" => "4"}, false}
+        ]
+      },
+      %{
+        where: "id IN (1, 2) AND (number > 5 OR number < 0)",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "-1"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
         ]
       }
     ]
@@ -614,6 +679,13 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),
       Shape.new!("table", where: "id IN (4, 5)", inspector: @inspector),
       Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector),
+      Shape.new!("table", where: "(id = 1 OR id = 2) AND number > 5", inspector: @inspector),
+      Shape.new!("table", where: "id IN (1, 2) AND number IN (3, 4)", inspector: @inspector),
+      Shape.new!("table", where: "number = 3 AND id IN (1, 2) AND id > 1", inspector: @inspector),
+      Shape.new!("table",
+        where: "id IN (1, 2) AND (number > 5 OR number < 0)",
+        inspector: @inspector
+      ),
       Shape.new!("table",
         where: "id IN (SELECT id FROM another_table) OR id = 1",
         inspector: @inspector
@@ -993,6 +1065,125 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     @tag :performance
+    test "where clause in the form `field IN (consts) AND non_indexed_condition` is optimised" do
+      # Regression test for https://github.com/electric-sql/electric/issues/4742
+      max_reductions = @max_reductions * 2
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1",
+            where: "id IN (#{i}, #{i + @shape_count}) AND number > 5",
+            inspector: @inspector
+          )
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7", "number" => "6"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
+    @tag :performance
+    test "where clause in the form `non_indexed_condition AND field IN (consts)` is optimised" do
+      max_reductions = @max_reductions * 2
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1",
+            where: "number > 5 AND id IN (#{i}, #{i + @shape_count})",
+            inspector: @inspector
+          )
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7", "number" => "6"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
+    @tag :performance
+    test "`field IN (consts) AND non_indexed_condition` is optimised below an indexed equality" do
+      # All shapes share the `number = 1` node; the `IN ... AND id > 0` residual must stay
+      # indexed in the child node rather than being scanned linearly for every change.
+      max_reductions = @max_reductions * 2
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1",
+            where: "number = 1 AND id IN (#{i}, #{i + @shape_count}) AND id > 0",
+            inspector: @inspector
+          )
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7", "number" => "1"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
+    @tag :performance
+    test "where clause in the form `field IN (consts) AND another_field IN (consts)` is optimised" do
+      max_reductions = @max_reductions * 3
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1",
+            where: "id IN (#{i}, #{i + @shape_count}) AND number IN (1, 2)",
+            inspector: @inspector
+          )
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7", "number" => "2"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
+    @tag :performance
     test "removing a subquery shape is O(1) in the total number of shapes" do
       # Each shape lives on its own subquery node (distinct outer equality
       # value), so no single node ever holds more than one shape. The only thing
@@ -1063,6 +1254,8 @@ defmodule Electric.Shapes.FilterTest do
       record: record
     }
   end
+
+  defp in_list(count), do: Enum.join(1..count, ", ")
 
   describe "subquery shapes routing in filter" do
     import Support.DbSetup
