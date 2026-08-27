@@ -106,6 +106,26 @@ defmodule Electric.Shapes.FilterTest do
       refute Filter.indexed_shape?(shape, max_distributed_leaves: 5)
     end
 
+    test "a non-indexable OR next to two IN lists counts as one residual leaf, not its branches" do
+      # 2 * 2 = 4 index leaves; the `(number > 5 OR number < 0)` residual is not split
+      # and must not inflate the count to 8.
+      wheres = [
+        "id IN (1, 2) AND number IN (3, 4) AND (number > 5 OR number < 0)",
+        "id IN (1, 2) AND (number > 5 OR number < 0) AND number IN (3, 4)",
+        "(number > 5 OR number < 0) AND id IN (1, 2) AND number IN (3, 4)"
+      ]
+
+      for where <- wheres do
+        shape = Shape.new!("t1", where: where, inspector: @inspector)
+
+        assert Filter.indexed_shape?(shape, max_distributed_leaves: 4),
+               "#{where} should be indexed with a cap of 4"
+
+        refute Filter.indexed_shape?(shape, max_distributed_leaves: 3),
+               "#{where} should not be indexed with a cap of 3"
+      end
+    end
+
     test "a cap of 0 disables distribution over two OR trees but not over a single one" do
       two_trees =
         Shape.new!("t1", where: "id IN (1, 2) AND number IN (3, 4)", inspector: @inspector)

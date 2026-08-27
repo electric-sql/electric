@@ -55,7 +55,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       :not_optimised ->
         add_shape_to_other_shapes(table, condition_id, shape_id, branch_key, where_clause)
 
-      {:or, left, right} ->
+      {:or, left, right, _leaves} ->
         add_shape(filter, condition_id, shape_id, left, branch_key ++ [:left])
         add_shape(filter, condition_id, shape_id, right, branch_key ++ [:right])
 
@@ -85,10 +85,15 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     Index.add_shape(filter, condition_id, shape_id, optimisation, branch_key)
   end
 
-  # `max_distributed_leaves` caps the number of index leaves created when both sides of an
-  # `AND` are `OR` trees and one is distributed over the other (see the `"and"` clause).
-  # Above the cap the conjunction is not distributed and the shape falls back to
-  # `other_shapes` for that condition.
+  # Returns one of:
+  #   - `:not_optimised`
+  #   - `%{operation: ..., and_where: residual | nil, leaves: n}` for an indexable operation
+  #   - `{:or, left, right, leaves}` for an `OR` whose branches are all indexable
+  #
+  # `leaves` is the number of index leaves the shape occupies below this point (see `leaves/1`).
+  # `max_distributed_leaves` caps it when both sides of an `AND` are `OR` trees and one is
+  # distributed over the other (see the `"and"` clause). Above the cap the conjunction is not
+  # distributed and the shape falls back to `other_shapes` for that condition.
   @doc false
   defp optimise_where(where_clause, max_distributed_leaves)
 
@@ -97,37 +102,43 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   defp optimise_where(%Expr{eval: eval}, max_leaves), do: optimise_where(eval, max_leaves)
 
   defp optimise_where(%Func{name: "or", args: [left, right]}, max_leaves) do
-    if optimise_where(left, max_leaves) != :not_optimised and
-         optimise_where(right, max_leaves) != :not_optimised do
-      {:or, where_expr(left), where_expr(right)}
-    else
-      :not_optimised
+    with left_opt when left_opt != :not_optimised <- optimise_where(left, max_leaves),
+         right_opt when right_opt != :not_optimised <- optimise_where(right, max_leaves) do
+      {:or, where_expr(left), where_expr(right), leaves(left_opt) + leaves(right_opt)}
     end
   end
 
   defp optimise_where(%Func{name: "and", args: [left, right]}, max_leaves) do
     case {optimise_where(left, max_leaves), optimise_where(right, max_leaves)} do
-      {%{operation: _} = optimisation, _} ->
-        %{optimisation | and_where: merge_and_where(optimisation.and_where, right)}
+      {%{operation: _} = optimisation, other} ->
+        %{
+          optimisation
+          | and_where: merge_and_where(optimisation.and_where, right),
+            leaves: optimisation.leaves * leaves(other)
+        }
 
-      {_, %{operation: _} = optimisation} ->
-        %{optimisation | and_where: merge_and_where(left, optimisation.and_where)}
+      {other, %{operation: _} = optimisation} ->
+        %{
+          optimisation
+          | and_where: merge_and_where(left, optimisation.and_where),
+            leaves: leaves(other) * optimisation.leaves
+        }
 
-      {{:or, _, _} = or_tree, {:or, _, _}} ->
+      {{:or, _, _, or_leaves} = or_tree, {:or, _, _, other_leaves}} ->
         # Distributing over the left OR tree leaves the right OR tree as the residual of every
         # branch, which the child condition then splits again. The number of index leaves is
         # the product of both trees' sizes, so guard against it blowing up.
-        if leaf_count(left) * leaf_count(right) <= max_leaves do
-          distribute_and_over_or(or_tree, right)
+        if or_leaves * other_leaves <= max_leaves do
+          distribute_and_over_or(or_tree, right, other_leaves)
         else
           :not_optimised
         end
 
-      {{:or, _, _} = or_tree, :not_optimised} ->
-        distribute_and_over_or(or_tree, right)
+      {{:or, _, _, _} = or_tree, :not_optimised} ->
+        distribute_and_over_or(or_tree, right, 1)
 
-      {:not_optimised, {:or, _, _} = or_tree} ->
-        distribute_and_over_or(or_tree, left)
+      {:not_optimised, {:or, _, _, _} = or_tree} ->
+        distribute_and_over_or(or_tree, left, 1)
 
       {:not_optimised, :not_optimised} ->
         :not_optimised
@@ -141,7 +152,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          },
          _max_leaves
        ) do
-    %{operation: "=", field: field, type: type, value: value, and_where: nil}
+    %{operation: "=", field: field, type: type, value: value, and_where: nil, leaves: 1}
   end
 
   defp optimise_where(
@@ -151,7 +162,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          },
          _max_leaves
        ) do
-    %{operation: "=", field: field, type: type, value: value, and_where: nil}
+    %{operation: "=", field: field, type: type, value: value, and_where: nil, leaves: 1}
   end
 
   defp optimise_where(
@@ -162,7 +173,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          _max_leaves
        )
        when is_list(value) do
-    %{operation: "@>", field: field, type: type, value: value, and_where: nil}
+    %{operation: "@>", field: field, type: type, value: value, and_where: nil, leaves: 1}
   end
 
   defp optimise_where(
@@ -173,7 +184,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          _max_leaves
        )
        when is_list(value) do
-    %{operation: "@>", field: field, type: type, value: value, and_where: nil}
+    %{operation: "@>", field: field, type: type, value: value, and_where: nil, leaves: 1}
   end
 
   # const = ANY(array_ref) → reuse @> index with [const] as single-element array
@@ -191,7 +202,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          _max_leaves
        )
        when not is_nil(value) do
-    %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
+    %{operation: "@>", field: field, type: type, value: [value], and_where: nil, leaves: 1}
   end
 
   defp optimise_where(%Func{name: "sublink_membership_check"} = subquery, _max_leaves) do
@@ -229,22 +240,20 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   # Each resulting branch is `indexable AND residual`, so it lands in the index with `c` as the
   # `and_where` of that branch instead of the whole conjunction being scanned linearly in
   # `other_shapes`. `c` is evaluated only for the shapes the index selects.
-  defp distribute_and_over_or({:or, or_left, or_right}, other) do
+  defp distribute_and_over_or({:or, or_left, or_right, or_leaves}, other, other_leaves) do
     {:or, where_expr(and_func(extract_eval(or_left), other)),
-     where_expr(and_func(extract_eval(or_right), other))}
+     where_expr(and_func(extract_eval(or_right), other)), or_leaves * other_leaves}
   end
 
-  # Upper bound on the number of index leaves a where clause expands to once `AND` is
-  # distributed over `OR`: `OR` adds its sides' leaves together and `AND` multiplies them.
-  defp leaf_count(%Expr{eval: eval}), do: leaf_count(eval)
-
-  defp leaf_count(%Func{name: "or", args: [left, right]}),
-    do: leaf_count(left) + leaf_count(right)
-
-  defp leaf_count(%Func{name: "and", args: [left, right]}),
-    do: leaf_count(left) * leaf_count(right)
-
-  defp leaf_count(_), do: 1
+  # The number of index leaves an optimisation expands to once added to the tree: an `OR`
+  # tree is the sum of its branches, an indexed operation with a residual is the residual's
+  # count (the child condition re-optimises it), and anything not optimised is a single
+  # `other_shapes` entry. Counts are accumulated as `optimise_where/2` recurses, so a
+  # non-indexable `OR` counts as one leaf rather than as its branches and no subtree is
+  # optimised twice.
+  defp leaves(:not_optimised), do: 1
+  defp leaves(%{leaves: leaves}), do: leaves
+  defp leaves({:or, _left, _right, leaves}), do: leaves
 
   defp and_func(left_eval, right_eval) do
     %Func{
@@ -277,7 +286,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         subquery_ref: subquery_ref,
         dep_index: dep_index,
         polarity: polarity,
-        and_where: nil
+        and_where: nil,
+        leaves: 1
       }
     else
       _ -> :not_optimised
@@ -307,7 +317,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       :not_optimised ->
         remove_shape_from_other_shapes(table, condition_id, shape_id, branch_key)
 
-      {:or, left, right} ->
+      {:or, left, right, _leaves} ->
         _ = remove_shape(filter, condition_id, shape_id, left, branch_key ++ [:left])
         _ = remove_shape(filter, condition_id, shape_id, right, branch_key ++ [:right])
         condition_status(table, condition_id)
