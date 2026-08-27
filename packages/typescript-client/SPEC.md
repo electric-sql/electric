@@ -302,6 +302,13 @@ cursor advances.
 
 **Enforcement**: Dedicated test (`should preserve change messages while suppressing a cached up-to-date`).
 
+**Reachability note**: This is a state-machine invariant, not a server scenario.
+The server only sets `electric-cursor` on `live=true` responses, the client only
+sends `live=true` from LiveState, and ReplayingState is only entered from a
+fetching state — so against a conforming server the first up-to-date a replaying
+stream sees never carries a cursor and suppression does not fire. The dedicated
+test drives the branch with a synthetic cursor header on a non-live response.
+
 ## Shape notification semantics
 
 The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers

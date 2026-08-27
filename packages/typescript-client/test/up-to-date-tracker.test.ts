@@ -215,6 +215,11 @@ describe(`UpToDateTracker`, () => {
   })
 
   it(`should preserve change messages while suppressing a cached up-to-date`, async () => {
+    // Pins the ReplayingState invariant (SPEC.md C9), not a server scenario:
+    // a real server only sets `electric-cursor` on live responses, and the
+    // client is never in ReplayingState when it issues a live request. The
+    // cursor header on this non-live initial response is synthetic so that
+    // the suppression branch runs at all.
     const table = `replayed_rows`
     const shapeKey = `${shapeUrl}?table=${table}`
     const rowKey = `dashboard-version-1`
