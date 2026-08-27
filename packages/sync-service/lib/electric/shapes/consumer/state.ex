@@ -135,6 +135,26 @@ defmodule Electric.Shapes.Consumer.State do
     }
   end
 
+  @spec mark_materializer_subscribed(t()) :: t()
+  def mark_materializer_subscribed(%__MODULE__{} = state) do
+    maybe_promote_write_unit(%{state | materializer_subscribed?: true})
+  end
+
+  # A materializer needs transaction-atomic updates. If it subscribes while a fragmented
+  # transaction is in progress, keep writing fragments until that transaction completes.
+  @spec maybe_promote_write_unit(t()) :: t()
+  def maybe_promote_write_unit(
+        %__MODULE__{
+          materializer_subscribed?: true,
+          pending_txn: nil,
+          write_unit: @write_unit_txn_fragment
+        } = state
+      ) do
+    %{state | write_unit: @write_unit_txn}
+  end
+
+  def maybe_promote_write_unit(%__MODULE__{} = state), do: state
+
   @doc """
   After the storage is ready, initialize the state with info from storage and writer state.
   """

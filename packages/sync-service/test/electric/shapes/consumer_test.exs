@@ -1958,6 +1958,57 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [] == :ets.tab2list(table)
     end
 
+    test "defers write-unit promotion until the current fragmented transaction commits",
+         ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert %{pending_txn: nil, write_unit: :txn_fragment} = :sys.get_state(consumer_pid)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      begin_fragment =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(lsn, 0)
+            }
+          ],
+          has_begin?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(begin_fragment, ctx.stack_id)
+      assert %{pending_txn: %{}, write_unit: :txn_fragment} = :sys.get_state(consumer_pid)
+
+      assert {:ok, _offset} = Consumer.subscribe_materializer(ctx.stack_id, shape_handle, self())
+
+      assert %{materializer_subscribed?: true, pending_txn: %{}, write_unit: :txn_fragment} =
+               :sys.get_state(consumer_pid)
+
+      commit_fragment =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "2"},
+              log_offset: LogOffset.new(lsn, 1)
+            }
+          ],
+          has_commit?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+      assert %{pending_txn: nil, write_unit: :txn} = :sys.get_state(consumer_pid)
+    end
+
     @tag with_pure_file_storage_opts: [flush_period: 1]
     test "writes txn fragments to storage immediately but keeps txn boundaries when flushing",
          ctx do

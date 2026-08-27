@@ -1154,6 +1154,37 @@ defmodule Electric.ShapeCacheTest do
       assert %{write_unit: :txn} = :sys.get_state(dependency_pid)
     end
 
+    test "promotes a running standalone consumer when it becomes a dependency", ctx do
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        snapshot_fun.([])
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      [dependency_shape] = @shape_with_subquery.shape_dependencies
+
+      {dependency_handle, _} =
+        ShapeCache.get_or_create_shape_handle(dependency_shape, ctx.stack_id)
+
+      assert ShapeCache.await_snapshot_start(dependency_handle, ctx.stack_id) == :started
+
+      dependency_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, dependency_handle)
+      assert %{write_unit: :txn_fragment} = :sys.get_state(dependency_pid)
+
+      {parent_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      assert ShapeCache.await_snapshot_start(parent_handle, ctx.stack_id) == :started
+
+      {:ok, parent_shape} = ShapeCache.fetch_shape_by_handle(parent_handle, ctx.stack_id)
+      assert parent_shape.shape_dependencies_handles == [dependency_handle]
+      assert Electric.Shapes.Consumer.whereis(ctx.stack_id, dependency_handle) == dependency_pid
+      assert %{write_unit: :txn} = :sys.get_state(dependency_pid)
+    end
+
     test "should wait for consumer to come up", ctx do
       Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})

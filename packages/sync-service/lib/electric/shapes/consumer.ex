@@ -220,7 +220,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:subscribe_materializer, pid}, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
     Process.monitor(pid, tag: :materializer_down)
-    state = %{state | materializer_subscribed?: true}
+    state = State.mark_materializer_subscribed(state)
     {:reply, {:ok, state.latest_offset}, state, state.hibernate_after}
   end
 
@@ -757,7 +757,7 @@ defmodule Electric.Shapes.Consumer do
   defp skip_txn_fragment(state, %TransactionFragment{} = txn_fragment) do
     %{state | pending_txn: nil}
     |> consider_flushed(txn_fragment.last_log_offset)
-    |> clear_pending_flush_offset()
+    |> finish_pending_txn()
   end
 
   # This function does similar things to do_handle_txn/2 but with the following simplifications:
@@ -916,7 +916,7 @@ defmodule Electric.Shapes.Consumer do
       %{state | pending_txn: nil}
       |> consider_flushed(txn_fragment.last_log_offset)
     end
-    |> clear_pending_flush_offset()
+    |> finish_pending_txn()
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
@@ -1198,13 +1198,20 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # After a pending transaction completes and txn_offset_mapping is populated,
-  # process the deferred flushed offset (if any).
+  # process the deferred flushed offset (if any), then promote a consumer that
+  # gained a materializer subscriber while the transaction was in progress.
   #
   # Even if the most recent transaction is skipped or no changes from it end up satisfying the
   # shape's `where` condition, Storage may have signaled a flush offset from the previous transaction
   # while we were still processing fragments of the current one. Therefore this function must
-  # be called any time `state.pending_txn` is reset to nil in a multi-fragment transaction
-  # processing setting.
+  # `finish_pending_txn/1` must be called any time `state.pending_txn` is reset to nil in a
+  # multi-fragment transaction processing setting.
+  defp finish_pending_txn(state) do
+    state
+    |> clear_pending_flush_offset()
+    |> State.maybe_promote_write_unit()
+  end
+
   defp clear_pending_flush_offset(%{pending_flush_offset: nil} = state), do: state
 
   defp clear_pending_flush_offset(%{pending_flush_offset: flushed_offset} = state) do
