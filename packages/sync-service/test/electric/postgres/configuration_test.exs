@@ -40,6 +40,89 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
     end
 
+    @tag connection_opt_overrides: [pool_size: 2]
+    test "adds table to publication only once in-flight writers have finished", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+      test_pid = self()
+
+      # A transaction that wrote to the table before it was added to the publication. Logical
+      # decoding evaluates publication membership per change, so this write is never emitted by
+      # the replication stream. It can only reach a shape via the initial snapshot, which is why
+      # the addition must not commit until the writer has finished: a snapshot taken after that
+      # point sees the write, while any later write is emitted by the stream.
+      writer =
+        Task.async(fn ->
+          Postgrex.transaction(conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "INSERT INTO items (id, value) VALUES (gen_random_uuid(), 'pre-publication')",
+              []
+            )
+
+            send(test_pid, :written)
+            receive(do: (:commit -> :ok))
+          end)
+        end)
+
+      assert_receive :written
+
+      adder =
+        Task.async(fn ->
+          Configuration.add_table_to_publication(conn, publication, oid_rel, :infinity)
+        end)
+
+      adder_ref = adder.ref
+      refute_receive {^adder_ref, _}, 500
+
+      send(writer.pid, :commit)
+      assert {:ok, :ok} = Task.await(writer)
+      assert :ok = Task.await(adder)
+
+      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
+    end
+
+    @tag connection_opt_overrides: [pool_size: 2, parameters: [lock_timeout: "100"]]
+    test "fails to add table to publication if timing out on an in-flight writer", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+      test_pid = self()
+
+      # A server-side `lock_timeout` is used rather than the client-side transaction timeout, as
+      # the latter tears the connection down at the deadline and races with the server's own
+      # cancellation of the statement, making the resulting error type non-deterministic.
+      writer =
+        Task.async(fn ->
+          Postgrex.transaction(conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "INSERT INTO items (id, value) VALUES (gen_random_uuid(), 'pre-publication')",
+              []
+            )
+
+            send(test_pid, :written)
+            receive(do: (:commit -> :ok))
+          end)
+        end)
+
+      assert_receive :written
+
+      assert {:error, %Electric.DbConfigurationError{type: :table_lock_timeout}} =
+               Configuration.add_table_to_publication(conn, publication, oid_rel)
+
+      # the addition must have been rolled back along with the failed barrier
+      assert list_tables_in_publication(conn, publication) == []
+
+      send(writer.pid, :commit)
+      assert {:ok, :ok} = Task.await(writer)
+    end
+
     test "sets REPLICA IDENTITY on the table", %{pool: conn} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       oid = get_table_oid(conn, {"public", "items"})

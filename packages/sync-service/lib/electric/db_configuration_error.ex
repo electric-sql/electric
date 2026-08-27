@@ -28,6 +28,14 @@ defmodule Electric.DbConfigurationError do
     }
   end
 
+  def table_lock_timeout(table) do
+    %Electric.DbConfigurationError{
+      type: :table_lock_timeout,
+      message:
+        "Timed out waiting for in-flight transactions writing to #{table} to finish before adding it to the publication"
+    }
+  end
+
   def publication_not_owned(pub_name) do
     %Electric.DbConfigurationError{
       type: :publication_not_owned,
