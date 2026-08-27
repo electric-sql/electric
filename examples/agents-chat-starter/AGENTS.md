@@ -76,7 +76,7 @@ Without the top-level `key`, the StreamDB won't materialize the event into the c
 Entities need an `initialMessage` when spawned — the runtime skips the handler if there's no fresh input on first wake:
 
 ```typescript
-await fetch(`${AGENTS_URL}/${type}/${id}`, {
+await fetch(`${AGENTS_URL}/_electric/entities/${type}/${id}`, {
   method: 'PUT',
   body: JSON.stringify({
     args: { chatroomId: roomId },
@@ -84,6 +84,8 @@ await fetch(`${AGENTS_URL}/${type}/${id}`, {
   }),
 })
 ```
+
+Spawn through `/_electric/entities/:type/:id`. A bare `PUT /:type/:id` falls through to the durable-streams proxy: it returns `201` and creates a raw stream, but no entity is registered and the agent never wakes.
 
 ### Preventing Agent Loops
 
