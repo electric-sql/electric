@@ -134,6 +134,11 @@ defmodule Electric.Config do
     # Heap-size threshold (in BYTES) above which a consumer runs :erlang.garbage_collect()
     # after processing a transaction fragment.
     consumer_gc_heap_threshold: nil,
+    # Upper bound on the number of index leaves the shape filter will create for a single
+    # shape by distributing `AND` over two `OR`/`IN` trees (e.g. `a IN (...) AND b IN (...)`).
+    # Above this many leaves the shape is routed via linear evaluation instead. Lower it for
+    # workloads where cheap shape creation/removal matters more than routing throughput.
+    shape_filter_max_distributed_leaves: 1000,
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
     feature_flags: [],

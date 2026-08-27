@@ -34,7 +34,8 @@ defmodule Electric.Shapes.Filter do
     :eq_index_table,
     :incl_index_table,
     :subquery_index,
-    :counters_table
+    :counters_table,
+    :max_distributed_leaves
   ]
 
   @type t :: %Filter{}
@@ -63,7 +64,8 @@ defmodule Electric.Shapes.Filter do
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
       subquery_index: SubqueryIndex.new(Keyword.take(opts, [:stack_id])),
-      counters_table: counters_table
+      counters_table: counters_table,
+      max_distributed_leaves: max_distributed_leaves(opts)
     }
   end
 
@@ -91,9 +93,29 @@ defmodule Electric.Shapes.Filter do
   Returns `true` when ShapeLogCollector can route the shape through any of its
   indexes instead of relying exclusively on `other_shapes` scans.
   """
-  @spec indexed_shape?(Shape.t()) :: boolean()
-  def indexed_shape?(%Shape{} = shape) do
-    WhereCondition.indexed_where?(shape.where)
+  @spec indexed_shape?(Shape.t(), keyword()) :: boolean()
+  def indexed_shape?(%Shape{} = shape, opts \\ []) do
+    WhereCondition.indexed_where?(shape.where, max_distributed_leaves(opts))
+  end
+
+  # The cap on index leaves created by distributing `AND` over two `OR` trees. Resolved from
+  # an explicit option, then the stack config (a tweak seeded at stack start), then the
+  # application default, so that the filter and `indexed_shape?/2` callers in the same stack
+  # always agree on it.
+  defp max_distributed_leaves(opts) do
+    with :error <- Keyword.fetch(opts, :max_distributed_leaves) do
+      default = Electric.Config.get_env(:shape_filter_max_distributed_leaves)
+
+      case Keyword.fetch(opts, :stack_id) do
+        {:ok, stack_id} ->
+          Electric.StackConfig.lookup(stack_id, :shape_filter_max_distributed_leaves, default)
+
+        :error ->
+          default
+      end
+    else
+      {:ok, max_leaves} -> max_leaves
+    end
   end
 
   @doc """

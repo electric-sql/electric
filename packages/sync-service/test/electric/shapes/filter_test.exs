@@ -97,6 +97,86 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.indexed_shape?(shape)
     end
 
+    test "the cap can be overridden with the :max_distributed_leaves option" do
+      # 2 * 3 = 6 leaves
+      shape =
+        Shape.new!("t1", where: "id IN (1, 2) AND number IN (3, 4, 5)", inspector: @inspector)
+
+      assert Filter.indexed_shape?(shape, max_distributed_leaves: 6)
+      refute Filter.indexed_shape?(shape, max_distributed_leaves: 5)
+    end
+
+    test "a cap of 0 disables distribution over two OR trees but not over a single one" do
+      two_trees =
+        Shape.new!("t1", where: "id IN (1, 2) AND number IN (3, 4)", inspector: @inspector)
+
+      one_tree = Shape.new!("t1", where: "id IN (1, 2) AND number > 5", inspector: @inspector)
+
+      refute Filter.indexed_shape?(two_trees, max_distributed_leaves: 0)
+      assert Filter.indexed_shape?(one_tree, max_distributed_leaves: 0)
+    end
+  end
+
+  describe "max_distributed_leaves configuration" do
+    import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+
+    setup :with_stack_id_from_test
+
+    # 2 * 3 = 6 leaves: indexed under the default cap, not under a cap of 5
+    @six_leaf_where "id IN (1, 2) AND number IN (3, 4, 5)"
+
+    test "Filter.new/1 honours the :max_distributed_leaves option" do
+      shape = Shape.new!("t1", where: @six_leaf_where, inspector: @inspector)
+
+      assert [] == unindexed_where_clauses(Filter.new() |> Filter.add_shape("s", shape))
+
+      assert [] ==
+               unindexed_where_clauses(
+                 Filter.new(max_distributed_leaves: 6)
+                 |> Filter.add_shape("s", shape)
+               )
+
+      assert [_] =
+               unindexed_where_clauses(
+                 Filter.new(max_distributed_leaves: 5)
+                 |> Filter.add_shape("s", shape)
+               )
+    end
+
+    @tag stack_config_seed: [shape_filter_max_distributed_leaves: 5]
+    test "the cap is read from the stack config when a stack_id is given", %{stack_id: stack_id} do
+      shape = Shape.new!("t1", where: @six_leaf_where, inspector: @inspector)
+
+      assert [_] =
+               unindexed_where_clauses(
+                 Filter.new(stack_id: stack_id)
+                 |> Filter.add_shape("s", shape)
+               )
+
+      refute Filter.indexed_shape?(shape, stack_id: stack_id)
+    end
+
+    test "the default cap applies when the stack config has no override", %{stack_id: stack_id} do
+      shape = Shape.new!("t1", where: @six_leaf_where, inspector: @inspector)
+
+      assert [] ==
+               unindexed_where_clauses(
+                 Filter.new(stack_id: stack_id)
+                 |> Filter.add_shape("s", shape)
+               )
+
+      assert Filter.indexed_shape?(shape, stack_id: stack_id)
+    end
+
+    # Where clauses stored in `other_shapes` for linear evaluation. Index leaves also live in
+    # `other_shapes` but with a `nil` where clause, so those are excluded.
+    defp unindexed_where_clauses(filter) do
+      for {_condition_id, {_index_keys, other_shapes}} <- :ets.tab2list(filter.where_cond_table),
+          {_shape_key, where} <- other_shapes,
+          where != nil,
+          do: where
+    end
+
     test "returns false for shapes without an indexable where clause" do
       shape = Shape.new!("t1", inspector: @inspector)
 

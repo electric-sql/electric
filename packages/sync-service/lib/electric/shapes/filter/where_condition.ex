@@ -27,11 +27,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   require Logger
 
-  # When both sides of an `AND` are `OR` trees, distributing one over the other multiplies the
-  # number of index leaves the shape occupies. Above this many leaves the conjunction is not
-  # distributed and the shape falls back to `other_shapes` for that condition.
-  @max_distributed_leaves 1000
-
   def init(%Filter{where_cond_table: table}, condition_id) do
     :ets.insert(table, {condition_id, {MapSet.new(), %{}}})
   end
@@ -40,8 +35,9 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   Returns `true` when the WHERE clause can use the filter's indexed routing
   path instead of relying entirely on `other_shapes`.
   """
-  @spec indexed_where?(Expr.t() | nil) :: boolean()
-  def indexed_where?(where_clause), do: optimise_where(where_clause) != :not_optimised
+  @spec indexed_where?(Expr.t() | nil, non_neg_integer()) :: boolean()
+  def indexed_where?(where_clause, max_distributed_leaves),
+    do: optimise_where(where_clause, max_distributed_leaves) != :not_optimised
 
   def add_shape(%Filter{} = filter, condition_id, shape_id, where_clause) do
     add_shape(filter, condition_id, shape_id, where_clause, [])
@@ -55,7 +51,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         where_clause,
         branch_key
       ) do
-    case optimise_where(where_clause) do
+    case optimise_where(where_clause, filter.max_distributed_leaves) do
       :not_optimised ->
         add_shape_to_other_shapes(table, condition_id, shape_id, branch_key, where_clause)
 
@@ -89,21 +85,28 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     Index.add_shape(filter, condition_id, shape_id, optimisation, branch_key)
   end
 
+  # `max_distributed_leaves` caps the number of index leaves created when both sides of an
+  # `AND` are `OR` trees and one is distributed over the other (see the `"and"` clause).
+  # Above the cap the conjunction is not distributed and the shape falls back to
+  # `other_shapes` for that condition.
   @doc false
-  defp optimise_where(nil), do: :not_optimised
+  defp optimise_where(where_clause, max_distributed_leaves)
 
-  defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
+  defp optimise_where(nil, _max_leaves), do: :not_optimised
 
-  defp optimise_where(%Func{name: "or", args: [left, right]}) do
-    if optimise_where(left) != :not_optimised and optimise_where(right) != :not_optimised do
+  defp optimise_where(%Expr{eval: eval}, max_leaves), do: optimise_where(eval, max_leaves)
+
+  defp optimise_where(%Func{name: "or", args: [left, right]}, max_leaves) do
+    if optimise_where(left, max_leaves) != :not_optimised and
+         optimise_where(right, max_leaves) != :not_optimised do
       {:or, where_expr(left), where_expr(right)}
     else
       :not_optimised
     end
   end
 
-  defp optimise_where(%Func{name: "and", args: [left, right]}) do
-    case {optimise_where(left), optimise_where(right)} do
+  defp optimise_where(%Func{name: "and", args: [left, right]}, max_leaves) do
+    case {optimise_where(left, max_leaves), optimise_where(right, max_leaves)} do
       {%{operation: _} = optimisation, _} ->
         %{optimisation | and_where: merge_and_where(optimisation.and_where, right)}
 
@@ -114,7 +117,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         # Distributing over the left OR tree leaves the right OR tree as the residual of every
         # branch, which the child condition then splits again. The number of index leaves is
         # the product of both trees' sizes, so guard against it blowing up.
-        if leaf_count(left) * leaf_count(right) <= @max_distributed_leaves do
+        if leaf_count(left) * leaf_count(right) <= max_leaves do
           distribute_and_over_or(or_tree, right)
         else
           :not_optimised
@@ -131,63 +134,81 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp optimise_where(%Func{
-         name: ~s("="),
-         args: [%Ref{path: [field], type: type}, %Const{value: value}]
-       }) do
+  defp optimise_where(
+         %Func{
+           name: ~s("="),
+           args: [%Ref{path: [field], type: type}, %Const{value: value}]
+         },
+         _max_leaves
+       ) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
-         name: ~s("="),
-         args: [%Const{value: value}, %Ref{path: [field], type: type}]
-       }) do
+  defp optimise_where(
+         %Func{
+           name: ~s("="),
+           args: [%Const{value: value}, %Ref{path: [field], type: type}]
+         },
+         _max_leaves
+       ) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
-         name: ~s("@>"),
-         args: [%Ref{path: [field], type: type}, %Const{value: value}]
-       })
+  defp optimise_where(
+         %Func{
+           name: ~s("@>"),
+           args: [%Ref{path: [field], type: type}, %Const{value: value}]
+         },
+         _max_leaves
+       )
        when is_list(value) do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
-         name: ~s("<@"),
-         args: [%Const{value: value}, %Ref{path: [field], type: type}]
-       })
+  defp optimise_where(
+         %Func{
+           name: ~s("<@"),
+           args: [%Const{value: value}, %Ref{path: [field], type: type}]
+         },
+         _max_leaves
+       )
        when is_list(value) do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
   # const = ANY(array_ref) → reuse @> index with [const] as single-element array
-  defp optimise_where(%Func{
-         name: "any",
-         args: [
-           %Func{
-             name: ~s("="),
-             map_over_array_in_pos: 1,
-             args: [%Const{value: value}, %Ref{path: [field], type: {:array, _} = type}]
-           }
-         ]
-       })
+  defp optimise_where(
+         %Func{
+           name: "any",
+           args: [
+             %Func{
+               name: ~s("="),
+               map_over_array_in_pos: 1,
+               args: [%Const{value: value}, %Ref{path: [field], type: {:array, _} = type}]
+             }
+           ]
+         },
+         _max_leaves
+       )
        when not is_nil(value) do
     %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
   end
 
-  defp optimise_where(%Func{name: "sublink_membership_check"} = subquery) do
+  defp optimise_where(%Func{name: "sublink_membership_check"} = subquery, _max_leaves) do
     subquery_optimisation(subquery, :positive)
   end
 
-  defp optimise_where(%Func{
-         name: "not",
-         args: [%Func{name: "sublink_membership_check"} = subquery]
-       }) do
+  defp optimise_where(
+         %Func{
+           name: "not",
+           args: [%Func{name: "sublink_membership_check"} = subquery]
+         },
+         _max_leaves
+       ) do
     subquery_optimisation(subquery, :negated)
   end
 
-  defp optimise_where(_), do: :not_optimised
+  defp optimise_where(_, _max_leaves), do: :not_optimised
 
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
@@ -282,7 +303,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         where_clause,
         branch_key
       ) do
-    case optimise_where(where_clause) do
+    case optimise_where(where_clause, filter.max_distributed_leaves) do
       :not_optimised ->
         remove_shape_from_other_shapes(table, condition_id, shape_id, branch_key)
 
