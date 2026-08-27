@@ -1566,9 +1566,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // Filter messages using snapshot tracker
     const messagesToProcess = batch.filter((message) => {
-      if (transition.suppressUpToDate && isUpToDateMessage(message)) {
-        return false
-      }
       if (isChangeMessage(message)) {
         const changeLsn = message.headers.lsn
         if (typeof changeLsn === `string` && changeLsn) {
@@ -1588,6 +1585,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // not once the database has passed the snapshot's LSN.
           this.#snapshotTracker.lastSeenUpdate(BigInt(lastSeenLsn))
         }
+
+        // A replayed up-to-date for the previous session's cursor still
+        // carries real WAL progress, which is applied above; only its
+        // delivery to subscribers is skipped.
+        if (transition.suppressUpToDate) return false
       }
 
       return true // Always process control messages
