@@ -1595,8 +1595,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return true // Always process control messages
     })
 
-    if (messagesToProcess.length === 0) return
-
     await this.#publish(messagesToProcess, {
       allowReentrantBypass: opts.allowReentrantPublishBypass,
     })
