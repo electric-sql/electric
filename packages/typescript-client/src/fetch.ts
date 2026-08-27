@@ -476,7 +476,7 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   const shapeHandle = res.headers.get(SHAPE_HANDLE_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
   const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
-  const isSnapshot = res.headers.has(SNAPSHOT_HEADER)
+  const isSnapshot = res.headers.get(SNAPSHOT_HEADER) === `true`
 
   // only prefetch if shape handle and offset for next chunk are available, and
   // response is not already up-to-date

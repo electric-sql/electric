@@ -419,6 +419,28 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
+  it(`should prefetch when the snapshot header is not true`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SNAPSHOT_HEADER]: `false`,
+      }),
+    })
+    const nextResponse = new Response(`next chunk`, { status: 200 })
+
+    mockFetch.mockResolvedValueOnce(initialResponse)
+    mockFetch.mockResolvedValueOnce(nextResponse)
+
+    const result = await fetchWrapper(baseUrl)
+
+    expect(result).toBe(initialResponse)
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+    expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
+  })
+
   it(`should not prefetch for non-GET requests`, async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
     const postResponse = new Response(`snapshot chunk`, {
