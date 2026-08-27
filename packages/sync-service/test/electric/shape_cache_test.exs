@@ -1079,15 +1079,9 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "starts the consumer of a registered dependency shape that has none running", ctx do
-      # A dependency (subquery) shape can be registered in ShapeStatus with a
-      # completed snapshot but no running consumer — e.g. restored on restart
-      # as a plain shape after its parent was removed (`prune_subquery_shapes/1`
-      # only matches dependencies through a surviving parent), with consumers
-      # only started lazily on transaction routing. A new parent then resolves
-      # its subquery to this handle, and the ShapeCache must start the missing
-      # consumer before starting the parent — otherwise the parent's materializer
-      # finds no consumer, the parent is invalidated, and that repeats on every
-      # retry, since the dependency stays registered.
+      # After restart, an orphaned dependency may remain registered with a completed
+      # snapshot but no consumer. Reusing it must restart the consumer before the
+      # new parent's materializer starts, or the parent is repeatedly invalidated.
       Support.TestUtils.patch_snapshotter(fn parent,
                                              shape_handle,
                                              _shape,
@@ -1109,11 +1103,8 @@ defmodule Electric.ShapeCacheTest do
       ShapeCache.clean_shape(parent_handle, ctx.stack_id)
       assert_shape_cleanup(parent_handle)
 
-      # Stop the dependency's consumer with the suspend reason, which
-      # deregisters it from the ConsumerRegistry without removing the shape —
-      # the dependency's materializer exits with it. This leaves the exact
-      # restored-orphan state: registered handle, completed snapshot, no
-      # consumer process, no materializer.
+      # Suspend the dependency without deleting its completed shape, reproducing
+      # the post-restart orphan state.
       :ok =
         Electric.Shapes.Consumer.stop(
           ctx.stack_id,
