@@ -60,7 +60,7 @@ This:
 2. Starts a built-in **Horton** runtime in the foreground that registers the `horton` and `worker` entity types.
 3. Prints onboarding commands you can copy into a second terminal.
 
-Leave this terminal running. Press `Ctrl-C` to stop the built-in Horton runtime — the runtime server containers keep running in the background until you call [`electric agents stop`](#stop-the-dev-environment).
+Leave this terminal running. Press `Ctrl-C` to stop the built-in Horton runtime — the runtime server containers keep running in the background until you call [`electric-ax agents stop`](#stop-the-dev-environment).
 
 ## Chat with Horton
 
@@ -156,7 +156,7 @@ This:
 3. **starts an HTTP server** to receive webhook callbacks from the runtime
 4. **registers entity types** with the runtime server on startup
 
-Make sure `ANTHROPIC_API_KEY` is exported in this shell (or copy your `.env` into `my-agents-app`). Then, with the runtime server already running (from `electric agents quickstart` or `electric agents start`), start your app:
+Make sure `ANTHROPIC_API_KEY` is exported in this shell (or copy your `.env` into `my-agents-app`). Then, with the runtime server already running (from `electric-ax agents quickstart` or `electric-ax agents start`), start your app:
 
 ```sh
 npx tsx server.ts
