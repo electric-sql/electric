@@ -112,8 +112,7 @@ defmodule Electric.Shapes.Api.Response do
     %{response | finalized?: true}
   end
 
-  # nginx's "client closed request" convention. Never sent to anyone — the
-  # client has already reset the stream — it exists so server-side accounting
+  # nginx's "client closed request" convention. It exists so server-side accounting
   # (spans, metrics) records a client disconnect rather than a server error.
   @client_disconnect_status 499
 
