@@ -886,6 +886,18 @@ defmodule Electric.Shapes.Api do
 
       {^ref, :out_of_bounds_timeout} ->
         :out_of_bounds_timeout
+
+      # Bandit's HTTP/2 connection process forwards a client's RST_STREAM to
+      # this handler process as a plain message (Bandit-private format, see
+      # Bandit.HTTP2.Stream.deliver_rst_stream/2). Matching it here lets us
+      # abandon the long poll — releasing this process and its admission
+      # permit — the moment the client cancels the request, instead of
+      # discovering the reset only when the response send fails after the
+      # full long-poll timeout. HTTP/1 has no equivalent early signal; there
+      # the reset surfaces as Bandit.TransportError at send time, handled in
+      # Electric.Plug.ServeShapePlug.
+      {:bandit, {:rst_stream, _error_code}} ->
+        :client_disconnect
     after
       long_poll_timeout ->
         :long_poll_timeout
@@ -899,6 +911,12 @@ defmodule Electric.Shapes.Api do
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
     |> do_serve_shape_log()
+  end
+
+  defp handle_live_change_result(:client_disconnect, request) do
+    request
+    |> update_attrs(%{ot_is_client_disconnected: true})
+    |> Response.client_disconnect()
   end
 
   defp handle_live_change_result({:shape_rotation, new_handle}, request) do

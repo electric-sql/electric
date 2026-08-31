@@ -131,11 +131,31 @@ defmodule Electric.Plug.ServeShapePlug do
     end
 
     normalized_reason = Exception.normalize(kind, reason, stack)
-    status = if kind == :error, do: Plug.Exception.status(normalized_reason), else: 500
 
-    conn
-    |> Conn.put_status(status)
-    |> handle_error(kind, normalized_reason, stack)
+    if client_disconnected?(kind, normalized_reason) do
+      handle_client_disconnect(conn)
+    else
+      status = if kind == :error, do: Plug.Exception.status(normalized_reason), else: 500
+
+      conn
+      |> Conn.put_status(status)
+      |> handle_error(kind, normalized_reason, stack)
+    end
+  end
+
+  # The client tore down the request (HTTP/2 RST_STREAM, or a closed socket on
+  # HTTP/1) before the response could be sent — Bandit surfaces that as a raise
+  # from inside send_resp/send_chunked. Nobody can read a response (an error
+  # body included), and it is not a server error, so: no error body, no
+  # record_exception, status 499 for span/metric accounting. The transport
+  # error is still reraised by our caller for Bandit to handle natively —
+  # Bandit closes client-reset streams quietly (`log_client_closures: false`
+  # by default) instead of crash-logging.
+  defp client_disconnected?(:error, %Bandit.TransportError{error: :closed}), do: true
+  defp client_disconnected?(_kind, _reason), do: false
+
+  defp handle_client_disconnect(conn) do
+    Conn.put_status(conn, Api.Response.client_disconnect_status())
   end
 
   defp handle_error(conn, kind, exception, stack) do
@@ -592,6 +612,12 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.offset" => conn.query_params["offset"],
       "shape_req.is_shape_rotated" => attrs[:ot_is_shape_rotated] || false,
       "shape_req.is_long_poll_timeout" => attrs[:ot_is_long_poll_timeout] || false,
+      # The status check covers disconnects discovered only at send time
+      # (Bandit.TransportError caught in handle_caught/4), which never get a
+      # response struct carrying the trace attr.
+      "shape_req.client_disconnected" =>
+        attrs[:ot_is_client_disconnected] ||
+          conn.status == Api.Response.client_disconnect_status(),
       "shape_req.is_empty_response" => attrs[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => attrs[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
