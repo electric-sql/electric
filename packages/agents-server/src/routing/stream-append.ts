@@ -10,6 +10,7 @@ import {
   ErrCodeUnauthorized,
 } from '../electric-agents-types.js'
 import { serverLog } from '../utils/log.js'
+import { WRITE_FENCE_HEADER, WRITE_TOKEN_HEADER } from '../stream-client.js'
 import type { EntityManager } from '../entity-manager.js'
 import type { IRequest, RouterType } from 'itty-router'
 
@@ -105,6 +106,16 @@ async function handleStreamAppend(
     const token = writeTokenFromHeaders(request.headers)
     if (!manager.isValidWriteToken(entity, token)) {
       return apiError(401, ErrCodeUnauthorized, `Invalid write token`)
+    }
+    if (manager.fencedSessionStreams) {
+      // Forward the runtime's claim capability to the Durable Streams
+      // backend and assert the fenced write class, so a stale or lost token
+      // is a loud 401 downstream instead of a silent open-class write under
+      // this server's forwarded identity. The runtime's own bearer is
+      // overwritten with the server's when the request is forwarded, so
+      // `Write-Token` is the only carrier that survives.
+      request.headers.set(WRITE_TOKEN_HEADER, token)
+      request.headers.set(WRITE_FENCE_HEADER, `true`)
     }
     if (manager.isForkWriteLockedEntity(entity.url)) {
       return apiError(

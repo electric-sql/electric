@@ -11,6 +11,18 @@ import type { HeadersRecord, MaybePromise } from '@durable-streams/client'
 
 export type DurableStreamsBearerProvider = string | (() => MaybePromise<string>)
 
+/**
+ * Headers of the Durable Streams Write Fencing extension. `Write-Fence: true`
+ * on a create opts the stream into fenced appends; on an append it asserts
+ * the fenced write class, which the backend only honours together with a
+ * claim-scoped write token carried in `Write-Token`. A backend without the
+ * extension ignores both headers.
+ *
+ * https://github.com/adityavkk/chronicle/blob/main/docs/spec/WRITE-FENCING.md
+ */
+export const WRITE_FENCE_HEADER = `Write-Fence`
+export const WRITE_TOKEN_HEADER = `Write-Token`
+
 export interface StreamClientOptions {
   bearer?: DurableStreamsBearerProvider
 }
@@ -72,6 +84,11 @@ export interface SubscriptionClaimResponse {
   wake_id: string
   generation: number
   token: string
+  /**
+   * Claim-scoped write token minted by a backend that implements the Write
+   * Fencing extension; absent on backends without it.
+   */
+  write_token?: string
   streams: Array<SubscriptionStreamInfo>
   lease_ttl_ms?: number
 }
@@ -226,7 +243,12 @@ export class StreamClient {
 
   async create(
     path: string,
-    opts: { contentType: string; body?: Uint8Array | string; closed?: boolean }
+    opts: {
+      contentType: string
+      body?: Uint8Array | string
+      closed?: boolean
+      writeFence?: boolean
+    }
   ): Promise<void> {
     return await withSpan(`stream.create`, async (span) => {
       span.setAttributes({
@@ -235,7 +257,9 @@ export class StreamClient {
       })
       await DurableStream.create({
         url: this.streamUrl(path),
-        headers: this.streamHeaders(),
+        headers: opts.writeFence
+          ? { ...this.streamHeaders(), [WRITE_FENCE_HEADER]: `true` }
+          : this.streamHeaders(),
         contentType: opts.contentType,
         body: opts.body,
         closed: opts.closed,
@@ -246,7 +270,7 @@ export class StreamClient {
   async fork(
     path: string,
     sourcePath: string,
-    opts?: { forkPointer?: EventPointer }
+    opts?: { forkPointer?: EventPointer; writeFence?: boolean }
   ): Promise<void> {
     return await withSpan(`stream.fork`, async (span) => {
       span.setAttributes({
@@ -256,6 +280,10 @@ export class StreamClient {
       const headers: Record<string, string> = {
         'content-type': `application/json`,
         'Stream-Forked-From': new URL(this.streamUrl(sourcePath)).pathname,
+      }
+      if (opts?.writeFence) {
+        // Forks never inherit the fence; a fenced fork opts in explicitly.
+        headers[WRITE_FENCE_HEADER] = `true`
       }
       if (opts?.forkPointer) {
         // The durable-streams server returns 400 if Stream-Fork-Sub-Offset

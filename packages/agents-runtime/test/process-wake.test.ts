@@ -1847,6 +1847,59 @@ describe(`processWake`, () => {
     setIntervalSpy.mockRestore()
   })
 
+  it(`adopts a refreshed write token from heartbeat responses`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async () => {
+        // Keep the wake alive long enough for several heartbeat intervals.
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      },
+    })
+
+    fetchMock.mockImplementation(async (url, opts) => {
+      if (String(url).includes(`/_electric/wakes/wake-abc`)) {
+        const body = JSON.parse(String(opts?.body ?? `{}`)) as Record<
+          string,
+          unknown
+        >
+        const isClaim = body.wakeId !== undefined
+        const isHeartbeat = !isClaim && body.done === undefined
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            ...(isClaim ? { writeToken: `wt-initial` } : {}),
+            ...(isHeartbeat ? { writeToken: `wt-refreshed` } : {}),
+          }),
+          { status: 200, headers: { 'content-type': `application/json` } }
+        )
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    })
+
+    await processWake(makeNotification(), {
+      ...BASE_CONFIG,
+      heartbeatInterval: 20,
+    })
+
+    // The producer reads the write token per request, so appends issued
+    // after a heartbeat refresh must carry the refreshed token.
+    const producer = mockConstructedProducers.find(
+      (constructed) =>
+        constructed.producerId ===
+        `entity-http://localhost:3000/test-agent/agent-1`
+    )
+    const producerFetch = producer!.opts!.fetch as typeof fetch
+    await producerFetch(`http://localhost:3000/streams/entity:agent-1`, {
+      method: `POST`,
+    })
+    const [, init] = fetchMock.mock.calls.at(-1)!
+    expect(new Headers(init?.headers).get(`authorization`)).toBe(
+      `Bearer wt-refreshed`
+    )
+  })
+
   it(`flushes producer on completion`, async () => {
     defineEntity(`test-agent`, {
       handler: () => {},
