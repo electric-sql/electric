@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
   @electric_has_data_header "electric-has-data"
+  @electric_snapshot_header "electric-snapshot"
   @electric_known_error_header "electric-internal-known-error"
   @retry_after_header "retry-after"
 
@@ -23,6 +24,7 @@ defmodule Electric.Shapes.Api.Response do
     @electric_offset_header,
     @electric_schema_header,
     @electric_up_to_date_header,
+    @electric_snapshot_header,
     @electric_known_error_header,
     @retry_after_header
   ]
@@ -207,7 +209,7 @@ defmodule Electric.Shapes.Api.Response do
   defp put_resp_headers(conn, %__MODULE__{response_type: :subset} = response) do
     conn
     |> put_cache_header("cache-control", "no-cache", response.api)
-    |> Plug.Conn.put_resp_header("electric-snapshot", "true")
+    |> Plug.Conn.put_resp_header(@electric_snapshot_header, "true")
     |> put_shape_handle_header(response)
     |> put_schema_header(response)
     |> put_offset_header(response)
