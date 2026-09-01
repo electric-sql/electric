@@ -114,6 +114,25 @@ defmodule Electric.Shapes.Api.Response do
     %{response | finalized?: true}
   end
 
+  # nginx's "client closed request" convention. It exists so server-side accounting
+  # (spans, metrics) records a client disconnect rather than a server error.
+  @client_disconnect_status 499
+
+  def client_disconnect_status, do: @client_disconnect_status
+
+  @doc """
+  Response for a live request whose client cancelled mid-long-poll.
+  """
+  def client_disconnect(%Api.Request{response: response}) do
+    ensure_cleanup(%{
+      response
+      | status: @client_disconnect_status,
+        chunked: false,
+        up_to_date: false,
+        body: []
+    })
+  end
+
   def invalid_request(api_or_request, args) do
     error(api_or_request, "Invalid request", args)
   end
@@ -133,7 +152,22 @@ defmodule Electric.Shapes.Api.Response do
     Api.encode_error_message(api_or_request, body)
   end
 
+  # A client-disconnect response has no reader: the empty body is still
+  # drained so the cleanup operations appended by ensure_cleanup/1 run, and
+  # send_resp still fires to satisfy the Plug contract — having consumed the
+  # rst_stream notification, Bandit silently discards frames addressed to the
+  # reset stream (and on HTTP/1 the send raises Bandit.TransportError, which
+  # Electric.Plug.ServeShapePlug classifies as the same disconnect).
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
+  def send(%Plug.Conn{} = conn, %__MODULE__{status: @client_disconnect_status} = response) do
+    validate_response_finalized!(response)
+    _drained = Enum.into(response.body, [])
+
+    conn
+    |> Plug.Conn.put_resp_header("cache-control", "no-store")
+    |> Plug.Conn.send_resp(@client_disconnect_status, "")
+  end
+
   def send(%Plug.Conn{} = conn, %__MODULE__{chunked: false} = response) do
     validate_response_finalized!(response)
 

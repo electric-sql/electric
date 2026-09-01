@@ -107,22 +107,18 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  # Normalize the error and translate it into an appropriate HTTP response.
+  #
   # If the response was already sent (e.g. send_chunked partway through a
   # stream), we can't meaningfully recover — re-raise so the caller sees the
-  # original error. Otherwise normalize and delegate to handle_errors/2.
+  # original error.
   #
-  # Pre-existing limitation on the re-raise path: the
-  # [:electric, :plug, :serve_shape] telemetry event is NOT emitted when we
-  # re-raise. This is inherited from Plug.ErrorHandler's identical
-  # {:plug_conn, :sent} check — earlier approaches (outer/inner split;
-  # register_before_send) had the same behaviour, because once the response
-  # has been committed we no longer have access to the accumulated conn.
+  # Pre-existing limitation on the re-raise path: the [:electric, :plug, :serve_shape]
+  # telemetry event is NOT emitted when we re-raise, because once the response has been
+  # committed we no longer have access to the accumulated conn.
   #
   # The admission permit is still released and the OTEL span is still popped
   # via the `after` clause in call/2 — only the aggregate metric is lost.
-  # This triggers only when Plug.Conn.chunk/2 raises mid-stream; client
-  # disconnects are already handled explicitly as {:error, "closed"} in
-  # Api.Response.send_stream/2 without raising.
   defp handle_caught(conn, kind, reason, stack) do
     receive do
       {:plug_conn, :sent} -> :erlang.raise(kind, reason, stack)
@@ -131,18 +127,25 @@ defmodule Electric.Plug.ServeShapePlug do
     end
 
     normalized_reason = Exception.normalize(kind, reason, stack)
-    status = if kind == :error, do: Plug.Exception.status(normalized_reason), else: 500
+    handle_error(conn, kind, normalized_reason, stack)
+  end
 
-    conn
-    |> Conn.put_status(status)
-    |> handle_error(kind, normalized_reason, stack)
+  # The client tore down the request (HTTP/2 RST_STREAM, or a closed socket on
+  # HTTP/1) before the response could be sent.
+  #
+  # Bandit surfaces this condition as a raise from inside send_resp/send_chunked.
+  defp handle_error(conn, :error, %Bandit.TransportError{error: :closed}, _stack) do
+    Conn.put_status(conn, Api.Response.client_disconnect_status())
   end
 
   defp handle_error(conn, kind, exception, stack) do
     OpenTelemetry.record_exception(kind, exception, stack)
+
+    status = if kind == :error, do: Plug.Exception.status(exception), else: 500
     error_str = Exception.format(kind, exception)
 
     conn
+    |> Conn.put_status(status)
     |> assign(:error_str, error_str)
     |> handle_specific_error(kind, exception)
   end
@@ -592,6 +595,9 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.offset" => conn.query_params["offset"],
       "shape_req.is_shape_rotated" => attrs[:ot_is_shape_rotated] || false,
       "shape_req.is_long_poll_timeout" => attrs[:ot_is_long_poll_timeout] || false,
+      "shape_req.client_disconnected" =>
+        attrs[:ot_is_client_disconnected] ||
+          conn.status == Api.Response.client_disconnect_status(),
       "shape_req.is_empty_response" => attrs[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => attrs[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),

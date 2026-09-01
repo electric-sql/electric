@@ -61,6 +61,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 2000
 
+  defmodule RstStreamAdapter do
+    @moduledoc false
+    # Stands in for Bandit's adapter when the client has already reset the
+    # HTTP/2 stream: any attempt to send the response raises, exactly like
+    # Bandit.HTTP2.Stream.do_recv_rst_stream!/2 does.
+    def send_resp(_state, _status, _headers, _body) do
+      raise Bandit.TransportError, message: "Client reset stream normally", error: :closed
+    end
+  end
+
   @moduletag :tmp_dir
 
   setup [
@@ -760,6 +770,100 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert get_resp_header(conn, "electric-up-to-date") == [""]
       assert get_resp_header(conn, "electric-has-data") == ["false"]
+    end
+
+    test "aborts a live long-poll as soon as the client resets the HTTP/2 stream", ctx do
+      patch_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      test_pid = self()
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end
+      )
+
+      task =
+        Task.async(fn ->
+          ctx
+          |> conn(
+            :get,
+            %{"table" => "public.users"},
+            "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true"
+          )
+          |> call_serve_shape_plug(ctx)
+        end)
+
+      assert_receive :got_log_stream, @receive_timeout
+
+      # Simulate Bandit's HTTP/2 connection process delivering the client's
+      # RST_STREAM (error code 8 = CANCEL) to the request-handler process.
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, _ref}] ->
+        send(pid, {:bandit, {:rst_stream, 8}})
+      end)
+
+      # The default long_poll_timeout is 20s here, so completing well within
+      # a second proves the poll was aborted by the reset, not the timeout.
+      conn = Task.await(task, 1000)
+
+      assert conn.status == 499
+      assert conn.resp_body == ""
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "records a client disconnect when the response send hits a reset stream", ctx do
+      patch_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
+
+      ctx = Map.put(ctx, :long_poll_timeout, 100)
+
+      telemetry_ref =
+        :telemetry_test.attach_event_handlers(self(), [[:electric, :plug, :serve_shape]])
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true"
+        )
+        |> then(fn conn -> %{conn | adapter: {RstStreamAdapter, elem(conn.adapter, 1)}} end)
+
+      error =
+        assert_raise Plug.Conn.WrapperError, fn ->
+          call_serve_shape_plug(conn, ctx)
+        end
+
+      # The transport error is reraised for Bandit to handle natively (it
+      # closes client-reset streams quietly), but the request is accounted
+      # for as a client disconnect, not a 500.
+      assert %Bandit.TransportError{error: :closed} = error.reason
+      assert error.conn.status == 499
+
+      # Note: `live` is false here because the exception path only sees the
+      # pre-pipeline conn without the request assign (see the moduledoc note
+      # in ServeShapePlug) — the root span's `shape_req.is_live` attr is
+      # unaffected as it falls back to query params.
+      assert_received {[:electric, :plug, :serve_shape], ^telemetry_ref, %{count: 1},
+                       %{status: 499}}
     end
 
     test "returns electric-has-data: false for offset=now requests", ctx do
