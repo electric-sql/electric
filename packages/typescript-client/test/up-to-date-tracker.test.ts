@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { ShapeStream } from '../src'
+import { type Message, ShapeStream } from '../src'
 import { UpToDateTracker, upToDateTracker } from '../src/up-to-date-tracker'
 
 describe(`UpToDateTracker`, () => {
@@ -212,6 +212,188 @@ describe(`UpToDateTracker`, () => {
     // Neither should trigger replay mode after clear
     expect(tracker.shouldEnterReplayMode(shapeKey1)).toBe(null)
     expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(null)
+  })
+
+  it(`should preserve change messages while suppressing a cached up-to-date`, async () => {
+    // Pins the ReplayingState invariant (SPEC.md C9), not a server scenario:
+    // a real server only sets `electric-cursor` on live responses, and the
+    // client is never in ReplayingState when it issues a live request. The
+    // cursor header on this non-live initial response is synthetic so that
+    // the suppression branch runs at all.
+    const table = `replayed_rows`
+    const shapeKey = `${shapeUrl}?table=${table}`
+    const rowKey = `dashboard-version-1`
+    const notifications: Array<Array<Message>> = []
+
+    upToDateTracker.recordUpToDate(shapeKey, `cursor-1`)
+
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              key: rowKey,
+              value: { id: rowKey },
+              headers: { operation: `insert` },
+            },
+            { headers: { control: `up-to-date` } },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `test-handle-1`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+              'electric-up-to-date': `true`,
+            },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': `test-handle-1`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `cursor-2`,
+            'electric-up-to-date': `true`,
+          },
+        })
+      )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        aborter.abort()
+        reject(new Error(`Timed out waiting for fresh up-to-date`))
+      }, 500)
+
+      stream.subscribe(
+        (messages) => {
+          notifications.push(messages)
+          const hasUpToDate = messages.some(
+            (message) =>
+              `control` in message.headers &&
+              message.headers.control === `up-to-date`
+          )
+          if (hasUpToDate) {
+            clearTimeout(timeout)
+            aborter.abort()
+            resolve()
+          }
+        },
+        (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        }
+      )
+    })
+
+    const receivedMessages = notifications.flat()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(
+      receivedMessages.some(
+        (message) => `key` in message && message.key === rowKey
+      )
+    ).toBe(true)
+    expect(
+      receivedMessages.some(
+        (message) =>
+          `control` in message.headers &&
+          message.headers.control === `up-to-date`
+      )
+    ).toBe(true)
+    expect(stream.isUpToDate).toBe(true)
+  })
+
+  it(`should not notify subscribers for a batch emptied by replay suppression`, async () => {
+    // Same synthetic setup as the test above (SPEC.md C9): the cursor header on
+    // a non-live response is what drives the suppression branch. Here the
+    // replayed batch carries only the duplicate up-to-date, so filtering leaves
+    // nothing to deliver and subscribers must not be invoked with `[]`.
+    const table = `replayed_empty`
+    const shapeKey = `${shapeUrl}?table=${table}`
+    const notifications: Array<Array<Message>> = []
+
+    upToDateTracker.recordUpToDate(shapeKey, `cursor-1`)
+
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': `test-handle-1`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `cursor-1`,
+            'electric-up-to-date': `true`,
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': `test-handle-1`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `cursor-2`,
+            'electric-up-to-date': `true`,
+          },
+        })
+      )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        aborter.abort()
+        reject(new Error(`Timed out waiting for fresh up-to-date`))
+      }, 500)
+
+      stream.subscribe(
+        (messages) => {
+          notifications.push(messages)
+          const hasUpToDate = messages.some(
+            (message) =>
+              `control` in message.headers &&
+              message.headers.control === `up-to-date`
+          )
+          if (hasUpToDate) {
+            clearTimeout(timeout)
+            aborter.abort()
+            resolve()
+          }
+        },
+        (error) => {
+          clearTimeout(timeout)
+          reject(error)
+        }
+      )
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // Exactly one notification: the fresh up-to-date. The suppressed replay
+    // batch produced no callback at all, not an empty one.
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0]).toHaveLength(1)
+    expect(notifications[0][0].headers.control).toBe(`up-to-date`)
+    expect(stream.isUpToDate).toBe(true)
   })
 
   it(`should suppress cached up-to-dates during replay mode`, async () => {

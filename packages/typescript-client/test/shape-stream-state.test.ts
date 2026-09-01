@@ -287,7 +287,7 @@ describe(`shape stream state machine`, () => {
       makeMessageBatchInput({ currentCursor: `cursor-1` })
     )
 
-    expect(transition.suppressBatch).toBe(true)
+    expect(transition.suppressUpToDate).toBe(true)
     expect(transition.state).toBeInstanceOf(LiveState)
     expect(transition.state.replayCursor).toBe(undefined)
   })
@@ -303,7 +303,7 @@ describe(`shape stream state machine`, () => {
       makeMessageBatchInput({ currentCursor: `cursor-2` })
     )
 
-    expect(transition.suppressBatch).toBe(false)
+    expect(transition.suppressUpToDate).toBe(false)
     expect(transition.state).toBeInstanceOf(LiveState)
   })
 
@@ -318,7 +318,7 @@ describe(`shape stream state machine`, () => {
       makeMessageBatchInput({ isSse: true, currentCursor: `cursor-1` })
     )
 
-    expect(transition.suppressBatch).toBe(false)
+    expect(transition.suppressUpToDate).toBe(false)
     expect(transition.state).toBeInstanceOf(LiveState)
   })
 
@@ -594,7 +594,7 @@ describe(`shape stream state machine`, () => {
     )
 
     expect(transition.state).toBe(syncing)
-    expect(transition.suppressBatch).toBe(false)
+    expect(transition.suppressUpToDate).toBe(false)
     expect(transition.becameUpToDate).toBe(false)
   })
 

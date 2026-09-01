@@ -1554,11 +1554,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     if (hasUpToDateMessage) {
       this.#refreshCatchUpWatchdogActive = false
-      if (transition.suppressBatch) {
-        return
-      }
-
-      if (this.#currentFetchUrl) {
+      if (!transition.suppressUpToDate && this.#currentFetchUrl) {
         const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
         upToDateTracker.recordUpToDate(
           shapeKey,
@@ -1589,10 +1585,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // not once the database has passed the snapshot's LSN.
           this.#snapshotTracker.lastSeenUpdate(BigInt(lastSeenLsn))
         }
+
+        // A replayed up-to-date for the previous session's cursor still
+        // carries real WAL progress, which is applied above; only its
+        // delivery to subscribers is skipped.
+        if (transition.suppressUpToDate) return false
       }
 
       return true // Always process control messages
     })
+
+    // A replay batch that carried nothing but the suppressed up-to-date has
+    // nothing to deliver. Skip the callback rather than publishing an empty
+    // batch: subscribers are promised one or more messages per notification,
+    // and the pre-suppression code never notified for a suppressed replay.
+    // Batches emptied by the snapshot tracker alone are still published as
+    // before.
+    if (messagesToProcess.length === 0 && transition.suppressUpToDate) return
 
     await this.#publish(messagesToProcess, {
       allowReentrantBypass: opts.allowReentrantPublishBypass,
