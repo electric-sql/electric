@@ -168,7 +168,6 @@ interface WakeEntry {
   timeout: boolean
   changes: WakeChangeEntry[]
   finished_child?: WakeFinishedChildEntry
-  other_children?: WakeOtherChildEntry[]
 }
 
 interface WakeChangeEntry {
@@ -187,12 +186,6 @@ interface WakeFinishedChildEntry {
   run_status: "completed" | "failed"
   response?: string // concatenated text deltas from the finished run
   error?: string // error message(s) if run_status is "failed"
-}
-
-interface WakeOtherChildEntry {
-  url: string
-  type: string
-  status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
 }
 ```
 
