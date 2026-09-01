@@ -1078,6 +1078,82 @@ defmodule Electric.ShapeCacheTest do
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^subshape_handle}
     end
 
+    test "starts the consumer of a registered dependency shape that has none running", ctx do
+      # After restart, an orphaned dependency may remain registered with a completed
+      # snapshot but no consumer. Reusing it must restart the consumer before the
+      # new parent's materializer starts, or the parent is repeatedly invalidated.
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        snapshot_fun.([])
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      {parent_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      assert ShapeCache.await_snapshot_start(parent_handle, ctx.stack_id) == :started
+
+      {:ok, shape} = ShapeCache.fetch_shape_by_handle(parent_handle, ctx.stack_id)
+      [dependency_handle] = shape.shape_dependencies_handles
+
+      # Remove the parent shape, orphaning the dependency.
+      ShapeCache.clean_shape(parent_handle, ctx.stack_id)
+      assert_shape_cleanup(parent_handle)
+
+      # Suspend the dependency without deleting its completed shape, reproducing
+      # the post-restart orphan state.
+      :ok =
+        Electric.Shapes.Consumer.stop(
+          ctx.stack_id,
+          dependency_handle,
+          Electric.ShapeCache.ShapeCleaner.consumer_suspend_reason()
+        )
+
+      assert wait_until(
+               fn ->
+                 is_nil(Electric.Shapes.Consumer.whereis(ctx.stack_id, dependency_handle)) and
+                   is_nil(
+                     GenServer.whereis(
+                       Electric.Shapes.Consumer.Materializer.name(
+                         ctx.stack_id,
+                         dependency_handle
+                       )
+                     )
+                   )
+               end,
+               1_000
+             )
+
+      assert ShapeStatus.has_shape_handle?(ctx.stack_id, dependency_handle)
+      assert ShapeStatus.snapshot_started?(ctx.stack_id, dependency_handle)
+
+      # A new request for the parent shape resolves the subquery to the same
+      # dependency handle. The missing consumer must be started, letting the
+      # parent initialize and the request succeed.
+      {second_parent_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      refute second_parent_handle == parent_handle
+
+      assert ShapeCache.await_snapshot_start(second_parent_handle, ctx.stack_id) == :started
+
+      {:ok, second_shape} =
+        ShapeCache.fetch_shape_by_handle(second_parent_handle, ctx.stack_id)
+
+      assert second_shape.shape_dependencies_handles == [dependency_handle]
+
+      dependency_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, dependency_handle)
+      assert is_pid(dependency_pid) and Process.alive?(dependency_pid)
+
+      # The restarted consumer must be initialized as a subquery (inner) shape, i.e.
+      # buffer whole transactions rather than stream fragments, like any other
+      # dependency consumer.
+      assert %{write_unit: :txn} = :sys.get_state(dependency_pid)
+    end
+
     test "should wait for consumer to come up", ctx do
       Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
