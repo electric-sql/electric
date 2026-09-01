@@ -1,5 +1,14 @@
 # @electric-sql/client
 
+## 1.5.27
+
+### Patch Changes
+
+- c4c48c0: Preserve data messages when suppressing cached up-to-date notifications during replay.
+- d9d2666: Prevent subscription startup failures from also surfacing as unhandled promise
+  rejections after they are delivered to the subscriber error callback.
+- 7b9e9fe: Fix duplicate download of subset snapshot responses caused by the chunk prefetcher mistaking them for a normal chunk to prefetch.
+
 ## 1.5.26
 
 ### Patch Changes
