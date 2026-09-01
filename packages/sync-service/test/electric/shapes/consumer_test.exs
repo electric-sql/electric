@@ -13,6 +13,7 @@ defmodule Electric.Shapes.ConsumerTest do
   alias Electric.Shapes
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Consumer
+  alias Electric.Shapes.Consumer.Materializer
 
   alias Support.StubInspector
 
@@ -28,7 +29,8 @@ defmodule Electric.Shapes.ConsumerTest do
       register_as_replication_client: 1,
       complete_txn_fragment: 3,
       txn_fragments: 3,
-      txn_fragment: 4
+      txn_fragment: 4,
+      wait_until: 1
     ]
 
   @receive_timeout 1_000
@@ -1956,6 +1958,69 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
 
       assert [] == :ets.tab2list(table)
+    end
+
+    test "materializer subscribing mid-transaction sees the whole transaction", ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert %{pending_txn: nil, write_unit: :txn_fragment} = :sys.get_state(consumer_pid)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      new_record = fn id, offset ->
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => id},
+          log_offset: offset
+        }
+      end
+
+      begin_fragment =
+        txn_fragment(xid, lsn, [new_record.("1", LogOffset.new(lsn, 0))], has_begin?: true)
+
+      assert :ok = ShapeLogCollector.handle_event(begin_fragment, ctx.stack_id)
+      assert %{pending_txn: %{}, write_unit: :txn_fragment} = :sys.get_state(consumer_pid)
+
+      materializer_opts = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+
+      materializer_pid =
+        start_link_supervised!(
+          {Materializer,
+           Map.merge(materializer_opts, %{
+             storage: ctx.storage,
+             columns: ["id"],
+             materialized_type: {:array, :int8}
+           })}
+        )
+
+      # The subscription is parked until the in-flight transaction commits.
+      assert wait_until(fn ->
+               match?(
+                 %{deferred_materializer_subscription: {^materializer_pid, _}},
+                 :sys.get_state(consumer_pid)
+               )
+             end)
+
+      assert %{materializer_subscribed?: false, write_unit: :txn_fragment} =
+               :sys.get_state(consumer_pid)
+
+      commit_fragment =
+        txn_fragment(xid, lsn, [new_record.("2", LogOffset.new(lsn, 1))], has_commit?: true)
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      assert %{
+               pending_txn: nil,
+               write_unit: :txn,
+               materializer_subscribed?: true,
+               deferred_materializer_subscription: nil
+             } = :sys.get_state(consumer_pid)
+
+      assert :ok = Materializer.wait_until_ready(materializer_opts)
+      assert Materializer.get_link_values(materializer_opts) == MapSet.new([1, 2])
     end
 
     @tag with_pure_file_storage_opts: [flush_period: 1]

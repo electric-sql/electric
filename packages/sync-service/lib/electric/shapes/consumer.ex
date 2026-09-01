@@ -83,7 +83,7 @@ defmodule Electric.Shapes.Consumer do
   def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
-    |> GenServer.call({:subscribe_materializer, pid})
+    |> GenServer.call({:subscribe_materializer, pid}, :infinity)
   end
 
   @spec whereis(Electric.stack_id(), Electric.shape_handle()) :: pid() | nil
@@ -217,10 +217,21 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
+  # A materializer's initial history read is bounded by the last committed offset in
+  # storage, while `state.latest_offset` advances with every fragment written in
+  # `write_unit: :txn_fragment` mode. Replying mid-transaction would hand the materializer an
+  # offset past what it can read, silently losing the already-written head of the
+  # transaction. Park the subscription until the commit boundary instead — see
+  # `complete_deferred_materializer_subscription/1`.
+  def handle_call({:subscribe_materializer, pid}, from, %State{pending_txn: pending_txn} = state)
+      when is_write_unit_txn_fragment(state.write_unit) and not is_nil(pending_txn) do
+    Logger.debug("Deferring materializer subscription for #{state.shape_handle} until commit")
+    state = %{state | deferred_materializer_subscription: {pid, from}}
+    {:noreply, state, state.hibernate_after}
+  end
+
   def handle_call({:subscribe_materializer, pid}, _from, state) do
-    Logger.debug("Subscribing materializer for #{state.shape_handle}")
-    Process.monitor(pid, tag: :materializer_down)
-    state = %{state | materializer_subscribed?: true}
+    state = subscribe_materializer(pid, state)
     {:reply, {:ok, state.latest_offset}, state, state.hibernate_after}
   end
 
@@ -467,8 +478,9 @@ defmodule Electric.Shapes.Consumer do
   # ShapeLogCollector holds no pending flush entry for this shape.
   defp consumer_can_suspend?(state) do
     is_snapshot_started(state) and not Shape.has_dependencies(state.shape) and
-      not state.materializer_subscribed? and is_nil(state.pending_txn) and
-      state.txn_offset_mapping == [] and is_nil(state.pending_flush_offset)
+      not state.materializer_subscribed? and is_nil(state.deferred_materializer_subscription) and
+      is_nil(state.pending_txn) and state.txn_offset_mapping == [] and
+      is_nil(state.pending_flush_offset)
   end
 
   defp schedule_suspend_timer(%{suspend_after: nil} = state), do: state
@@ -757,7 +769,7 @@ defmodule Electric.Shapes.Consumer do
   defp skip_txn_fragment(state, %TransactionFragment{} = txn_fragment) do
     %{state | pending_txn: nil}
     |> consider_flushed(txn_fragment.last_log_offset)
-    |> clear_pending_flush_offset()
+    |> finish_pending_txn()
   end
 
   # This function does similar things to do_handle_txn/2 but with the following simplifications:
@@ -916,7 +928,7 @@ defmodule Electric.Shapes.Consumer do
       %{state | pending_txn: nil}
       |> consider_flushed(txn_fragment.last_log_offset)
     end
-    |> clear_pending_flush_offset()
+    |> finish_pending_txn()
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
@@ -1197,14 +1209,43 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  # After a pending transaction completes and txn_offset_mapping is populated,
-  # process the deferred flushed offset (if any).
+  # After a pending transaction completes and txn_offset_mapping is populated, process the
+  # deferred flushed offset (if any), then complete a materializer subscription that arrived
+  # while the transaction was in progress.
   #
   # Even if the most recent transaction is skipped or no changes from it end up satisfying the
   # shape's `where` condition, Storage may have signaled a flush offset from the previous transaction
   # while we were still processing fragments of the current one. Therefore this function must
   # be called any time `state.pending_txn` is reset to nil in a multi-fragment transaction
   # processing setting.
+  defp finish_pending_txn(state) do
+    state
+    |> clear_pending_flush_offset()
+    |> complete_deferred_materializer_subscription()
+  end
+
+  defp complete_deferred_materializer_subscription(
+         %{deferred_materializer_subscription: nil} = state
+       ),
+       do: state
+
+  # The transaction that was in flight when the materializer called us has now committed, so
+  # `state.latest_offset` sits on a commit boundary and everything up to it is readable from
+  # storage. Subscribe and release the materializer's blocked call.
+  defp complete_deferred_materializer_subscription(
+         %{deferred_materializer_subscription: {pid, from}} = state
+       ) do
+    state = subscribe_materializer(pid, %{state | deferred_materializer_subscription: nil})
+    GenServer.reply(from, {:ok, state.latest_offset})
+    state
+  end
+
+  defp subscribe_materializer(pid, state) do
+    Logger.debug("Subscribing materializer for #{state.shape_handle}")
+    Process.monitor(pid, tag: :materializer_down)
+    State.mark_materializer_subscribed(state)
+  end
+
   defp clear_pending_flush_offset(%{pending_flush_offset: nil} = state), do: state
 
   defp clear_pending_flush_offset(%{pending_flush_offset: flushed_offset} = state) do

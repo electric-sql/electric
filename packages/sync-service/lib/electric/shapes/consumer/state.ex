@@ -26,6 +26,11 @@ defmodule Electric.Shapes.Consumer.State do
     buffer: [],
     txn_offset_mapping: [],
     materializer_subscribed?: false,
+    # `{pid, from}` of a materializer whose `subscribe_materializer` call arrived while a
+    # fragmented transaction was in progress. The subscription is completed (and the call
+    # replied to) once that transaction commits, so the materializer's initial history read
+    # starts from a commit boundary.
+    deferred_materializer_subscription: nil,
     terminating?: false,
     buffering?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until
@@ -133,6 +138,27 @@ defmodule Electric.Shapes.Consumer.State do
             @write_unit_txn_fragment
           end
     }
+  end
+
+  @doc """
+  Record that a materializer is subscribed to this consumer and promote the consumer to
+  whole-transaction writes: a materializer needs transaction-atomic updates.
+
+  A fragment-streaming consumer must only be promoted with no transaction in progress
+  (`pending_txn: nil`), so that already-written fragments are never mixed with a buffered
+  tail of the same transaction. The consumer guarantees this by deferring subscriptions that
+  arrive mid-transaction until the commit boundary. A consumer already buffering whole
+  transactions can be subscribed at any point.
+  """
+  @spec mark_materializer_subscribed(t()) :: t()
+  def mark_materializer_subscribed(%__MODULE__{write_unit: @write_unit_txn} = state) do
+    %{state | materializer_subscribed?: true}
+  end
+
+  def mark_materializer_subscribed(
+        %__MODULE__{write_unit: @write_unit_txn_fragment, pending_txn: nil} = state
+      ) do
+    %{state | materializer_subscribed?: true, write_unit: @write_unit_txn}
   end
 
   @doc """

@@ -109,6 +109,30 @@ defmodule Electric.Shapes.Consumer.StateTest do
     end
   end
 
+  describe "mark_materializer_subscribed/1" do
+    setup [:with_stack_id_from_test]
+
+    setup %{stack_id: stack_id} do
+      shape = %Shape{root_table: {"public", "items"}, root_table_id: 1}
+      state = State.new(stack_id, "test-handle", shape)
+      %{state: state}
+    end
+
+    test "promotes a fragment-streaming consumer to transaction writes", %{state: state} do
+      state = %{state | write_unit: :txn_fragment}
+
+      assert %{materializer_subscribed?: true, write_unit: :txn} =
+               State.mark_materializer_subscribed(state)
+    end
+
+    test "subscribes a transaction-buffering consumer even mid-transaction", %{state: state} do
+      state = %{state | write_unit: :txn, pending_txn: %{}}
+
+      assert %{materializer_subscribed?: true, write_unit: :txn, pending_txn: %{}} =
+               State.mark_materializer_subscribed(state)
+    end
+  end
+
   describe "initialize/3" do
     setup [:with_stack_id_from_test, :with_in_memory_storage]
 
