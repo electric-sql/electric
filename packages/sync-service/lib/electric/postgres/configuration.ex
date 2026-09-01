@@ -4,6 +4,7 @@ defmodule Electric.Postgres.Configuration do
   a provided connection.
   """
   require Logger
+  alias Electric.DbConfigurationError
   alias Electric.Utils
   alias Electric.Replication.PublicationManager
 
@@ -89,9 +90,60 @@ defmodule Electric.Postgres.Configuration do
 
     run_in_transaction(
       conn,
-      &exec_alter_publication_for_table(&1, publication_name, :add, table),
+      fn conn ->
+        case exec_alter_publication_for_table(conn, publication_name, :add, table) do
+          :ok -> wait_for_in_flight_writers(conn, table)
+          :noop -> :ok
+          {:error, _} = error -> error
+        end
+      end,
       timeout
     )
+  end
+
+  # Logical decoding evaluates publication membership per change, against the catalog state at
+  # the point in the WAL where the change was made. A transaction that wrote to the table
+  # *before* the `ALTER PUBLICATION ... ADD TABLE` commits therefore never has those writes
+  # emitted by the replication stream, even if it commits after. The only way for such writes to
+  # reach a shape is through the initial snapshot, and the snapshot only includes them if the
+  # transaction has committed by the time the snapshot is taken.
+  #
+  # `ALTER PUBLICATION ... ADD TABLE` only takes a SHARE UPDATE EXCLUSIVE lock on the table, which
+  # doesn't conflict with writers, so on its own it gives no such guarantee. Taking a SHARE lock
+  # here closes the gap: it conflicts with the ROW EXCLUSIVE lock every writer holds until its
+  # transaction ends, so it is only granted once all in-flight writers have finished, and writers
+  # that arrive while it's pending queue up behind it and end up writing after the addition has
+  # committed, which is decoded normally. Since this runs inside the same transaction as the
+  # addition, the addition doesn't commit - and shapes waiting on it don't start snapshotting -
+  # until then.
+  #
+  # This mirrors what the `ALTER TABLE ... REPLICA IDENTITY FULL` in
+  # `configure_table_for_replication/4` has always done implicitly via its stronger ACCESS
+  # EXCLUSIVE lock. The wait is bounded by the transaction timeout, on expiry of which the whole
+  # transaction, addition included, is rolled back and the configuration reported as failed.
+  #
+  # Only called when this transaction is the one adding the table, i.e. when it holds the SHARE
+  # UPDATE EXCLUSIVE lock from the `ALTER PUBLICATION`. That lock serialises concurrent
+  # configurators on the same table, so no two of them can hold SHARE at the same time and then
+  # deadlock on upgrading it to ACCESS EXCLUSIVE for the replica identity change. If the table was
+  # already in the publication there is no gap to close, and taking the lock would open that
+  # deadlock up.
+  defp wait_for_in_flight_writers(conn, table) do
+    case Postgrex.query(conn, "LOCK TABLE #{table} IN SHARE MODE", []) do
+      {:ok, _} ->
+        :ok
+
+      # `query_canceled` is what the transaction timeout produces, `lock_not_available` what a
+      # `lock_timeout` configured on the database side does.
+      # A failed `LOCK` leaves the transaction aborted, and the addition must not be committed
+      # without the barrier in any case, so roll the whole transaction back.
+      {:error, %Postgrex.Error{postgres: %{code: code}}}
+      when code in [:query_canceled, :lock_not_available] ->
+        Postgrex.rollback(conn, DbConfigurationError.table_lock_timeout(table))
+
+      {:error, reason} ->
+        Postgrex.rollback(conn, reason)
+    end
   end
 
   @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation(), timeout()) ::
@@ -122,6 +174,12 @@ defmodule Electric.Postgres.Configuration do
         with :ok <- add_table_to_publication(conn, publication_name, oid_relation),
              :ok <- set_table_replica_identity_full(conn, oid_relation) do
           :ok
+        else
+          # If the nested `add_table_to_publication/4` rolled back, the outer transaction is
+          # already marked as failed and committing it would report a bare `{:error, :rollback}`,
+          # losing the reason. Roll back explicitly to propagate it instead. For the errors the
+          # nested calls recover from via savepoints there is nothing to commit anyway.
+          {:error, reason} -> Postgrex.rollback(conn, reason)
         end
       end,
       timeout
@@ -147,13 +205,21 @@ defmodule Electric.Postgres.Configuration do
 
     run_in_transaction(
       conn,
-      &exec_alter_publication_for_table(&1, publication_name, :drop, table),
+      fn conn ->
+        case exec_alter_publication_for_table(conn, publication_name, :drop, table) do
+          result when result in [:ok, :noop] -> :ok
+          {:error, _} = error -> error
+        end
+      end,
       timeout
     )
   end
 
+  # Returns `:noop` when the table was already in the requested state, i.e. the publication was
+  # not altered. Note that in that case the savepoint rollback also releases the lock that
+  # `ALTER PUBLICATION` took on the table.
   @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::
-          :ok | {:error, term()}
+          :ok | :noop | {:error, term()}
   defp exec_alter_publication_for_table(conn, publication_name, op_atom, table) do
     op =
       case op_atom do
@@ -178,11 +244,11 @@ defmodule Electric.Postgres.Configuration do
         case reason do
           # undefined object can happen when removing a table that was already removed
           %{postgres: %{code: :undefined_object, message: "relation" <> _}} when op_atom == :drop ->
-            :ok
+            :noop
 
           # duplicate object can happen when adding a table that was already added
           %{postgres: %{code: :duplicate_object}} when op_atom == :add ->
-            :ok
+            :noop
 
           _ ->
             {:error, reason}
