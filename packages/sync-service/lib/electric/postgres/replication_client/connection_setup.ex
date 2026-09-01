@@ -151,7 +151,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     Logger.debug("ReplicationClient step: create_publication_query")
     # We're creating an "empty" publication here because synced tables are added to it
     # elsewhere. See `Electric.Replication.PublicationManager`.
-    query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
+    query = "CREATE PUBLICATION IF NOT EXISTS #{Utils.quote_name(state.publication_name)}"
 
     query =
       if state.pg_version >= @pg18_version,
