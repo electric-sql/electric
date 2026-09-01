@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
       fn ->
         valid_handles = remove_shapes_immediate(stack_id, shape_handles, reason)
         remove_shapes_deferred(stack_id, valid_handles)
-        OpenTelemetry.stop_and_save_intervals(total_attribute: "remove_shape.total_duration_µs")
+        OpenTelemetry.stop_and_save_intervals(total_attribute: "remove_shape.total_duration_us")
         :ok
       end
     )
@@ -155,18 +155,18 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shape_immediate(stack_id, shape_handle, reason) do
-    OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_µs")
+    OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_us")
 
     case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
       :ok ->
-        OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_µs")
+        OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_us")
 
         stack_storage = Storage.for_stack(stack_id)
 
         with :ok <- Consumer.stop(stack_id, shape_handle, reason),
-             OpenTelemetry.start_interval(:"remove_shape.storage_cleanup.duration_µs"),
+             OpenTelemetry.start_interval(:"remove_shape.storage_cleanup.duration_us"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
-             OpenTelemetry.start_interval(:"remove_shape.shape_log_collector_remove.duration_µs"),
+             OpenTelemetry.start_interval(:"remove_shape.shape_log_collector_remove.duration_us"),
              :ok <-
                Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
           :ok
@@ -183,7 +183,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shapes_deferred(stack_id, shape_handles) when is_list(shape_handles) do
-    OpenTelemetry.start_interval(:"remove_shape.remove_shapes_deferred.duration_µs")
+    OpenTelemetry.start_interval(:"remove_shape.remove_shapes_deferred.duration_us")
     :ok = CleanupTaskSupervisor.cleanup_async(stack_id, shape_handles)
   end
 

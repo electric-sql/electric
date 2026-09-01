@@ -178,7 +178,7 @@ defmodule Electric.Shapes.Filter do
   @spec affected_shapes(Filter.t(), Changes.change() | Relation.t()) ::
           MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
-    OpenTelemetry.timed_fun("filter.affected_shapes.duration_µs", fn ->
+    OpenTelemetry.timed_fun("filter.affected_shapes.duration_us", fn ->
       try do
         shapes_affected_by_change(filter, change)
       catch

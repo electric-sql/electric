@@ -750,7 +750,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       ],
       state.stack_id,
       fn ->
-        OpenTelemetry.start_interval(:"shape_log_collector.logging.duration_µs")
+        OpenTelemetry.start_interval(:"shape_log_collector.logging.duration_us")
 
         Logger.debug(
           fn ->
@@ -768,7 +768,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         result = handle_txn_fragment(state, txn_fragment)
 
         OpenTelemetry.stop_and_save_intervals(
-          total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+          total_attribute: :"shape_log_collector.transaction.total_duration_us"
         )
 
         put_wall_clock_duration_if_commit(txn_fragment)
@@ -832,11 +832,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_txn_fragment(state, txn_fragment) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    OpenTelemetry.start_interval(:"shape_log_collector.fill_keys_in_txn.duration_µs")
+    OpenTelemetry.start_interval(:"shape_log_collector.fill_keys_in_txn.duration_us")
 
     case fill_keys(txn_fragment, state) do
       {:ok, txn_fragment} ->
-        OpenTelemetry.start_interval(:"partitions.handle_transaction.duration_µs")
+        OpenTelemetry.start_interval(:"partitions.handle_transaction.duration_us")
 
         {partitions, txn_fragment} =
           Partitions.handle_txn_fragment(state.partitions, txn_fragment)
@@ -859,7 +859,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    OpenTelemetry.start_interval(:"shape_log_collector.event_routing.duration_µs")
+    OpenTelemetry.start_interval(:"shape_log_collector.event_routing.duration_us")
 
     {events_by_handle, event_router} =
       EventRouter.event_by_shape_handle(state.event_router, event)
@@ -879,7 +879,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       %{stack_id: state.stack_id}
     )
 
-    OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
+    OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_us")
     context = OpenTelemetry.get_current_context()
 
     {undeliverable, delivered_pids} =
@@ -920,7 +920,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     case event do
       %TransactionFragment{commit: commit} when not is_nil(commit) ->
-        OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
+        OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_us")
 
         lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
         LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
@@ -1033,22 +1033,22 @@ defmodule Electric.Replication.ShapeLogCollector do
         if EventRouter.has_shape?(state.event_router, shape_handle) do
           Logger.debug("Deleting shape #{shape_handle}")
 
-          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_subscription.duration_µs")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_subscription.duration_us")
 
-          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_event_router.duration_µs")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_event_router.duration_us")
           event_router = EventRouter.remove_shape(state.event_router, shape_handle)
 
-          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_partitions.duration_µs")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_partitions.duration_us")
           partitions = Partitions.remove_shape(state.partitions, shape_handle)
 
-          OpenTelemetry.start_interval(:"unsubscribe_shape.demonitor_writer.duration_µs")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.demonitor_writer.duration_us")
           state = demonitor_writer(state, shape_handle)
 
-          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_flush_tracker.duration_µs")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_flush_tracker.duration_us")
           flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
 
           OpenTelemetry.start_interval(
-            :"unsubscribe_shape.remove_from_dependency_layers.duration_µs"
+            :"unsubscribe_shape.remove_from_dependency_layers.duration_us"
           )
 
           dependency_layers =
@@ -1057,7 +1057,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, state.registry_state)
 
           OpenTelemetry.stop_and_save_intervals(
-            total_attribute: "unsubscribe_shape.total_duration_µs"
+            total_attribute: "unsubscribe_shape.total_duration_us"
           )
 
           {:ok,
