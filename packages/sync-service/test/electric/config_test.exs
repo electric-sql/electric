@@ -60,6 +60,17 @@ defmodule Electric.ConfigTest do
       refute Keyword.has_key?(default_opts[:thousand_island_options], :read_timeout)
     end
 
+    test "api_server/1 applies conn_max_requests to HTTP/1 connections only" do
+      [{Bandit, bandit_opts}] = Electric.Application.api_server(tweaks: [conn_max_requests: 50])
+
+      assert bandit_opts[:http_1_options][:max_requests] == 50
+      refute Keyword.has_key?(bandit_opts[:http_2_options], :max_requests)
+
+      [{Bandit, default_opts}] = Electric.Application.api_server([])
+      refute Keyword.has_key?(default_opts[:http_1_options], :max_requests)
+      refute Keyword.has_key?(default_opts[:http_2_options], :max_requests)
+    end
+
     test "configuration/1", ctx do
       Electric.Application.configuration(
         Keyword.take(ctx.initial_config, [:replication_connection_opts])

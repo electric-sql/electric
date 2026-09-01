@@ -355,7 +355,14 @@ defmodule Electric.Application do
         n -> [{:handler_fullsweep_after, n} | ti_opts]
       end
 
-    shared_http_opts =
+    # `max_requests` is only applied to HTTP/1 connections. There, requests are served
+    # sequentially by a long-lived handler process and the limit recycles that process
+    # (and its accumulated heap) at a request boundary to avoid accumulating garbage memory.
+    #
+    # Under HTTP/2, requests already run in short-lived per-stream processes, and reaching
+    # `max_requests` would make Bandit tear down the whole multiplexed connection close all its
+    # streams.
+    http_1_opts =
       if max_requests = Keyword.get(tweaks, :conn_max_requests) do
         [max_requests: max_requests]
       else
@@ -367,8 +374,8 @@ defmodule Electric.Application do
        [
          plug: {Electric.Plug.Router, router_opts},
          port: get_env(opts, :service_port),
-         http_1_options: shared_http_opts,
-         http_2_options: shared_http_opts,
+         http_1_options: http_1_opts,
+         http_2_options: [],
          thousand_island_options: thousand_island_options(opts ++ ti_opts)
        ]}
     ]
