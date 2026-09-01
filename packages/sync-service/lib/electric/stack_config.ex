@@ -35,7 +35,8 @@ defmodule Electric.StackConfig do
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
       process_spawn_opts: %{},
-      consumer_gc_heap_threshold: Electric.Config.default(:consumer_gc_heap_threshold)
+      consumer_gc_heap_threshold: Electric.Config.default(:consumer_gc_heap_threshold),
+      stalled_serve_timeout: Electric.Config.default(:stalled_serve_timeout)
     ]
   end
 

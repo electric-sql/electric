@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Api.Response do
   alias Electric.Plug.Utils
   alias Electric.Shapes.Api
+  alias Electric.Shapes.Api.ServeWatchdog
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -434,6 +435,7 @@ defmodule Electric.Shapes.Api.Response do
     sample_rate_attrs = Electric.Plug.TraceContextPlug.sample_rate_attrs(conn, status)
 
     conn = Plug.Conn.send_chunked(conn, status)
+    watchdog = watchdog_context(conn, stack_id, response)
 
     {conn, bytes_sent} =
       response.body
@@ -445,7 +447,7 @@ defmodule Electric.Shapes.Api.Response do
           Map.put(sample_rate_attrs, "chunk_size", chunk_size),
           stack_id,
           fn ->
-            case Plug.Conn.chunk(conn, chunk) do
+            case write_in_bounded_pieces(conn, chunk, chunk_size, watchdog) do
               {:ok, conn} ->
                 {:cont, {conn, bytes_sent + chunk_size}}
 
@@ -465,6 +467,91 @@ defmodule Electric.Shapes.Api.Response do
       end)
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
+  end
+
+  # Socket writes are split into pieces of at most this size. Bounding the
+  # write unit bounds the response data queued in the socket's driver queue
+  # at any moment and — because a bounded write to a live client completes
+  # once the transport buffers drain — gives the stall watchdog below a
+  # progress signal: each completed piece is proof the client accepted data.
+  #
+  # Derived from the encoder's batch cap so that ordinary body elements are
+  # written as-is (no flattening or splitting) and only oversized single
+  # items (e.g. one very large row) are split. Making pieces smaller would
+  # not sharpen the watchdog: write completion is quantized by the OS at up
+  # to a kernel send buffer of drain, which dwarfs the piece size.
+  @socket_write_bytes Electric.Shapes.Api.Encoder.JSON.max_batch_bytes()
+
+  # See Electric.Shapes.Api.ServeWatchdog for the design rationale. The
+  # context carries what arming each write's deadline needs; `nil` disables
+  # reaping for this serve: when the timeout is not positive, when no
+  # watchdog is running for the stack, or when the adapter does not run the
+  # plug in the socket-owning process (only Bandit does; under proxying
+  # adapters like Plug.Test or Cowboy, writes complete without touching a
+  # socket, so a deadline would measure nothing and a kill would hit a
+  # process whose cleanup semantics we do not own).
+  defp watchdog_context(%Plug.Conn{adapter: {Bandit.Adapter, _}}, stack_id, response) do
+    # Fallback for stacks whose seed config omits the key (e.g. minimal
+    # unit-test stacks); Electric.Config is the single source of truth.
+    timeout =
+      Electric.StackConfig.lookup(
+        stack_id,
+        :stalled_serve_timeout,
+        Electric.Config.default(:stalled_serve_timeout)
+      )
+
+    with true <- is_integer(timeout) and timeout > 0,
+         watchdog when is_pid(watchdog) <- ServeWatchdog.resolve(stack_id) do
+      {watchdog, response.handle, timeout}
+    else
+      _ -> nil
+    end
+  end
+
+  defp watchdog_context(%Plug.Conn{}, _stack_id, _response), do: nil
+
+  # Write one response body element as a sequence of bounded socket writes,
+  # notifying the watchdog around each one. Elements within the bound — the
+  # common case, as the bound is derived from the encoder's batch cap — are
+  # written directly without flattening.
+  defp write_in_bounded_pieces(conn, chunk, chunk_size, watchdog)
+       when chunk_size <= @socket_write_bytes do
+    guarded_chunk(conn, chunk, watchdog)
+  end
+
+  defp write_in_bounded_pieces(conn, chunk, _chunk_size, watchdog) do
+    chunk
+    |> IO.iodata_to_binary()
+    |> write_pieces(conn, watchdog)
+  end
+
+  defp write_pieces(<<piece::binary-size(@socket_write_bytes), rest::binary>>, conn, watchdog)
+       when byte_size(rest) > 0 do
+    case guarded_chunk(conn, piece, watchdog) do
+      {:ok, conn} -> write_pieces(rest, conn, watchdog)
+      error -> error
+    end
+  end
+
+  defp write_pieces(piece, conn, watchdog) do
+    guarded_chunk(conn, piece, watchdog)
+  end
+
+  defp guarded_chunk(conn, data, nil) do
+    Plug.Conn.chunk(conn, data)
+  end
+
+  defp guarded_chunk(conn, data, {watchdog, shape_handle, timeout}) do
+    ref = ServeWatchdog.arm(watchdog, shape_handle, timeout)
+
+    # Disarming in `after` keeps the stamped ref from outliving this write on
+    # any exit path; a stale stamp would let a later firing timer kill a
+    # handler that is no longer inside the write it was armed for.
+    try do
+      Plug.Conn.chunk(conn, data)
+    after
+      ServeWatchdog.disarm(ref)
+    end
   end
 
   def etag(response, opts \\ [])
