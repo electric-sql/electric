@@ -1,5 +1,27 @@
 # @core/sync-service
 
+## 1.8.0
+
+### Minor Changes
+
+- 1a50fff: **Breaking change**: renamed several telemetry metric and span attribute names, replacing their non-ASCII `µs`/`μs` microsecond suffix with the plain-ASCII `us`. Some metrics backends (e.g. Mimir/Prometheus) reject metric names containing non-ASCII characters, which previously caused ingestion of the affected metrics to fail. Any dashboards, alerts, or queries referencing the old attribute names (e.g. `shape_db.pool.checkout.queue_time_μs`) need to be updated to the new ASCII names (e.g. `shape_db.pool.checkout.queue_time_us`).
+
+### Patch Changes
+
+- 2e9e9b4: Handle client-cancelled shape requests as disconnects instead of server errors.
+  A live long-poll now aborts as soon as the client resets the HTTP/2 stream,
+  releasing the handler process and its admission permit immediately instead of
+  holding them for the remainder of the long-poll timeout. Transport errors
+  raised when sending a response to a client that already went away are now
+  recorded as status 499 with a `shape_req.client_disconnected` span attribute
+  rather than surfacing as phantom 500s with recorded exceptions.
+- 7b9e9fe: Include the `electric-snapshot` response header in `access-control-expose-headers` so that cross-origin browser clients can read it.
+- f0e1904: Only advance the global last seen LSN on commit-bearing transaction fragments. Large transactions are split into multiple fragments that all carry the transaction's final LSN, so a `up-to-date` response could previously advertise an LSN whose changes were not yet readable in the shape logs, and a later response could then return data at that same LSN.
+- 09c60c6: Promote an already-running standalone shape consumer to whole-transaction writes when a subquery materializer subscribes to it. If a fragmented transaction is already in progress, the subscription is completed at its commit boundary so the materializer never misses the already-written head of that transaction.
+- 5ce464c: Wait for in-flight transactions that have written to a table to finish before committing the table's addition to the publication. Previously, such a transaction's writes were neither emitted by the replication stream (they predate the addition) nor included in the initial snapshot (the transaction was still open), so any shape created on the table right after it was added - e.g. after a `TRUNCATE` invalidated the previous shapes - was silently missing those rows for its whole lifetime.
+- 138039d: Stop applying `ELECTRIC_TWEAKS_CONN_MAX_REQUESTS` to HTTP/2 connections. The limit is only meaningful for HTTP/1, where it recycles long-lived handler processes at a request boundary. Under HTTP/2 it made Bandit tear down the whole multiplexed connection with GOAWAY/REFUSED_STREAM once the cumulative stream count reached the limit (50 by default), disrupting in-flight streams and causing reconnect bursts.
+- ab53baa: Start the consumer of an existing subquery dependency shape if it isn't running when a new parent shape resolves to it. Previously such a parent request failed with a 500 on every retry: the dependency's materializer found no consumer, the parent was invalidated, and the still-registered dependency poisoned the next attempt.
+
 ## 1.7.12
 
 ### Patch Changes
