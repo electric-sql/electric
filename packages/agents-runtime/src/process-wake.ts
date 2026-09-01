@@ -84,6 +84,12 @@ interface RawClaimCallbackResponse extends Omit<ClaimCallbackResponse, `ok`> {
 
 const DEFAULT_IDLE_TIMEOUT = 20_000
 const DEFAULT_HEARTBEAT_INTERVAL = 10_000
+
+function appendAll<T>(target: Array<T>, items: Array<T>): void {
+  for (const item of items) {
+    target.push(item)
+  }
+}
 type EntityStreamOptions = NonNullable<
   Parameters<typeof createEntityStreamDB>[3]
 >
@@ -1075,7 +1081,7 @@ export async function processWake(
       // ctx.events so no child result is silently acked without being visible.
       pendingLiveBatches.shift()
       batches.push(batch)
-      deltaEvents.push(...changeEvents)
+      appendAll(deltaEvents, changeEvents)
 
       if (freshKind === `inbox`) {
         selectedKind = `inbox`
@@ -1130,7 +1136,7 @@ export async function processWake(
     if (!preloaded) {
       const changeEvents = toChangeEvents(batch)
       if (changeEvents.length > 0) {
-        catchUpEvents.push(...changeEvents)
+        appendAll(catchUpEvents, changeEvents)
       }
       lastCatchUpOffset = batch.offset
       return
@@ -1145,7 +1151,7 @@ export async function processWake(
 
     handleLatestSignalEvents(changeEvents)
 
-    catchUpEvents.push(...changeEvents)
+    appendAll(catchUpEvents, changeEvents)
 
     if (
       resolveCurrentWakeReady !== null &&
