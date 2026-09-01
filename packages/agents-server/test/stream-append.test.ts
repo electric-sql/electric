@@ -16,6 +16,7 @@ const entity = {
 function buildRuntime(opts: {
   fencedSessionStreams: boolean
   hasEntity?: boolean
+  knownToken?: boolean
 }): ElectricAgentsStreamAppendRuntime {
   return {
     manager: {
@@ -26,7 +27,7 @@ function buildRuntime(opts: {
       },
       fencedSessionStreams: opts.fencedSessionStreams,
       isAttachmentStreamPath: vi.fn(() => false),
-      isValidWriteToken: vi.fn(() => true),
+      isValidWriteToken: vi.fn(() => opts.knownToken ?? true),
       isForkWriteLockedEntity: vi.fn(() => false),
       isForkWriteLockedStream: vi.fn(() => false),
       validateWriteEvent: vi.fn().mockResolvedValue(null),
@@ -69,6 +70,44 @@ describe(`entity stream appends`, () => {
     expect(response?.status).toBe(204)
     expect(forwardedHeaders!.get(`Write-Token`)).toBe(`claim-token-1`)
     expect(forwardedHeaders!.get(`Write-Fence`)).toBe(`true`)
+  })
+
+  it(`lets the backend judge a token the local store does not know when fenced session streams are enabled`, async () => {
+    // The claim may have been adopted by another instance, or by this one
+    // before a restart: in fenced mode the backend is the write authority.
+    let forwardedHeaders: Headers | null = null
+    const forward = vi.fn(async (req: { headers: Headers }) => {
+      forwardedHeaders = req.headers
+      return new Response(null, { status: 204 })
+    })
+    const runtime = buildRuntime({
+      fencedSessionStreams: true,
+      knownToken: false,
+    })
+
+    const response = await electricAgentsStreamAppendRouter.fetch(
+      appendRequest(`/horton/demo/main`),
+      runtime,
+      forward as any
+    )
+
+    expect(response?.status).toBe(204)
+    expect(forwardedHeaders!.get(`Write-Token`)).toBe(`claim-token-1`)
+    expect(forwardedHeaders!.get(`Write-Fence`)).toBe(`true`)
+    expect(runtime.manager.isValidWriteToken).not.toHaveBeenCalled()
+  })
+
+  it(`rejects a token the local store does not know when fencing is off`, async () => {
+    const forward = vi.fn(async () => new Response(null, { status: 204 }))
+
+    const response = await electricAgentsStreamAppendRouter.fetch(
+      appendRequest(`/horton/demo/main`),
+      buildRuntime({ fencedSessionStreams: false, knownToken: false }),
+      forward as any
+    )
+
+    expect(response?.status).toBe(401)
+    expect(forward).not.toHaveBeenCalled()
   })
 
   it(`forwards appends without fencing headers by default`, async () => {

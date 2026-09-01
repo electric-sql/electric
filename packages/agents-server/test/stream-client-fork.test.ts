@@ -35,20 +35,25 @@ describe(`StreamClient.fork`, () => {
     ).resolves.toEqual({ offset: expect.any(String) })
   })
 
-  it(`create and fork with writeFence succeed against a backend without the extension`, async () => {
-    // A base Durable Streams server ignores the Write-Fence header, so the
-    // fencedSessionStreams knob is safe to enable against any backend.
-    await client.create(`/source-fenced`, {
+  it(`refuses writeFence against a backend without the extension`, async () => {
+    // A base Durable Streams server ignores the Write-Fence header and
+    // creates the stream unfenced, so a fenced create or fork must fail
+    // rather than hand back a stream the fence never protects [WF-02].
+    await expect(
+      client.create(`/source-fenced`, {
+        contentType: `application/json`,
+        body: `[]`,
+        writeFence: true,
+      })
+    ).rejects.toThrow(/did not echo Write-Fence/)
+
+    await client.create(`/source-unfenced`, {
       contentType: `application/json`,
       body: `[]`,
-      writeFence: true,
     })
-
-    await client.fork(`/fork-fenced`, `/source-fenced`, { writeFence: true })
-
     await expect(
-      client.append(`/fork-fenced`, JSON.stringify({ type: `reconcile` }))
-    ).resolves.toEqual({ offset: expect.any(String) })
+      client.fork(`/fork-fenced`, `/source-unfenced`, { writeFence: true })
+    ).rejects.toThrow(/did not echo Write-Fence/)
   })
 
   it(`preserves source history when reading the fork`, async () => {

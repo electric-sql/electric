@@ -16,7 +16,8 @@ export type DurableStreamsBearerProvider = string | (() => MaybePromise<string>)
  * on a create opts the stream into fenced appends; on an append it asserts
  * the fenced write class, which the backend only honours together with a
  * claim-scoped write token carried in `Write-Token`. A backend without the
- * extension ignores both headers.
+ * extension ignores both headers, so a fenced create is only trusted once the
+ * backend echoes `Write-Fence: true` back [WF-02].
  *
  * https://github.com/adityavkk/chronicle/blob/main/docs/spec/WRITE-FENCING.md
  */
@@ -264,6 +265,15 @@ export class StreamClient {
         body: opts.body,
         closed: opts.closed,
       })
+      if (opts.writeFence) {
+        // The client library does not surface the PUT response; a fenced
+        // stream echoes on HEAD as well [WF-02].
+        const head = await fetch(this.streamUrl(path), {
+          method: `HEAD`,
+          headers: await this.requestHeaders(),
+        })
+        this.assertWriteFenced(path, head)
+      }
     })
   }
 
@@ -303,12 +313,31 @@ export class StreamClient {
         headers: await this.requestHeaders(headers),
       })
 
-      if (response.ok) return
+      if (response.ok) {
+        if (opts?.writeFence) this.assertWriteFenced(path, response)
+        return
+      }
 
       throw new Error(
         `Stream fork failed: ${response.status} ${await response.text()}`
       )
     })
+  }
+
+  /**
+   * A backend without the Write Fencing extension ignores `Write-Fence` and
+   * creates the stream unfenced, so a client that requires fencing checks for
+   * the echo before treating the stream as fenced [WF-02]. Throwing keeps
+   * `fencedSessionStreams` honest: a session stream is fenced, or its
+   * creation fails — never silently unfenced.
+   */
+  private assertWriteFenced(path: string, response: Response): void {
+    if (response.headers.get(WRITE_FENCE_HEADER)?.toLowerCase() === `true`) {
+      return
+    }
+    throw new Error(
+      `Stream ${path} is not write-fenced: the Durable Streams backend did not echo ${WRITE_FENCE_HEADER} (fencedSessionStreams requires a backend implementing the Write Fencing extension)`
+    )
   }
 
   async append(
