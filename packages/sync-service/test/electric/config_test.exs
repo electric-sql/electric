@@ -188,5 +188,26 @@ defmodule Electric.ConfigTest do
 
       assert Keyword.fetch!(config[:tweaks], :consumer_gc_heap_threshold) == nil
     end
+
+    test "shape_filter_max_distributed_leaves opt is threaded into tweaks", ctx do
+      config =
+        Electric.Application.configuration(
+          Keyword.merge(
+            Keyword.take(ctx.initial_config, [:replication_connection_opts]),
+            shape_filter_max_distributed_leaves: 50
+          )
+        )
+
+      assert Keyword.fetch!(config[:tweaks], :shape_filter_max_distributed_leaves) == 50
+    end
+
+    test "shape_filter_max_distributed_leaves defaults to 1000 in tweaks", ctx do
+      config =
+        Electric.Application.configuration(
+          Keyword.take(ctx.initial_config, [:replication_connection_opts])
+        )
+
+      assert Keyword.fetch!(config[:tweaks], :shape_filter_max_distributed_leaves) == 1000
+    end
   end
 end

@@ -117,7 +117,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def add_shape(stack_id, shape) when is_stack_id(stack_id) do
     OpenTelemetry.with_child_span("shape_status.add_shape", [], stack_id, fn ->
       {_, shape_handle} = Shape.generate_id(shape)
-      indexed? = Filter.indexed_shape?(shape)
+      indexed? = Filter.indexed_shape?(shape, stack_id: stack_id)
 
       # Add the lookup last as it is the one that enables clients to find the shape
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
@@ -505,7 +505,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp rebuild_shape_routing_state(stack_id) do
     case ShapeDb.reduce_shapes(stack_id, {empty_shape_counts(), []}, fn {shape_handle, shape},
                                                                         {counts, entries} ->
-           indexed? = Filter.indexed_shape?(shape)
+           indexed? = Filter.indexed_shape?(shape, stack_id: stack_id)
            {update_shape_counts(counts, indexed?, 1), [{shape_handle, indexed?} | entries]}
          end) do
       {:error, _reason} = error ->
