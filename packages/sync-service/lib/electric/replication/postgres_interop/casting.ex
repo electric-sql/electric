@@ -99,6 +99,16 @@ defmodule Electric.Replication.PostgresInterop.Casting do
   @doc """
   LIKE function from SQL. Case sensitive by default.
 
+  Follows Postgres semantics:
+
+    * `%` matches any sequence of zero or more characters,
+    * `_` matches any single character,
+    * both wildcards also match newline characters,
+    * the pattern must match the entire string (a trailing newline in the value
+      is not ignored), and
+    * a backslash escapes the following character, so an escaped `%` or `_`
+      matches the literal character instead of acting as a wildcard.
+
   ## Examples
 
       iex> like?("hello", "hell_")
@@ -117,17 +127,35 @@ defmodule Electric.Replication.PostgresInterop.Casting do
       true
   """
   def like?(text, pattern, ignore_case? \\ false) do
-    pattern
-    |> String.split(~r/(?<!\\)[_%]/, include_captures: true, trim: true)
-    |> Enum.map_join(fn
-      "%" -> ".*"
-      "_" -> "."
-      text -> Regex.escape(text)
-    end)
-    |> then(&("^" <> &1 <> "$"))
-    |> Regex.compile!(if ignore_case?, do: [:caseless], else: [])
+    # `:dotall` makes `.` (from `%`/`_`) match newlines like Postgres does, and
+    # `\A..\z` anchors the match to the absolute string boundaries so a trailing
+    # newline in the value is not silently ignored (which `^..$` would do).
+    options = if ignore_case?, do: [:caseless, :dotall], else: [:dotall]
+
+    ("\\A" <> like_pattern_to_regex(pattern) <> "\\z")
+    |> Regex.compile!(options)
     |> Regex.match?(text)
   end
+
+  # Translate a SQL LIKE pattern into a regex source string following Postgres
+  # semantics: `%` -> `.*`, `_` -> `.`, a backslash escapes the next character,
+  # and everything else is matched literally.
+  defp like_pattern_to_regex(pattern), do: like_pattern_to_regex(pattern, [])
+
+  defp like_pattern_to_regex(<<>>, acc),
+    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp like_pattern_to_regex(<<?\\, next::utf8, rest::binary>>, acc),
+    do: like_pattern_to_regex(rest, [Regex.escape(<<next::utf8>>) | acc])
+
+  defp like_pattern_to_regex(<<?%, rest::binary>>, acc),
+    do: like_pattern_to_regex(rest, [".*" | acc])
+
+  defp like_pattern_to_regex(<<?_, rest::binary>>, acc),
+    do: like_pattern_to_regex(rest, ["." | acc])
+
+  defp like_pattern_to_regex(<<c::utf8, rest::binary>>, acc),
+    do: like_pattern_to_regex(rest, [Regex.escape(<<c::utf8>>) | acc])
 
   def ilike?(text, pattern), do: like?(text, pattern, true)
 
