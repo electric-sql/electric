@@ -219,7 +219,7 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 
 The agents subsystem spans seven packages: `agents-runtime`, `agents-mcp` (MCP bridge library used by built-ins), `agents-server`, `agents` (built-in Horton & Worker), `agents-server-ui`, `agents-desktop` (Electron wrapper for the UI), and `agents-server-conformance-tests`.
 
-**Quick start** (from project root, ensure `.env` has `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`):
+**Quick start** (from project root, ensure `.env` has `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or another supported provider key such as `ORCAROUTER_API_KEY`):
 
 ```sh
 ./scripts/dev.sh build       # install + build typescript-client, agents-runtime,

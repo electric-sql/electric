@@ -23,6 +23,7 @@ describe(`model catalog`, () => {
     delete process.env.ANTHROPIC_API_KEY
     delete process.env.DEEPSEEK_API_KEY
     delete process.env.MOONSHOT_API_KEY
+    delete process.env.ORCAROUTER_API_KEY
     process.env.OPENAI_API_KEY = `test-openai-key`
     process.env.CODEX_AUTH_PATH = `/nonexistent/auth.json`
   })
@@ -358,5 +359,66 @@ describe(`model catalog`, () => {
     })
     expect(config.getApiKey).toBeTypeOf(`function`)
     expect(await config.getApiKey?.(`moonshot`)).toBe(`test-moonshot-key`)
+  })
+
+  it(`lists OrcaRouter models when ORCAROUTER_API_KEY is set`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.ORCAROUTER_API_KEY = `test-orcarouter-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.orcarouter.ai`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ id: `orcarouter/auto` }, { id: `orcarouter/fusion` }],
+            }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+
+    expect(catalog).not.toBeNull()
+    expect(catalog!.choices.map((c) => c.provider)).toContain(`orcarouter`)
+    expect(catalog!.choices.map((c) => c.value)).toContain(
+      `orcarouter:orcarouter/auto`
+    )
+    expect(catalog!.choices.map((c) => c.value)).toContain(
+      `orcarouter:orcarouter/fusion`
+    )
+  })
+
+  it(`resolves OrcaRouter model config with a runtime API key hook`, async () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.ORCAROUTER_API_KEY = `test-orcarouter-key`
+    vi.stubGlobal(
+      `fetch`,
+      vi.fn(async (url: string) => {
+        if (String(url).includes(`api.orcarouter.ai`)) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: [{ id: `orcarouter/auto` }] }),
+          }
+        }
+        return { ok: false, status: 401, json: async () => ({}) }
+      })
+    )
+
+    const catalog = await createBuiltinModelCatalog()
+    const config = resolveBuiltinModelConfig(catalog!, {
+      model: `orcarouter:orcarouter/auto`,
+    })
+
+    expect(config).toMatchObject({
+      provider: `orcarouter`,
+      model: `orcarouter/auto`,
+    })
+    expect(config.getApiKey).toBeTypeOf(`function`)
+    expect(await config.getApiKey?.(`orcarouter`)).toBe(`test-orcarouter-key`)
   })
 })

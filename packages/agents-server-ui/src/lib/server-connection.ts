@@ -86,9 +86,9 @@ export interface ServerConnectionState {
  * `null` means "not set". The renderer never reads these from
  * `process.env` directly — that only exists in main.
  *
- * - `anthropic` / `openai` / `deepseek` / `moonshot`: LLM provider
- *   keys. At least one is required for the local Horton runtime to be
- *   useful; the first-launch dialog auto-opens until one is set.
+ * - `anthropic` / `openai` / `deepseek` / `moonshot` / `orcarouter`: LLM
+ *   provider keys. At least one is required for the local Horton runtime
+ *   to be useful; the first-launch dialog auto-opens until one is set.
  * - `brave`: optional search-tool auxiliary. Mirrored to
  *   `BRAVE_SEARCH_API_KEY` to enable Horton's `brave_search` tool;
  *   without it, web search falls back to Anthropic's built-in search.
@@ -114,6 +114,13 @@ export interface ApiKeys {
    * `anthropic`, `openai`, and `deepseek`.
    */
   moonshot: string | null
+  /**
+   * Optional. Mirrored to `ORCAROUTER_API_KEY` so the runtime can use
+   * OrcaRouter's smart-routed OpenAI-compatible gateway models. Treated
+   * as a peer LLM provider alongside `anthropic`, `openai`, `deepseek`,
+   * and `moonshot`.
+   */
+  orcarouter: string | null
   brave: string | null
   e2b: string | null
 }
@@ -126,6 +133,7 @@ export type ModelProvider =
   | `openai-codex`
   | `deepseek`
   | `moonshot`
+  | `orcarouter`
 
 export interface ModelPickerChoice {
   provider: ModelProvider
@@ -166,8 +174,8 @@ export interface ApiKeysStatus {
    * Per-slot ENV-derived suggestions: a value is provided only for
    * slots that are NOT already saved, so the dialog can pre-fill
    * empty inputs from `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
-   * `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` without overwriting the
-   * user's saved choice.
+   * `DEEPSEEK_API_KEY` / `MOONSHOT_API_KEY` / `ORCAROUTER_API_KEY`
+   * without overwriting the user's saved choice.
    */
   suggested: ApiKeys
   codex: CodexStatus
