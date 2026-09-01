@@ -22,7 +22,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       patch_calls: 3,
       expect_calls: 2,
       register_as_replication_client: 1,
-      complete_txn_fragment: 3
+      complete_txn_fragment: 3,
+      txn_fragments: 3
     ]
 
   import Support.ComponentSetup
@@ -1445,6 +1446,176 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(fragment, ctx.stack_id)
 
       refute_receive {:global_last_seen_lsn, _}
+    end
+  end
+
+  describe "public last processed LSN across transaction fragments" do
+    @shape Shape.new!("test_table", inspector: @inspector)
+    # Only matches the second of the two records used below, so it stays
+    # invisible to the EventRouter until the commit fragment arrives.
+    @late_shape Shape.new!("test_table", where: "id > 1", inspector: @inspector)
+
+    setup [:with_registry, :setup_log_collector]
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_relation_info: fn 1234, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      consumers =
+        for id <- 1..2 do
+          consumer =
+            start_link_supervised!(%{
+              id: {:consumer, id},
+              start:
+                {Support.TransactionConsumer, :start_link,
+                 [
+                   [
+                     id: id,
+                     stack_id: ctx.stack_id,
+                     parent: parent,
+                     shape: @shape,
+                     shape_handle: "#{@shape_handle}-#{id}"
+                   ]
+                 ]},
+              restart: :temporary
+            })
+
+          {id, consumer}
+        end
+
+      # Start from a non-zero committed frontier so that "the public LSN has not
+      # moved" is distinguishable from "the public LSN was never populated".
+      prev_lsn = Lsn.from_integer(100)
+      :ok = LsnTracker.set_last_processed_lsn(ctx.stack_id, prev_lsn)
+      :ok = ShapeLogCollector.mark_as_ready(ctx.stack_id)
+
+      %{consumers: consumers, prev_lsn: prev_lsn, txn_lsn: Lsn.from_integer(200)}
+    end
+
+    test "stays at the previous transaction until the commit fragment is processed", ctx do
+      %{stack_id: stack_id, consumers: consumers, prev_lsn: prev_lsn, txn_lsn: txn_lsn} = ctx
+
+      [fragment1, fragment2] =
+        txn_fragments(100, txn_lsn, [
+          %{
+            changes: [new_record(txn_lsn, 0, "1"), new_record(txn_lsn, 2, "2")],
+            has_begin?: true
+          },
+          %{changes: [new_record(txn_lsn, 4, "3")], has_commit?: true}
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
+      Support.TransactionConsumer.assert_consume(consumers, [fragment1])
+
+      # Every fragment inherits the transaction's final LSN, but a non-commit
+      # fragment's changes are not readable yet, so publishing that LSN as the
+      # global proof would let a client see proof T before any data at T.
+      assert LsnTracker.get_last_processed_lsn(stack_id) == prev_lsn
+
+      assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
+      Support.TransactionConsumer.assert_consume(consumers, [fragment2])
+
+      assert LsnTracker.get_last_processed_lsn(stack_id) == txn_lsn
+    end
+
+    test "stays put when a shape first appears in the commit fragment", ctx do
+      %{stack_id: stack_id, prev_lsn: prev_lsn, txn_lsn: txn_lsn} = ctx
+
+      late_consumer =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: :late,
+           stack_id: stack_id,
+           parent: self(),
+           shape: @late_shape,
+           shape_handle: "#{@shape_handle}-late"},
+          id: {:consumer, :late}
+        )
+
+      late_consumers = [{:late, late_consumer}]
+
+      [fragment1, fragment2] =
+        txn_fragments(100, txn_lsn, [
+          %{changes: [new_record(txn_lsn, 0, "1")], has_begin?: true},
+          %{changes: [new_record(txn_lsn, 2, "2")], has_commit?: true}
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
+
+      # The EventRouter cannot know yet that this shape takes part in the
+      # transaction, which is exactly why the proof must not advance.
+      Support.TransactionConsumer.refute_consume(late_consumers)
+      assert LsnTracker.get_last_processed_lsn(stack_id) == prev_lsn
+
+      assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
+
+      Support.TransactionConsumer.assert_consume(late_consumers, [%{fragment2 | has_begin?: true}])
+
+      assert LsnTracker.get_last_processed_lsn(stack_id) == txn_lsn
+    end
+
+    test "only advances once every participating consumer has handled the commit", ctx do
+      %{stack_id: stack_id, consumers: consumers, prev_lsn: prev_lsn, txn_lsn: txn_lsn} = ctx
+
+      [fragment1, fragment2] =
+        txn_fragments(100, txn_lsn, [
+          %{changes: [new_record(txn_lsn, 0, "1")], has_begin?: true},
+          %{
+            changes: [
+              new_record(txn_lsn, 2, "block-until-released", %{
+                "handle" => "#{@shape_handle}-2"
+              })
+            ],
+            has_commit?: true
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
+      Support.TransactionConsumer.assert_consume(consumers, [fragment1])
+
+      task = Task.async(fn -> ShapeLogCollector.handle_event(fragment2, stack_id) end)
+
+      assert_receive {Support.TransactionConsumer, {2, _pid}, {:blocked, from}}, 1000
+
+      # The collector is still inside ConsumerRegistry.publish/2 waiting on this
+      # consumer, so the transaction is not durable for every shape yet.
+      assert LsnTracker.get_last_processed_lsn(stack_id) == prev_lsn
+
+      GenServer.reply(from, :ok)
+
+      assert :ok = Task.await(task)
+      assert LsnTracker.get_last_processed_lsn(stack_id) == txn_lsn
+    end
+
+    test "advances on a transaction that affects no shapes", ctx do
+      %{stack_id: stack_id, consumers: consumers, txn_lsn: txn_lsn} = ctx
+
+      # A transaction filtered out entirely still has to move the proof forward,
+      # otherwise clients would stall behind traffic they don't care about.
+      assert :ok =
+               ShapeLogCollector.handle_event(complete_txn_fragment(100, txn_lsn, []), stack_id)
+
+      Support.TransactionConsumer.refute_consume(consumers)
+      assert LsnTracker.get_last_processed_lsn(stack_id) == txn_lsn
+    end
+
+    defp new_record(lsn, op_index, id, extra \\ %{}) do
+      %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: Map.merge(%{"id" => id}, extra),
+        log_offset: LogOffset.new(lsn, op_index)
+      }
     end
   end
 

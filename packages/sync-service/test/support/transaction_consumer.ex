@@ -85,7 +85,7 @@ defmodule Support.TransactionConsumer do
 
   def handle_call(
         {:handle_event, %Changes.TransactionFragment{} = txn_fragment, _ctx},
-        _from,
+        from,
         state
       ) do
     send(state.parent, {__MODULE__, {state.id, self()}, [txn_fragment]})
@@ -99,6 +99,13 @@ defmodule Support.TransactionConsumer do
         }
       ] ->
         exit(reason)
+
+      [%Changes.NewRecord{record: %{"id" => "block-until-released", "handle" => ^handle}}] ->
+        # Hold the reply so the test can hold the ShapeLogCollector inside
+        # ConsumerRegistry.publish/2 and observe its state mid-fan-out. The
+        # test releases us with `GenServer.reply(from, :ok)`.
+        send(state.parent, {__MODULE__, {state.id, self()}, {:blocked, from}})
+        {:noreply, state}
 
       _ ->
         {:reply, :ok, state}
