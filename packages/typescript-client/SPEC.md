@@ -297,10 +297,13 @@ back to Live, SSE state resets to defaults.
 When a non-SSE replay reaches an up-to-date message with the same cursor as the
 previous session, the duplicate `up-to-date` control message is suppressed. Every
 other message in that batch, including inserts, updates, and deletes, is still
-delivered to stream subscribers. A fresh up-to-date message is delivered once the
+delivered to stream subscribers. If suppression leaves the batch empty (it carried
+nothing but the duplicate `up-to-date`), subscribers are not notified at all rather
+than receiving an empty batch. A fresh up-to-date message is delivered once the
 cursor advances.
 
-**Enforcement**: Dedicated test (`should preserve change messages while suppressing a cached up-to-date`).
+**Enforcement**: Dedicated tests (`should preserve change messages while suppressing a cached up-to-date`,
+`should not notify subscribers for a batch emptied by replay suppression`).
 
 **Reachability note**: This is a state-machine invariant, not a server scenario.
 The server only sets `electric-cursor` on `live=true` responses, the client only

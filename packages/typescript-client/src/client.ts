@@ -1595,6 +1595,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return true // Always process control messages
     })
 
+    // A replay batch that carried nothing but the suppressed up-to-date has
+    // nothing to deliver. Skip the callback rather than publishing an empty
+    // batch: subscribers are promised one or more messages per notification,
+    // and the pre-suppression code never notified for a suppressed replay.
+    // Batches emptied by the snapshot tracker alone are still published as
+    // before.
+    if (messagesToProcess.length === 0 && transition.suppressUpToDate) return
+
     await this.#publish(messagesToProcess, {
       allowReentrantBypass: opts.allowReentrantPublishBypass,
     })
