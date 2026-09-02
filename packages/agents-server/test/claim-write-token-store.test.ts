@@ -108,4 +108,74 @@ describe(`ClaimWriteTokenStore`, () => {
     expect(store.takeDelivered(`tenant-a`, `wake-1`)).toBeUndefined()
     expect(store.takeDelivered(`tenant-b`, `wake-1`)).toBe(`token-b`)
   })
+
+  describe(`expiry`, () => {
+    function clockedStore(ttlMs = 1_000) {
+      const clock = { now: 0 }
+      return {
+        clock,
+        store: new ClaimWriteTokenStore({ ttlMs, now: () => clock.now }),
+      }
+    }
+
+    it(`expires a claim that is neither re-minted nor renewed within the TTL`, () => {
+      const { clock, store } = clockedStore()
+
+      const token = store.mint(`tenant-a`, `/one/main`, `wake-1`)
+      clock.now = 999
+      expect(store.isValid(`tenant-a`, `/one/main`, token)).toBe(true)
+      expect(store.owns(`tenant-a`, `/one/main`, `wake-1`)).toBe(true)
+
+      clock.now = 1_000
+      expect(store.isValid(`tenant-a`, `/one/main`, token)).toBe(false)
+      expect(store.owns(`tenant-a`, `/one/main`, `wake-1`)).toBe(false)
+    })
+
+    it(`re-minting and renewing both extend the claim`, () => {
+      const { clock, store } = clockedStore()
+
+      const first = store.mint(`tenant-a`, `/one/main`, `wake-1`)
+      clock.now = 800
+      const second = store.mint(`tenant-a`, `/one/main`, `wake-1`)
+      clock.now = 1_500
+      expect(store.isValid(`tenant-a`, `/one/main`, first)).toBe(true)
+      expect(store.isValid(`tenant-a`, `/one/main`, second)).toBe(true)
+
+      store.renew(`tenant-a`, `wake-1`)
+      clock.now = 2_400
+      expect(store.isValid(`tenant-a`, `/one/main`, second)).toBe(true)
+      expect(store.owns(`tenant-a`, `/one/main`, `wake-1`)).toBe(true)
+    })
+
+    it(`expires a delivered token nobody claimed`, () => {
+      const { clock, store } = clockedStore()
+
+      store.recordDelivered(`tenant-a`, `wake-1`, `backend-token`)
+      store.recordDelivered(`tenant-a`, `wake-2`, `backend-token-2`)
+      clock.now = 500
+      store.renew(`tenant-a`, `wake-2`)
+      clock.now = 1_000
+
+      expect(store.takeDelivered(`tenant-a`, `wake-1`)).toBeUndefined()
+      expect(store.takeDelivered(`tenant-a`, `wake-2`)).toBe(`backend-token-2`)
+    })
+
+    it(`sweeps expired entries so a later mint by a different consumer starts clean`, () => {
+      const { clock, store } = clockedStore()
+
+      const stale = store.mint(`tenant-a`, `/one/main`, `wake-1`)
+      store.recordDelivered(`tenant-a`, `wake-1`, `delivered-1`)
+      clock.now = 1_000
+      // A mint for another stream triggers the sweep; the stale consumer's
+      // entries are gone, not merely hidden, so clearing it later is a no-op
+      // that cannot touch a successor's claim.
+      store.mint(`tenant-a`, `/two/main`, `wake-2`)
+      const successor = store.mint(`tenant-a`, `/one/main`, `wake-3`)
+      store.clearConsumer(`tenant-a`, `wake-1`)
+
+      expect(store.isValid(`tenant-a`, `/one/main`, stale)).toBe(false)
+      expect(store.isValid(`tenant-a`, `/one/main`, successor)).toBe(true)
+      expect(store.takeDelivered(`tenant-a`, `wake-1`)).toBeUndefined()
+    })
+  })
 })

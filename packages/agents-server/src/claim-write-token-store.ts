@@ -10,12 +10,42 @@ interface ActiveClaimWriteToken {
    */
   previousToken?: string
   consumerId: string
+  expiresAt: number
+}
+
+interface DeliveredWriteToken {
+  token: string
+  expiresAt: number
+}
+
+/**
+ * How long an entry stays valid without a mint or renewal: the Durable
+ * Streams default claim lease (30s, PROTOCOL §7) plus the grace a backend
+ * keeps a write token alive past the lease. A heartbeat renews the entry, so
+ * only a claim that stopped heartbeating — or one whose heartbeats and done
+ * all reached other server instances — ages out.
+ */
+const DEFAULT_TTL_MS = 30_000 + 5_000
+
+export interface ClaimWriteTokenStoreOptions {
+  ttlMs?: number
+  now?: () => number
 }
 
 export class ClaimWriteTokenStore {
   private readonly claimsByStream = new Map<string, ActiveClaimWriteToken>()
   private readonly streamKeysByConsumer = new Map<string, Set<string>>()
-  private readonly deliveredTokensByConsumer = new Map<string, string>()
+  private readonly deliveredTokensByConsumer = new Map<
+    string,
+    DeliveredWriteToken
+  >()
+  private readonly ttlMs: number
+  private readonly now: () => number
+
+  constructor(options: ClaimWriteTokenStoreOptions = {}) {
+    this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
+    this.now = options.now ?? Date.now
+  }
 
   mint(
     service: string,
@@ -23,6 +53,7 @@ export class ClaimWriteTokenStore {
     consumerId: string,
     token: string = randomUUID()
   ): string {
+    this.sweep()
     const streamKey = this.streamKey(service, streamPath)
     const consumerKey = this.consumerKey(service, consumerId)
     const previousClaimForStream = this.claimsByStream.get(streamKey)
@@ -36,6 +67,7 @@ export class ClaimWriteTokenStore {
     this.claimsByStream.set(streamKey, {
       token,
       consumerId,
+      expiresAt: this.now() + this.ttlMs,
       ...(previousClaimForStream?.consumerId === consumerId
         ? { previousToken: previousClaimForStream.token }
         : {}),
@@ -45,31 +77,46 @@ export class ClaimWriteTokenStore {
   }
 
   /**
+   * Extends the expiry of every entry a consumer holds. Called on a
+   * heartbeat the backend answered without re-minting, so an entry this
+   * process is the sole authority for (no Write Fencing extension) lives as
+   * long as the claim does.
+   */
+  renew(service: string, consumerId: string): void {
+    const consumerKey = this.consumerKey(service, consumerId)
+    const expiresAt = this.now() + this.ttlMs
+    const delivered = this.deliveredTokensByConsumer.get(consumerKey)
+    if (delivered) delivered.expiresAt = expiresAt
+    for (const streamKey of this.streamKeysByConsumer.get(consumerKey) ?? []) {
+      const claim = this.claimsByStream.get(streamKey)
+      if (claim) claim.expiresAt = expiresAt
+    }
+  }
+
+  /**
    * Remembers a write token the Durable Streams backend issued with a wake
    * delivery (webhook notification or pull-wake claim), keyed by the wake's
    * consumer id, until that consumer's claim callback mints it as the active
    * claim write token.
    */
   recordDelivered(service: string, consumerId: string, token: string): void {
-    this.deliveredTokensByConsumer.set(
-      this.consumerKey(service, consumerId),
-      token
-    )
+    this.sweep()
+    this.deliveredTokensByConsumer.set(this.consumerKey(service, consumerId), {
+      token,
+      expiresAt: this.now() + this.ttlMs,
+    })
   }
 
   takeDelivered(service: string, consumerId: string): string | undefined {
     const consumerKey = this.consumerKey(service, consumerId)
-    const token = this.deliveredTokensByConsumer.get(consumerKey)
-    if (token !== undefined) {
-      this.deliveredTokensByConsumer.delete(consumerKey)
-    }
-    return token
+    const delivered = this.deliveredTokensByConsumer.get(consumerKey)
+    if (delivered === undefined) return undefined
+    this.deliveredTokensByConsumer.delete(consumerKey)
+    return delivered.expiresAt > this.now() ? delivered.token : undefined
   }
 
   isValid(service: string, streamPath: string, token: string): boolean {
-    const activeClaim = this.claimsByStream.get(
-      this.streamKey(service, streamPath)
-    )
+    const activeClaim = this.liveClaim(this.streamKey(service, streamPath))
     return (
       activeClaim !== undefined &&
       (activeClaim.token === token || activeClaim.previousToken === token)
@@ -78,8 +125,8 @@ export class ClaimWriteTokenStore {
 
   owns(service: string, streamPath: string, consumerId: string): boolean {
     return (
-      this.claimsByStream.get(this.streamKey(service, streamPath))
-        ?.consumerId === consumerId
+      this.liveClaim(this.streamKey(service, streamPath))?.consumerId ===
+      consumerId
     )
   }
 
@@ -104,6 +151,35 @@ export class ClaimWriteTokenStore {
     this.streamKeysByConsumer.delete(consumerKey)
     for (const streamKey of streamKeys) {
       this.claimsByStream.delete(streamKey)
+    }
+  }
+
+  private liveClaim(streamKey: string): ActiveClaimWriteToken | undefined {
+    const claim = this.claimsByStream.get(streamKey)
+    return claim !== undefined && claim.expiresAt > this.now()
+      ? claim
+      : undefined
+  }
+
+  /**
+   * Drops expired entries. Lazy — run from the paths that add entries — so a
+   * server instance that saw a wake's delivery or claim but none of its
+   * later callbacks does not accumulate them forever.
+   */
+  private sweep(): void {
+    const now = this.now()
+    for (const [consumerKey, streamKeys] of this.streamKeysByConsumer) {
+      for (const streamKey of streamKeys) {
+        const claim = this.claimsByStream.get(streamKey)
+        if (claim !== undefined && claim.expiresAt > now) continue
+        this.claimsByStream.delete(streamKey)
+        this.removeConsumerStream(consumerKey, streamKey)
+      }
+    }
+    for (const [consumerKey, delivered] of this.deliveredTokensByConsumer) {
+      if (delivered.expiresAt <= now) {
+        this.deliveredTokensByConsumer.delete(consumerKey)
+      }
     }
   }
 
