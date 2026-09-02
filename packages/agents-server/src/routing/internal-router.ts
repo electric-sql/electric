@@ -16,14 +16,17 @@ import {
 } from '../electric-agents-http.js'
 import { consumerCallbacks, subscriptionWebhooks } from '../db/schema.js'
 import {
+  ErrCodeWakeAlreadyClaimed,
   ErrCodeWakeCallbackNotFound,
   ErrCodeForkInProgress,
   ErrCodeSubscriptionNotFound,
   ErrCodeUnauthorized,
+  ErrCodeWriteTokenUnavailable,
 } from '../electric-agents-types.js'
 import { ATTR, tracer } from '../tracing.js'
 import { decodeJsonObject } from '../utils/server-utils.js'
 import { serverLog } from '../utils/log.js'
+import { DEFAULT_CLAIM_LEASE_MS } from '../claim-write-token-store.js'
 import { applyDurableStreamsBearer } from '../stream-client.js'
 import { getDefaultWebhookSigner } from '../webhook-signing.js'
 import { resolveDurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
@@ -41,6 +44,7 @@ import type {
   WebhookSourceContract,
   WebhookSignatureVerifierConfig,
 } from '@electric-ax/agents-runtime'
+import type { ElectricAgentsEntity } from '../electric-agents-types.js'
 import type { TenantContext } from './context.js'
 import type { DurableStreamsRoutingAdapter } from './durable-streams-routing-adapter.js'
 import type { WebhookSigner } from '../webhook-signing.js'
@@ -670,7 +674,7 @@ async function subscriptionWebhook(
     )
   } catch (err) {
     if (runningEntityUrl) {
-      await ctx.entityManager.registry.updateStatus(runningEntityUrl, `idle`)
+      await ctx.entityManager.registry.revertRunningStatus(runningEntityUrl)
     }
     return apiError(
       502,
@@ -682,6 +686,13 @@ async function subscriptionWebhook(
   const responseBytes = upstream.body
     ? new Uint8Array(await upstream.arrayBuffer())
     : new Uint8Array()
+  if (!upstream.ok && runningEntityUrl) {
+    // The runtime refused the wake (draining, unknown type), so nothing will
+    // claim or finish it; the backend retries later. Leaving `running` set
+    // for that whole backoff misreports the entity, exactly as a failed
+    // forward would.
+    await ctx.entityManager.registry.revertRunningStatus(runningEntityUrl)
+  }
   return responseFromUpstream(upstream, responseBytes)
 }
 
@@ -723,28 +734,44 @@ async function wakeCallback(
   )
   if (!parsedBodyResult.ok) return parsedBodyResult.response
   const requestBody = parsedBodyResult.value as WakeCallbackBody | undefined
-  const isClaimRequest =
-    requestBody?.wakeId !== undefined || requestBody?.wake_id !== undefined
   const isDoneRequest = requestBody?.done === true
+  // A done carries `wake_id` too (PROTOCOL §7.1) — only today's runtime
+  // omits it. Routed as a claim it would be answered
+  // WRITE_TOKEN_UNAVAILABLE (a backend mints no token for a done) and would
+  // never reach the release below, leaving the claim and the entity's
+  // dispatch state pointing at a wake that finished.
+  const isClaimCallback =
+    !isDoneRequest &&
+    (requestBody?.wakeId !== undefined || requestBody?.wake_id !== undefined)
+  const epoch = requestBody?.generation ?? requestBody?.epoch
+  const subscriptionId = durableStreamsSubscriptionCallback(target.callbackUrl)
 
   const headers = forwardHeadersFromRequest(request)
   headers.delete(`content-length`)
 
-  if (isClaimRequest && !isDoneRequest) {
-    let responseBody: Record<string, unknown> = { ok: true }
-    if (target.primaryStream) {
-      const writeToken = await mintClaimWriteToken(
-        ctx,
-        target.primaryStream,
-        consumerId
-      )
-      if (writeToken) {
-        responseBody = { ...responseBody, writeToken }
-      }
-    }
-    return json(responseBody)
+  // Without stream fencing this store is the only write authority, so a claim
+  // the backend refused — or never answered — is still safe to run locally:
+  // the round trip is there to fetch the backend's token, not to gate the
+  // wake, and answering the runtime with the backend's error would drop a
+  // wake that used to run and make it wait out a lease. With fencing on there
+  // is no such fallback: a token minted here is refused on the first append.
+  const mintClaimLocally = async (reason: string): Promise<Response> => {
+    serverLog.warn(
+      `[wake-callback] claim not confirmed by the backend (${reason}); minting locally for consumer=${consumerId} (stream fencing off)`
+    )
+    const writeToken = target.primaryStream
+      ? await mintClaimWriteToken(ctx, target.primaryStream, consumerId)
+      : undefined
+    return json(writeToken ? { ok: true, writeToken } : { ok: true })
   }
 
+  // A claim is forwarded like a heartbeat rather than answered here: as a
+  // non-done callback it renews the lease and, on a backend with the Write
+  // Fencing extension, returns the wake's write token (PROTOCOL §7.1). The
+  // server instance handling the claim is not necessarily the one that
+  // received the delivery, so the token the delivery carried may live in
+  // another process's memory; the backend is the only party that can hand it
+  // to whichever instance the runtime reached.
   const upstreamBody = encodeWakeCallbackBody(
     ctx.service,
     consumerId,
@@ -757,9 +784,6 @@ async function wakeCallback(
 
   let upstream: Response
   try {
-    const subscriptionId = durableStreamsSubscriptionCallback(
-      target.callbackUrl
-    )
     if (subscriptionId) {
       const token = claimTokenFromRequest(request)
       if (!token) {
@@ -784,24 +808,74 @@ async function wakeCallback(
       })
     }
   } catch (err) {
-    return apiError(
-      502,
-      `WAKE_CALLBACK_FAILED`,
-      err instanceof Error ? err.message : String(err)
-    )
+    const message = err instanceof Error ? err.message : String(err)
+    if (isClaimCallback && !ctx.entityManager.fencedSessionStreams) {
+      return await mintClaimLocally(message)
+    }
+    return apiError(502, `WAKE_CALLBACK_FAILED`, message)
   }
 
   let responseBytes: Uint8Array = upstream.body
     ? new Uint8Array(await upstream.arrayBuffer())
     : new Uint8Array()
 
-  if (isClaimRequest && upstream.ok && target.primaryStream) {
+  if (
+    isClaimCallback &&
+    !upstream.ok &&
+    !ctx.entityManager.fencedSessionStreams
+  ) {
+    return await mintClaimLocally(`answered ${upstream.status}`)
+  }
+
+  if (isClaimCallback && upstream.ok && target.primaryStream) {
     const responseBody = decodeJsonObject(responseBytes)
     if (responseBody?.ok === true) {
+      const entity = await ctx.entityManager.registry.getEntityByStream(
+        target.primaryStream
+      )
+      const backendToken = backendWriteToken(responseBody)
+      if (
+        backendToken === undefined &&
+        ctx.entityManager.fencedSessionStreams
+      ) {
+        // The backend is the write authority for fenced streams
+        // (stream-append.ts), so a token minted here would be refused on the
+        // runtime's first append, and `ok` without one lets the runtime
+        // claim, fail every write and then ack the message away. Refuse the
+        // claim instead: the runtime drops the wake unclaimed and the backend
+        // re-wakes it when the lease lapses.
+        return apiError(
+          502,
+          ErrCodeWriteTokenUnavailable,
+          `Backend issued no write token for the claim`
+        )
+      }
+      if (entity && epoch !== undefined && !subscriptionId) {
+        // Pull-wake claims were materialised when the runner claimed them
+        // (runners-router); webhook wakes only now, once the backend has
+        // confirmed the claim is live, so no row is left behind for a wake
+        // that was delivered but never claimed.
+        const claimed = await materializeCallbackClaim(
+          ctx,
+          entity,
+          target.primaryStream,
+          consumerId,
+          epoch
+        )
+        if (!claimed) {
+          return apiError(
+            409,
+            ErrCodeWakeAlreadyClaimed,
+            `Wake is already claimed`
+          )
+        }
+      }
       const writeToken = await mintClaimWriteToken(
         ctx,
         target.primaryStream,
-        consumerId
+        consumerId,
+        backendToken,
+        entity
       )
       if (writeToken) {
         responseBody.writeToken = writeToken
@@ -814,12 +888,8 @@ async function wakeCallback(
     // token tracks the backend's, and surface it to the runtime as
     // `writeToken` alongside the passed-through ack body.
     const responseBody = decodeJsonObject(responseBytes)
-    const refreshedToken = responseBody?.write_token
-    if (
-      responseBody?.ok === true &&
-      typeof refreshedToken === `string` &&
-      refreshedToken !== ``
-    ) {
+    const refreshedToken = backendWriteToken(responseBody)
+    if (responseBody?.ok === true && refreshedToken !== undefined) {
       const writeToken = await mintClaimWriteToken(
         ctx,
         target.primaryStream,
@@ -830,11 +900,12 @@ async function wakeCallback(
         responseBody.writeToken = writeToken
         responseBytes = new TextEncoder().encode(JSON.stringify(responseBody))
       }
+    } else if (responseBody?.ok === true) {
+      ctx.runtime.claimWriteTokens.renew(ctx.service, consumerId)
     }
   }
 
   try {
-    const epoch = requestBody?.generation ?? requestBody?.epoch
     if (
       upstream.ok &&
       !isDoneRequest &&
@@ -888,23 +959,33 @@ async function wakeCallback(
       const entity =
         await ctx.entityManager.registry.getEntityByStream(releasedClaimStream)
 
-      // Transition entity back to idle when either signal says it's safe:
+      // Transition the entity out of its run when either signal says it's
+      // safe:
       // - entityCleared: our release just cleared the entity's active
-      //   dispatch state, so no in-flight wake remains.
+      //   dispatch state, so no in-flight wake remains. This is the durable
+      //   signal, and the one that holds on a server instance other than
+      //   the one that minted the claim's write token.
       // - stillOwnsClaim: this consumer is still the in-memory write-token
-      //   owner, so no newer wake has displaced it. Covers two cases:
-      //   (a) retry of a failed done (first attempt cleared the DB state
-      //   but failed to update status), (b) server restart scenarios where
-      //   the token is intact even though entityDispatchState may diverge.
+      //   owner, so no newer wake has displaced it. Covers a retry of a
+      //   failed done (first attempt cleared the DB state but failed to
+      //   update status) on the minting instance.
       // If both are false, a newer wake owns the entity — leave status as-is.
+      //
+      // The settle is a statement of its own, not part of the release: the
+      // next wake can be delivered in between and set `running` again, and
+      // this write would then report `idle` under it. It is self-correcting
+      // (that wake's own done settles the status, and `updateStatusAfterDone`
+      // never touches a terminal status), which is why the release keeps the
+      // narrower job of clearing the dispatch state.
       if (entity && (entityCleared || stillOwnsClaim)) {
-        await ctx.entityManager.registry.updateStatus(
-          entity.url,
-          entity.status === `stopping` ? `stopped` : `idle`
+        const status = await ctx.entityManager.registry.updateStatusAfterDone(
+          entity.url
         )
-        await ctx.entityBridgeManager.onEntityChanged(entity.url)
+        if (status !== null) {
+          await ctx.entityBridgeManager.onEntityChanged(entity.url)
+        }
         serverLog.info(
-          `[wake-callback] status updated after done for ${entity.url}`
+          `[wake-callback] status updated after done for ${entity.url}: ${status ?? `unchanged (${entity.status})`}`
         )
       } else if (!entity) {
         serverLog.warn(
@@ -912,17 +993,15 @@ async function wakeCallback(
         )
       }
 
-      // Clear the in-memory write token only if this consumer still owns it.
-      // If a newer wake has taken over, that newer wake owns the token now
-      // and we must not clear it out from under it.
-      if (stillOwnsClaim) {
-        ctx.runtime.claimWriteTokens.clearStream(
-          ctx.service,
-          releasedClaimStream
-        )
-      } else if (entity) {
+      // Everything this consumer holds is finished: its claim entries (if
+      // this instance minted or refreshed them) and its delivered token (if
+      // this instance received the delivery but another one handled the
+      // claim). Consumer-scoped, so a newer wake's entry for the same stream
+      // is untouched.
+      ctx.runtime.claimWriteTokens.clearConsumer(ctx.service, consumerId)
+      if (!stillOwnsClaim && entity) {
         serverLog.info(
-          `[wake-callback] done arrived after in-memory token evicted (stream=${releasedClaimStream} consumer=${consumerId})`
+          `[wake-callback] done for a claim this instance did not mint (stream=${releasedClaimStream} consumer=${consumerId})`
         )
       }
     } else if (requestBody?.done === true) {
@@ -943,29 +1022,69 @@ async function wakeCallback(
   return responseFromUpstream(upstream, responseBytes)
 }
 
+function backendWriteToken(
+  responseBody: Record<string, unknown> | null
+): string | undefined {
+  const token = responseBody?.write_token
+  return typeof token === `string` && token !== `` ? token : undefined
+}
+
+async function materializeCallbackClaim(
+  ctx: TenantContext,
+  entity: ElectricAgentsEntity,
+  streamPath: string,
+  consumerId: string,
+  epoch: number
+): Promise<boolean> {
+  return await ctx.entityManager.registry.materializeActiveClaim({
+    consumerId,
+    epoch,
+    wakeId: consumerId,
+    entityUrl: entity.url,
+    streamPath,
+    // A webhook notification carries no `lease_ttl_ms` (PROTOCOL §7.1), so
+    // the row records the subscription default the backend applied.
+    leaseExpiresAt: new Date(Date.now() + DEFAULT_CLAIM_LEASE_MS),
+    // The backend fences a callback for a lapsed or re-armed wake itself,
+    // before this runs; the only way to meet an active row here is a second
+    // delivery of a wake another runtime is still processing.
+    unlessActive: true,
+  })
+}
+
 async function mintClaimWriteToken(
   ctx: TenantContext,
   streamPath: string,
   consumerId: string,
-  backendToken?: string
+  backendToken?: string,
+  // The claim path has already looked the entity up for the durable row;
+  // pass it in rather than reading it again on the wake's hot path.
+  knownEntity?: ElectricAgentsEntity | null
 ): Promise<string | undefined> {
-  const entity = await ctx.entityManager.registry.getEntityByStream(streamPath)
+  const entity =
+    knownEntity !== undefined
+      ? knownEntity
+      : await ctx.entityManager.registry.getEntityByStream(streamPath)
   if (!entity) return undefined
 
   // When the Durable Streams backend issued a write token for this claim
   // (Write Fencing extension), adopt it as the claim's write token so the
   // store stays the single validation authority while the backend is the
-  // mint. When the backend supplied none, the store mints its own token and
-  // behaviour is byte-for-byte what it is today.
+  // mint. When the backend supplied none, the store mints its own token —
+  // from the delivery, if this instance received it — and behaviour is
+  // byte-for-byte what it is today. (With `fencedSessionStreams` the claim
+  // path has already refused a claim the backend issued no token for.)
   //
   // Version-skew matrix — adoption is data-driven (it follows `write_token`
   // fields wherever the backend sends them), while stream fencing is a
   // separate opt-in (`fencedSessionStreams`):
   // - Base backend (no Write Fencing), any server/runtime: no `write_token`
-  //   ever appears, so the store mints and nothing changes. With
-  //   `fencedSessionStreams` on, the fencing headers are sent but a base
-  //   backend ignores them (additive headers, base spec §11), so
-  //   enforcement remains this store only.
+  //   ever appears, so the store mints and nothing changes — including for a
+  //   claim the backend refused, which falls back to a local mint.
+  //   `fencedSessionStreams` is not available against a base backend at all:
+  //   stream creation fails on the missing fencing support
+  //   (`assertWriteFenced`), and a claim it issues no token for is refused
+  //   rather than minted for.
   // - Token-minting backend, older server (no adoption): the optional
   //   fields are ignored and the old server mints its own tokens; it never
   //   creates streams fenced, so the backend enforces nothing.

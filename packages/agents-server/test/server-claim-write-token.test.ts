@@ -729,14 +729,15 @@ describe(`Claim-scoped write tokens`, () => {
     await registry.updateStatus(entity.url, `running`)
     expect(await getEntityStatus(entity.url)).toBe(`running`)
 
-    const origUpdateStatus = registry.updateStatus.bind(registry)
+    const origUpdateStatusAfterDone =
+      registry.updateStatusAfterDone.bind(registry)
     let shouldFail = true
-    registry.updateStatus = async (...args: [string, string]) => {
+    registry.updateStatusAfterDone = async (entityUrl: string) => {
       if (shouldFail) {
         shouldFail = false
         throw new Error(`simulated DB failure`)
       }
-      return origUpdateStatus(...args)
+      return origUpdateStatusAfterDone(entityUrl)
     }
 
     const firstDone = await sendDone({
@@ -747,7 +748,7 @@ describe(`Claim-scoped write tokens`, () => {
     expect(firstDone.status).toBe(200)
     expect(await getEntityStatus(entity.url)).toBe(`running`)
 
-    registry.updateStatus = origUpdateStatus
+    registry.updateStatusAfterDone = origUpdateStatusAfterDone
 
     const retryDone = await sendDone({
       consumerId: `consumer-done-retry`,

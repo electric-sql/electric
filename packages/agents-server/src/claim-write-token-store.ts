@@ -19,13 +19,25 @@ interface DeliveredWriteToken {
 }
 
 /**
- * How long an entry stays valid without a mint or renewal: the Durable
- * Streams default claim lease (30s, PROTOCOL §7) plus the grace a backend
- * keeps a write token alive past the lease. A heartbeat renews the entry, so
- * only a claim that stopped heartbeating — or one whose heartbeats and done
- * all reached other server instances — ages out.
+ * The Durable Streams default claim lease (PROTOCOL §7): a webhook wake
+ * carries no `lease_ttl_ms`, so this is what a claim confirmed through the
+ * wake callback is recorded with, and what a claim's write token is kept
+ * alive for.
  */
-const DEFAULT_TTL_MS = 30_000 + 5_000
+export const DEFAULT_CLAIM_LEASE_MS = 30_000
+
+/**
+ * The grace a backend keeps a write token valid past the lease it was minted
+ * for.
+ */
+const WRITE_TOKEN_FENCE_GRACE_MS = 5_000
+
+/**
+ * How long an entry stays valid without a mint or renewal. A heartbeat renews
+ * the entry, so only a claim that stopped heartbeating — or one whose
+ * heartbeats and done all reached other server instances — ages out.
+ */
+const DEFAULT_TTL_MS = DEFAULT_CLAIM_LEASE_MS + WRITE_TOKEN_FENCE_GRACE_MS
 
 export interface ClaimWriteTokenStoreOptions {
   ttlMs?: number
