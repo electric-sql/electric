@@ -1,6 +1,10 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import postgres from 'postgres'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getCronStreamPath } from '@electric-ax/agents-runtime'
 import { DurableStreamTestServer } from '@durable-streams/server'
+import { runMigrations } from '../src/db'
 import { ElectricAgentsServer } from '../src/server'
 import {
   durableStreamTestServerUrl,
@@ -8,10 +12,81 @@ import {
   waitFor,
 } from './test-utils'
 import {
-  TEST_ELECTRIC_URL,
-  TEST_POSTGRES_URL,
-  resetElectricAgentsTestBackend,
-} from './test-backend'
+  ELECTRIC_AGENTS_COMPOSE_FILE,
+  getElectricAgentsComposeProject,
+  getElectricAgentsDevPorts,
+} from './electric-agents-compose-utils'
+
+const execFileAsync = promisify(execFile)
+const { postgresPort, electricPort } = getElectricAgentsDevPorts()
+const TEST_POSTGRES_PORT = postgresPort + 20
+const TEST_ELECTRIC_PORT = electricPort + 20
+const TEST_COMPOSE_PROJECT = `${getElectricAgentsComposeProject()}-agent-server-scheduler`
+const TEST_POSTGRES_URL = `postgres://electric_agents:electric_agents@localhost:${TEST_POSTGRES_PORT}/electric_agents`
+const TEST_ELECTRIC_URL = `http://localhost:${TEST_ELECTRIC_PORT}`
+const TEST_BACKEND_ENV = {
+  ...process.env,
+  ELECTRIC_AGENTS_COMPOSE_PROJECT: TEST_COMPOSE_PROJECT,
+  PG_HOST_PORT: String(TEST_POSTGRES_PORT),
+  ELECTRIC_HOST_PORT: String(TEST_ELECTRIC_PORT),
+  JAEGER_UI_PORT: `0`,
+  JAEGER_OTLP_HTTP_PORT: `0`,
+  JAEGER_OTLP_GRPC_PORT: `0`,
+  DATABASE_URL: TEST_POSTGRES_URL,
+  ELECTRIC_URL: TEST_ELECTRIC_URL,
+  ELECTRIC_AGENTS_TEST_BACKEND_MANAGED: `1`,
+}
+
+async function startTestBackend(): Promise<void> {
+  await execFileAsync(
+    `docker`,
+    [
+      `compose`,
+      `-p`,
+      TEST_COMPOSE_PROJECT,
+      `-f`,
+      ELECTRIC_AGENTS_COMPOSE_FILE,
+      `up`,
+      `-d`,
+      `--wait`,
+    ],
+    { env: TEST_BACKEND_ENV }
+  )
+}
+
+async function stopTestBackend(): Promise<void> {
+  await execFileAsync(
+    `docker`,
+    [
+      `compose`,
+      `-p`,
+      TEST_COMPOSE_PROJECT,
+      `-f`,
+      ELECTRIC_AGENTS_COMPOSE_FILE,
+      `down`,
+      `-v`,
+    ],
+    { env: TEST_BACKEND_ENV }
+  )
+}
+
+async function resetTestBackend(): Promise<void> {
+  await startTestBackend()
+  const pg = postgres(TEST_POSTGRES_URL, {
+    max: 1,
+    onnotice: () => {},
+  })
+  try {
+    await pg.unsafe(`
+      DROP SCHEMA IF EXISTS drizzle CASCADE;
+      DROP SCHEMA IF EXISTS public CASCADE;
+      CREATE SCHEMA public AUTHORIZATION CURRENT_USER;
+    `)
+  } finally {
+    await pg.end()
+  }
+  await runMigrations(TEST_POSTGRES_URL)
+}
 
 describe(`Scheduler Integration`, () => {
   let dsServer: DurableStreamTestServer
@@ -90,12 +165,16 @@ describe(`Scheduler Integration`, () => {
       longPollTimeout: 500,
       webhooks: true,
     })
-    await Promise.all([resetElectricAgentsTestBackend(), dsServer.start()])
+    await Promise.all([resetTestBackend(), dsServer.start()])
     await startElectricAgentsServer()
   }, 120_000)
 
   afterAll(async () => {
-    await Promise.allSettled([stopElectricAgentsServer(), dsServer.stop()])
+    await Promise.allSettled([
+      stopElectricAgentsServer(),
+      dsServer.stop(),
+      stopTestBackend(),
+    ])
   }, 120_000)
 
   it(`delayed_send survives server restart and lands exactly once`, async () => {
@@ -289,7 +368,7 @@ describe(`Scheduler Integration`, () => {
         }),
       }
     )
-    expect(scheduleRes.status).toBe(200)
+    expect(scheduleRes.status, await scheduleRes.clone().text()).toBe(200)
 
     await waitFor(
       async () => {
