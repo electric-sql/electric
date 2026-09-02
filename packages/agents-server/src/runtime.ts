@@ -49,6 +49,7 @@ export interface ElectricAgentsTenantRuntimeOptions {
   pgSync?: PgSyncBridgeManagerOptions
   claimWriteTokens?: ClaimWriteTokenStore
   stopWakeRegistryOnShutdown?: boolean
+  fencedSessionStreams?: boolean
 }
 
 export class ElectricAgentsTenantRuntime {
@@ -99,6 +100,7 @@ export class ElectricAgentsTenantRuntime {
           token
         ),
       stopWakeRegistryOnShutdown: options.stopWakeRegistryOnShutdown ?? false,
+      fencedSessionStreams: options.fencedSessionStreams,
     })
     this.pgSyncBridgeManager =
       options.pgSyncBridgeManager ??
@@ -250,23 +252,29 @@ export class ElectricAgentsTenantRuntime {
         continue
       }
 
-      await this.manager.wakeRegistry.unregisterByManifestKey(
+      const reg = buildManifestWakeRegistration(
         subscriberUrl,
-        manifestKey,
-        this.serviceId
+        value,
+        manifestKey
       )
+      if (reg) {
+        // Replace rather than unregister-then-register: the spawn that wrote
+        // this manifest entry registered the same wake up front, and its
+        // child can finish in the gap between the two.
+        await this.manager.wakeRegistry.replaceByManifestKey({
+          ...reg,
+          manifestKey,
+          tenantId: this.serviceId,
+        })
+      } else {
+        await this.manager.wakeRegistry.unregisterByManifestKey(
+          subscriberUrl,
+          manifestKey,
+          this.serviceId
+        )
+      }
 
       if (value) {
-        const reg = buildManifestWakeRegistration(
-          subscriberUrl,
-          value,
-          manifestKey
-        )
-        if (reg) {
-          reg.tenantId = this.serviceId
-          await this.manager.wakeRegistry.register(reg)
-        }
-
         const cronSpec = extractManifestCronSpec(value)
         if (cronSpec) {
           void this.manager

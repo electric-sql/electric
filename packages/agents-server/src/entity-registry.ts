@@ -149,6 +149,22 @@ export interface MaterializeActiveClaimInput {
   runnerId?: string
   claimedAt?: Date
   leaseExpiresAt?: Date
+  /**
+   * Leave an existing active claim for the same (consumerId, epoch) alone
+   * and report false instead of replacing it. The claim callback sets this:
+   * the backend accepts every callback for a wake it still holds, so a
+   * redelivered wake's second claim is indistinguishable there, and this
+   * row is where the duplicate is fenced before a second runtime runs it.
+   *
+   * The fence is on `status` alone — `lease_expires_at` is informational,
+   * because heartbeats do not extend it and a wake outliving one lease would
+   * otherwise stop fencing its own duplicates. The cost: a claim whose wake
+   * never sends a done stays `active` until a reconciler sweeps it, and a
+   * redelivery of that wake is fenced until the backend re-arms it with a
+   * new generation (one lease of delay, no loss — the re-armed wake carries
+   * a new `(wake_id, generation)` and so a new row).
+   */
+  unlessActive?: boolean
 }
 
 export interface MaterializeHeartbeatClaimInput {
@@ -425,12 +441,18 @@ export class PostgresRegistry {
     return rows[0] ? this.rowToRunner(rows[0]) : null
   }
 
+  /**
+   * Returns false only with `unlessActive`, when an active claim for the
+   * same (consumerId, epoch) already exists. Postgres serialises the
+   * conflicting upserts, so two concurrent duplicate claims cannot both
+   * succeed.
+   */
   async materializeActiveClaim(
     input: MaterializeActiveClaimInput
-  ): Promise<void> {
+  ): Promise<boolean> {
     const claimedAt = input.claimedAt ?? new Date()
-    await this.db.transaction(async (tx) => {
-      await tx
+    return await this.db.transaction(async (tx) => {
+      const claimed = await tx
         .insert(consumerClaims)
         .values({
           tenantId: this.tenantId,
@@ -462,7 +484,12 @@ export class PostgresRegistry {
             releasedAt: null,
             updatedAt: claimedAt,
           },
+          ...(input.unlessActive
+            ? { setWhere: ne(consumerClaims.status, `active`) }
+            : {}),
         })
+        .returning({ consumerId: consumerClaims.consumerId })
+      if (claimed.length === 0) return false
 
       await tx
         .insert(entityDispatchState)
@@ -489,6 +516,7 @@ export class PostgresRegistry {
             updatedAt: claimedAt,
           },
         })
+      return true
     })
   }
 
@@ -1401,6 +1429,48 @@ export class PostgresRegistry {
       .update(entities)
       .set({ status, updatedAt: Date.now() })
       .where(whereClause)
+  }
+
+  /**
+   * Settles the entity's status once its wake is done: `running` → `idle`,
+   * `stopping` → `stopped`. One conditional statement rather than a read
+   * followed by `updateStatus`, because a done can land after the backend
+   * has already delivered the next wake — which set `running` again — and a
+   * read-then-write would clobber that. Returns the status written, or null
+   * when the entity was in neither state.
+   */
+  async updateStatusAfterDone(entityUrl: string): Promise<EntityStatus | null> {
+    const rows = await this.db
+      .update(entities)
+      .set({
+        status: sql`CASE WHEN ${entities.status} = 'stopping' THEN 'stopped' ELSE 'idle' END`,
+        updatedAt: Date.now(),
+      })
+      .where(
+        and(
+          this.entityWhere(entityUrl),
+          inArray(entities.status, [`running`, `stopping`])
+        )
+      )
+      .returning({ status: entities.status })
+    return rows[0] ? (rows[0].status as EntityStatus) : null
+  }
+
+  /**
+   * Reverts the `running` set for a wake the runtime never took: a refused or
+   * failed forward. Conditional, because the wake that set `running` is not
+   * necessarily the newest one — a rolling runtime restart refuses wakes for
+   * entities that are stopping, or that a sibling replica has already woken
+   * again, and an unconditional `idle` would report those wrong. Returns true
+   * when the status was reverted.
+   */
+  async revertRunningStatus(entityUrl: string): Promise<boolean> {
+    const rows = await this.db
+      .update(entities)
+      .set({ status: `idle`, updatedAt: Date.now() })
+      .where(and(this.entityWhere(entityUrl), eq(entities.status, `running`)))
+      .returning({ url: entities.url })
+    return rows.length > 0
   }
 
   async updateStatusWithTxid(

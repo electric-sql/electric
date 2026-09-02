@@ -29,6 +29,7 @@ const {
   mockProducerAppend,
   mockProducerFlush,
   mockProducerDetach,
+  mockProducerLastSuccessfulOffset,
   mockConstructedProducers,
   mockDbClose,
   mockDbPreload,
@@ -50,6 +51,9 @@ const {
   mockProducerAppend: vi.fn(),
   mockProducerFlush: vi.fn().mockResolvedValue(undefined),
   mockProducerDetach: vi.fn().mockResolvedValue(undefined),
+  mockProducerLastSuccessfulOffset: {
+    value: undefined as string | undefined,
+  },
   mockConstructedProducers: [] as Array<{
     producerId: string
     opts?: Record<string, unknown>
@@ -131,6 +135,10 @@ vi.mock(`@durable-streams/client`, async (importOriginal) => {
     append = mockProducerAppend
     flush = mockProducerFlush
     detach = mockProducerDetach
+
+    get lastSuccessfulOffset(): string | undefined {
+      return mockProducerLastSuccessfulOffset.value
+    }
   }
   return {
     ...actual,
@@ -439,6 +447,7 @@ describe(`processWake`, () => {
     vi.useRealTimers()
     clearRegistry()
     mockConstructedProducers.length = 0
+    mockProducerLastSuccessfulOffset.value = undefined
     mockDbPreload.mockResolvedValue(undefined)
     mockSourceDbPreload.mockResolvedValue(undefined)
     mockCreateStreamDB.mockImplementation((options) => {
@@ -1845,6 +1854,180 @@ describe(`processWake`, () => {
     expect(heartbeatCall).toBeDefined()
 
     setIntervalSpy.mockRestore()
+  })
+
+  it(`adopts a refreshed write token from heartbeat responses`, async () => {
+    defineEntity(`test-agent`, {
+      handler: async () => {
+        // Keep the wake alive long enough for several heartbeat intervals.
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      },
+    })
+
+    fetchMock.mockImplementation(async (url, opts) => {
+      if (String(url).includes(`/_electric/wakes/wake-abc`)) {
+        const body = JSON.parse(String(opts?.body ?? `{}`)) as Record<
+          string,
+          unknown
+        >
+        const isClaim = body.wakeId !== undefined
+        const isHeartbeat = !isClaim && body.done === undefined
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            ...(isClaim ? { writeToken: `wt-initial` } : {}),
+            ...(isHeartbeat ? { writeToken: `wt-refreshed` } : {}),
+          }),
+          { status: 200, headers: { 'content-type': `application/json` } }
+        )
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': `application/json` },
+      })
+    })
+
+    await processWake(makeNotification(), {
+      ...BASE_CONFIG,
+      heartbeatInterval: 20,
+    })
+
+    // The producer reads the write token per request, so appends issued
+    // after a heartbeat refresh must carry the refreshed token.
+    const producer = mockConstructedProducers.find(
+      (constructed) =>
+        constructed.producerId ===
+        `entity-http://localhost:3000/test-agent/agent-1`
+    )
+    const producerFetch = producer!.opts!.fetch as typeof fetch
+    await producerFetch(`http://localhost:3000/streams/entity:agent-1`, {
+      method: `POST`,
+    })
+    const [, init] = fetchMock.mock.calls.at(-1)!
+    expect(new Headers(init?.headers).get(`authorization`)).toBe(
+      `Bearer wt-refreshed`
+    )
+  })
+
+  it(`falls back to the notification's write_token when the claim callback returns none`, async () => {
+    defineEntity(`test-agent`, {
+      handler: () => {},
+    })
+
+    await processWake(
+      makeNotification({ write_token: `delivered-token` }),
+      BASE_CONFIG
+    )
+
+    const producer = mockConstructedProducers.find(
+      (constructed) =>
+        constructed.producerId ===
+        `entity-http://localhost:3000/test-agent/agent-1`
+    )
+    const producerFetch = producer!.opts!.fetch as typeof fetch
+    await producerFetch(`http://localhost:3000/streams/entity:agent-1`, {
+      method: `POST`,
+    })
+    const [, init] = fetchMock.mock.calls.at(-1)!
+    expect(new Headers(init?.headers).get(`authorization`)).toBe(
+      `Bearer delivered-token`
+    )
+  })
+
+  describe(`done after a write failure`, () => {
+    const entityProducerOnError = (): ((error: Error) => void) => {
+      const producer = mockConstructedProducers.find(
+        (constructed) =>
+          constructed.producerId ===
+          `entity-http://localhost:3000/test-agent/agent-1`
+      )
+      return producer!.opts!.onError as (error: Error) => void
+    }
+
+    const doneBody = (): { acks: Array<unknown>; done: boolean } => {
+      const doneCalls = fetchMock.mock.calls.filter(
+        ([url, opts]) =>
+          String(url).includes(`/_electric/wakes/wake-abc`) &&
+          String((opts as RequestInit | undefined)?.body).includes(
+            `"done":true`
+          )
+      )
+      expect(doneCalls).toHaveLength(1)
+      return JSON.parse(doneCalls[0]![1]!.body as string)
+    }
+
+    it(`acks the consumed offset when the error event reached the stream`, async () => {
+      defineEntity(`test-agent`, {
+        handler: () => {
+          entityProducerOnError()(new Error(`append rejected (401)`))
+        },
+      })
+
+      await expect(
+        processWake(makeNotification(), BASE_CONFIG)
+      ).rejects.toThrow(`append rejected (401)`)
+
+      expect(mockProducerAppend).toHaveBeenCalledWith(
+        expect.stringContaining(`WRITE_FAILED`)
+      )
+      const body = doneBody()
+      expect(body.done).toBe(true)
+      expect(body.acks).toEqual([
+        { path: `/streams/entity:agent-1`, offset: expect.any(String) },
+      ])
+    })
+
+    it(`acks when a later batch failure was not the error event's`, async () => {
+      defineEntity(`test-agent`, {
+        handler: () => {
+          const onError = entityProducerOnError()
+          // One in-flight batch reports the append failure ...
+          onError(new Error(`append rejected (401)`))
+          mockProducerFlush.mockImplementationOnce(async () => {
+            // ... the error event's own batch then lands, so the failure is
+            // on the stream ...
+            mockProducerLastSuccessfulOffset.value = `10_200`
+            // ... and a second batch queued before the failure reports it
+            // too. Batches are sent concurrently, so a failure after the
+            // error event is not evidence the error event was lost.
+            onError(new Error(`append rejected (401)`))
+          })
+        },
+      })
+
+      await expect(
+        processWake(makeNotification(), BASE_CONFIG)
+      ).rejects.toThrow(`append rejected (401)`)
+
+      const body = doneBody()
+      expect(body.acks).toEqual([
+        { path: `/streams/entity:agent-1`, offset: `10_200` },
+      ])
+    })
+
+    it(`sends done without acks when the error event was lost with the producer`, async () => {
+      defineEntity(`test-agent`, {
+        handler: () => {
+          const onError = entityProducerOnError()
+          // The stream rejected an append (a deposed or lapsed write token):
+          // the runtime records WRITE_FAILED and appends an error event ...
+          onError(new Error(`append rejected (401)`))
+          // ... whose batch the producer then fails to deliver as well, so
+          // nothing on the stream says this wake failed.
+          mockProducerFlush.mockImplementationOnce(async () => {
+            onError(new Error(`append rejected (401)`))
+          })
+        },
+      })
+
+      await expect(
+        processWake(makeNotification(), BASE_CONFIG)
+      ).rejects.toThrow(`append rejected (401)`)
+
+      const body = doneBody()
+      expect(body.done).toBe(true)
+      expect(body.acks).toEqual([])
+    })
   })
 
   it(`flushes producer on completion`, async () => {

@@ -630,3 +630,5 @@ export const ErrCodeEntityPersistFailed = `ENTITY_PERSIST_FAILED`
 export const ErrCodeAgentUiNotFound = `AGENT_UI_NOT_FOUND`
 export const ErrCodeSubscriptionNotFound = `SUBSCRIPTION_NOT_FOUND`
 export const ErrCodeWakeCallbackNotFound = `WAKE_CALLBACK_NOT_FOUND`
+export const ErrCodeWakeAlreadyClaimed = `WAKE_ALREADY_CLAIMED`
+export const ErrCodeWriteTokenUnavailable = `WRITE_TOKEN_UNAVAILABLE`
