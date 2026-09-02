@@ -379,11 +379,15 @@ Port that the [HTTP API](/docs/sync/api/http) is exposed on.
     defaultValue="false"
     example="true">
 
-Whether to terminate idle shape consumer processes after `ELECTRIC_SHAPE_HIBERNATE_AFTER` seconds. This saves on memory at the cost of slightly higher CPU usage. When receiving a transaction that contains changes matching a given shape, a consumer process is started to handle the update. If more transactions matching the shape appear within the time defined by `ELECTRIC_SHAPE_HIBERNATE_AFTER` then the consumer will remain active, if not it will be terminated.
+Whether to terminate idle shape consumer processes. This saves on memory at the cost of slightly higher CPU usage.
 
-If set to `false` the consumer processes will [hibernate](https://www.erlang.org/doc/apps/erts/erlang#hibernate/3) instead of terminating, meaning they still occupy some memory but are inactive until passed transaction operations to process.
+A consumer process first [hibernates](https://www.erlang.org/doc/apps/erts/erlang#hibernate/3) after `ELECTRIC_SHAPE_HIBERNATE_AFTER` of inactivity. With this option enabled, a hibernated consumer that stays idle for a further `ELECTRIC_SHAPE_SUSPEND_AFTER` is terminated. When a transaction containing changes matching the shape arrives, the consumer process is started again to handle the update.
 
-If you enable this feature then you should configure `ELECTRIC_SHAPE_HIBERNATE_AFTER` to match the usage patterns of your application to avoid unnecessary process churn.
+Not every consumer process is eligible for termination. Shapes with [subquery](/docs/sync/guides/shapes#subqueries) dependencies and shapes that other shapes depend on through a subquery, can only hibernate; they never get suspended.
+
+If set to `false` the consumer processes only hibernate, meaning they still occupy some memory but are inactive until passed transaction operations to process.
+
+If you enable this feature then you should configure `ELECTRIC_SHAPE_SUSPEND_AFTER` to match the usage patterns of your application to avoid unnecessary process churn.
 
 </EnvVarConfig>
 
@@ -394,7 +398,18 @@ If you enable this feature then you should configure `ELECTRIC_SHAPE_HIBERNATE_A
     defaultValue="30s"
     example="5000ms">
 
-The amount of time a consumer process remains active without receiving transaction operations before either [hibernating](https://www.erlang.org/doc/apps/erts/erlang#hibernate/3) or terminating (if `ELECTRIC_SHAPE_SUSPEND_CONSUMER` is `true`).
+The amount of time a consumer process remains active without receiving transaction operations before [hibernating](https://www.erlang.org/doc/apps/erts/erlang#hibernate/3).
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_SUSPEND_AFTER
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_SUSPEND_AFTER"
+    defaultValue="10m"
+    example="30m">
+
+The amount of time a hibernated consumer process remains idle before being terminated. Only applies when `ELECTRIC_SHAPE_SUSPEND_CONSUMER` is `true`. Counted from the moment the consumer hibernates, so an idle consumer is terminated roughly `ELECTRIC_SHAPE_HIBERNATE_AFTER` plus `ELECTRIC_SHAPE_SUSPEND_AFTER` after its last activity.
 
 </EnvVarConfig>
 
