@@ -1248,6 +1248,7 @@ export async function processWake(
             ok: boolean
             claimToken?: string
             token?: string
+            writeToken?: string
           }
           if (!data.ok) {
             failBackgroundWake(
@@ -1258,6 +1259,10 @@ export async function processWake(
           }
           if (data.claimToken) activeClaimToken = data.claimToken
           if (data.token) activeClaimToken = data.token
+          // The server may re-mint the write token on each heartbeat (its
+          // backend's token TTL tracks the claim lease); adopt the refresh
+          // so appends from a long-running activation keep a live token.
+          if (data.writeToken) writeToken = data.writeToken
         })
         .catch((err: unknown) => {
           failBackgroundWake(err, `HEARTBEAT_FAILED`)

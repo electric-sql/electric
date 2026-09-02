@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ClaimWriteTokenStore } from '../src/claim-write-token-store'
 import { globalRouter } from '../src/routing/global-router'
 import { DurableStreamsSubscriptionError } from '../src/stream-client'
 import type { TenantContext } from '../src/routing/context'
@@ -518,6 +519,53 @@ describe(`runner routes`, () => {
     expect(ctx.entityManager.registry.updateStatus).toHaveBeenCalledWith(
       `/chat/one`,
       `running`
+    )
+  })
+
+  it(`holds a backend-issued write token from a runner claim for the claim callback`, async () => {
+    const claimWriteTokens = new ClaimWriteTokenStore()
+    const ctx = buildContext({
+      runtime: { claimWriteTokens } as any,
+    })
+    vi.mocked(ctx.streamClient.claimSubscription).mockResolvedValue({
+      wake_id: `wake-1`,
+      generation: 7,
+      token: `claim-token`,
+      write_token: `backend-token-1`,
+      streams: [{ path: `chat/one/main`, tail_offset: `12` }],
+      lease_ttl_ms: 30_000,
+    })
+    vi.mocked(ctx.entityManager.registry.getEntityByStream).mockResolvedValue({
+      url: `/chat/one`,
+      type: `chat`,
+      status: `idle`,
+      streams: { main: `/chat/one/main` },
+      subscription_id: `runner:runner-1`,
+      write_token: `entity-token`,
+      tags: {},
+      created_at: 1,
+      updated_at: 1,
+    })
+
+    const response = await globalRouter.fetch(
+      request(`POST`, `/_electric/runners/runner-1/claim`, {
+        subscription_id: `runner:runner-1`,
+        stream: `chat/one/main`,
+        generation: 7,
+        ts: 123,
+      }),
+      ctx
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body.claimToken).toBe(`claim-token`)
+    // The backend's write token is not part of the notification; the runner
+    // receives it from its claim callback, which adopts the held token.
+    expect(body.write_token).toBeUndefined()
+    expect(body.writeToken).toBeUndefined()
+    expect(claimWriteTokens.takeDelivered(`tenant-test`, `wake-1`)).toBe(
+      `backend-token-1`
     )
   })
 

@@ -49,6 +49,7 @@ export interface ElectricAgentsTenantRuntimeOptions {
   pgSync?: PgSyncBridgeManagerOptions
   claimWriteTokens?: ClaimWriteTokenStore
   stopWakeRegistryOnShutdown?: boolean
+  fencedSessionStreams?: boolean
 }
 
 export class ElectricAgentsTenantRuntime {
@@ -99,6 +100,7 @@ export class ElectricAgentsTenantRuntime {
           token
         ),
       stopWakeRegistryOnShutdown: options.stopWakeRegistryOnShutdown ?? false,
+      fencedSessionStreams: options.fencedSessionStreams,
     })
     this.pgSyncBridgeManager =
       options.pgSyncBridgeManager ??
