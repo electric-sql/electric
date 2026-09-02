@@ -383,6 +383,8 @@ Whether to terminate idle shape consumer processes. This saves on memory at the 
 
 A consumer process first [hibernates](https://www.erlang.org/doc/apps/erts/erlang#hibernate/3) after `ELECTRIC_SHAPE_HIBERNATE_AFTER` of inactivity. With this option enabled, a hibernated consumer that stays idle for a further `ELECTRIC_SHAPE_SUSPEND_AFTER` is terminated. When a transaction containing changes matching the shape arrives, the consumer process is started again to handle the update.
 
+Not every consumer process is eligible for termination. Shapes with [subquery](/docs/sync/guides/shapes#subqueries) dependencies and shapes that other shapes depend on through a subquery, can only hibernate; they never get suspended.
+
 If set to `false` the consumer processes only hibernate, meaning they still occupy some memory but are inactive until passed transaction operations to process.
 
 If you enable this feature then you should configure `ELECTRIC_SHAPE_SUSPEND_AFTER` to match the usage patterns of your application to avoid unnecessary process churn.
