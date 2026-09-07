@@ -123,6 +123,14 @@ defmodule Electric.Config do
     # forces a fullsweep after N minor collections to reclaim that memory.
     # See https://www.erlang.org/doc/apps/erts/erlang.html#spawn_opt/4
     handler_fullsweep_after: nil,
+    # Sets max_reset_stream_rate for Bandit HTTP/2 connections: the number of client
+    # RST_STREAM frames tolerated per connection within a time window before Bandit
+    # tears down the whole connection with ENHANCE_YOUR_CALM. Bandit defaults to
+    # {500, 10_000}. Disabled here: tearing down a connection kills every in-flight
+    # stream on it, and behind a proxy that multiplexes many end clients onto a few
+    # upstream connections, ordinary client-side cancellations of long-polls are
+    # enough to trip it. Electric handles cancellations per stream instead.
+    http2_max_reset_stream_rate: :disabled,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
     # allow for configuring per-process `Process.spawn_opt()`. In the form
@@ -612,6 +620,47 @@ defmodule Electric.Config do
 
   def parse_top_process_limit!(str) do
     case parse_top_process_limit(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  @doc """
+  Parse an HTTP/2 reset-stream rate limit of the form `<count>/<duration>` into the
+  `{count, period_ms}` tuple Bandit expects, or `disabled` into `:disabled`.
+
+  ## Examples
+
+    iex> parse_http2_max_reset_stream_rate("500/10s")
+    {:ok, {500, 10000}}
+
+    iex> parse_http2_max_reset_stream_rate("disabled")
+    {:ok, :disabled}
+
+    iex> parse_http2_max_reset_stream_rate("500")
+    {:error, ~S'invalid HTTP/2 reset stream rate: "500". Expected format: <count>/<duration> (e.g. 500/10s) or disabled'}
+  """
+  @spec parse_http2_max_reset_stream_rate(binary) ::
+          {:ok, {pos_integer, pos_integer} | :disabled} | {:error, binary}
+  def parse_http2_max_reset_stream_rate(str) do
+    with false <- String.downcase(str) == "disabled",
+         [count_str, period_str] <- String.split(str, "/"),
+         {count, ""} when count > 0 <- Integer.parse(count_str),
+         {:ok, period_ms} <- parse_human_readable_time(period_str) do
+      {:ok, {count, period_ms}}
+    else
+      true ->
+        {:ok, :disabled}
+
+      _ ->
+        {:error,
+         "invalid HTTP/2 reset stream rate: #{inspect(str)}. " <>
+           "Expected format: <count>/<duration> (e.g. 500/10s) or disabled"}
+    end
+  end
+
+  def parse_http2_max_reset_stream_rate!(str) do
+    case parse_http2_max_reset_stream_rate(str) do
       {:ok, result} -> result
       {:error, message} -> raise Dotenvy.Error, message: message
     end
