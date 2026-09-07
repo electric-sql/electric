@@ -71,6 +71,24 @@ defmodule Electric.ConfigTest do
       refute Keyword.has_key?(default_opts[:http_2_options], :max_requests)
     end
 
+    test "api_server/1 disables Bandit's HTTP/2 reset-stream rate limit by default" do
+      [{Bandit, default_opts}] = Electric.Application.api_server([])
+
+      assert Keyword.fetch!(default_opts[:http_2_options], :max_reset_stream_rate) == nil
+    end
+
+    test "api_server/1 applies http2_max_reset_stream_rate when configured" do
+      [{Bandit, bandit_opts}] =
+        Electric.Application.api_server(tweaks: [http2_max_reset_stream_rate: {500, 10_000}])
+
+      assert bandit_opts[:http_2_options][:max_reset_stream_rate] == {500, 10_000}
+
+      [{Bandit, disabled_opts}] =
+        Electric.Application.api_server(tweaks: [http2_max_reset_stream_rate: :disabled])
+
+      assert Keyword.fetch!(disabled_opts[:http_2_options], :max_reset_stream_rate) == nil
+    end
+
     test "configuration/1", ctx do
       Electric.Application.configuration(
         Keyword.take(ctx.initial_config, [:replication_connection_opts])
@@ -138,6 +156,28 @@ defmodule Electric.ConfigTest do
       assert {:error, msg} = parse_top_process_limit("foo")
       assert msg =~ "invalid top process limit"
       assert msg =~ "Expected format: count:<N> or mem_percent:<N>"
+    end
+  end
+
+  describe "parse_http2_max_reset_stream_rate/1" do
+    import Electric.Config, only: [parse_http2_max_reset_stream_rate: 1]
+
+    test "parses <count>/<duration>" do
+      assert {:ok, {500, 10_000}} = parse_http2_max_reset_stream_rate("500/10s")
+      assert {:ok, {50, 1_000}} = parse_http2_max_reset_stream_rate("50/1000ms")
+      assert {:ok, {1, 60_000}} = parse_http2_max_reset_stream_rate("1/1m")
+    end
+
+    test "accepts disabled" do
+      assert {:ok, :disabled} = parse_http2_max_reset_stream_rate("disabled")
+      assert {:ok, :disabled} = parse_http2_max_reset_stream_rate("DISABLED")
+    end
+
+    test "rejects invalid input" do
+      for input <- ["", "500", "0/10s", "-5/10s", "abc/10s", "500/abc", "500/0s", "500/10s/1"] do
+        assert {:error, msg} = parse_http2_max_reset_stream_rate(input)
+        assert msg =~ "invalid HTTP/2 reset stream rate"
+      end
     end
   end
 

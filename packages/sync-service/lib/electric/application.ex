@@ -157,6 +157,7 @@ defmodule Electric.Application do
         flush_stall_grace_period: get_env(opts, :flush_stall_grace_period),
         conn_max_requests: get_env(opts, :conn_max_requests),
         handler_fullsweep_after: get_env(opts, :handler_fullsweep_after),
+        http2_max_reset_stream_rate: get_env(opts, :http2_max_reset_stream_rate),
         process_spawn_opts: get_env(opts, :process_spawn_opts),
         consumer_gc_heap_threshold: get_env(opts, :consumer_gc_heap_threshold)
       ],
@@ -369,13 +370,25 @@ defmodule Electric.Application do
         []
       end
 
+    # Bandit's reset-stream rate limit (a Rapid Reset mitigation) closes the entire
+    # connection once a client sends too many RST_STREAM frames, killing every stream
+    # on it without running their cleanup. A proxy that multiplexes many end clients
+    # onto one upstream connection trips it with ordinary long-poll cancellations, and
+    # since Bandit leaves `max_concurrent_streams` unbounded the limit does not close
+    # off any attack that opening streams without resetting them wouldn't achieve.
+    http_2_opts =
+      case Keyword.get(tweaks, :http2_max_reset_stream_rate, :disabled) do
+        :disabled -> [max_reset_stream_rate: nil]
+        {count, period_ms} -> [max_reset_stream_rate: {count, period_ms}]
+      end
+
     [
       {Bandit,
        [
          plug: {Electric.Plug.Router, router_opts},
          port: get_env(opts, :service_port),
          http_1_options: http_1_opts,
-         http_2_options: [],
+         http_2_options: http_2_opts,
          thousand_island_options: thousand_island_options(opts ++ ti_opts)
        ]}
     ]

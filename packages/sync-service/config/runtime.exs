@@ -311,6 +311,12 @@ config :electric,
   http_api_num_acceptors: env!("ELECTRIC_TWEAKS_HTTP_API_NUM_ACCEPTORS", :integer, 100),
   conn_max_requests: env!("ELECTRIC_TWEAKS_CONN_MAX_REQUESTS", :integer, nil),
   handler_fullsweep_after: env!("ELECTRIC_TWEAKS_HANDLER_FULLSWEEP_AFTER", :integer, nil),
+  http2_max_reset_stream_rate:
+    env!(
+      "ELECTRIC_TWEAKS_HTTP2_MAX_RESET_STREAM_RATE",
+      &Electric.Config.parse_http2_max_reset_stream_rate!/1,
+      nil
+    ),
   tcp_send_timeout:
     env!("ELECTRIC_TCP_SEND_TIMEOUT", &Electric.Config.parse_human_readable_time!/1, nil),
   tcp_read_timeout:
