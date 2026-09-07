@@ -353,7 +353,7 @@ When Electric runs behind a connection-pooling reverse proxy or load balancer (A
     name="ELECTRIC_TWEAKS_HTTP2_MAX_RESET_STREAM_RATE"
     defaultValue="disabled"
     example="500/10s">
-Maximum number of HTTP/2 stream resets (`RST_STREAM` frames) a single client connection may send within a time window, in the form `<count>/<duration>`, or `disabled`. When a connection exceeds the limit, Electric closes the whole connection and every request still in flight on it is dropped.
+Maximum number of HTTP/2 stream resets (`RST_STREAM` frames) a single client connection may send within a time window, in the form `COUNT/DURATION` (for example `500/10s`), or `disabled`. When a connection exceeds the limit, Electric closes the whole connection and every request still in flight on it is dropped.
 
 This is disabled by default. Behind a reverse proxy that multiplexes many end clients onto a few upstream HTTP/2 connections, ordinary client-side cancellations of live requests are enough to trip the limit and disconnect every other client sharing that connection. Set it only if Electric is directly exposed to untrusted HTTP/2 clients and you want the rate limit as a defence against HTTP/2 Rapid Reset style abuse.
 
