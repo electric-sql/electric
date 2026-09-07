@@ -43,7 +43,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   require Logger
 
-  @admission_permit_key {__MODULE__, :admission_permit}
+  @admission_permit_key Electric.AdmissionControl.permit_pd_key()
   @subquery_compaction_error "can't be enabled for shapes with subqueries"
 
   # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with

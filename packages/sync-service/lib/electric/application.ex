@@ -159,7 +159,8 @@ defmodule Electric.Application do
         handler_fullsweep_after: get_env(opts, :handler_fullsweep_after),
         http2_max_reset_stream_rate: get_env(opts, :http2_max_reset_stream_rate),
         process_spawn_opts: get_env(opts, :process_spawn_opts),
-        consumer_gc_heap_threshold: get_env(opts, :consumer_gc_heap_threshold)
+        consumer_gc_heap_threshold: get_env(opts, :consumer_gc_heap_threshold),
+        stalled_serve_timeout: get_env(opts, :stalled_serve_timeout)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?),
       shape_db_opts: [
