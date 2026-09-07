@@ -169,6 +169,10 @@ defmodule Electric.StackSupervisor do
                        type: {:or, [:non_neg_integer, nil]},
                        default: nil
                      ],
+                     http2_max_reset_stream_rate: [
+                       type: {:or, [{:tuple, [:pos_integer, :pos_integer]}, {:in, [:disabled]}]},
+                       default: Electric.Config.default(:http2_max_reset_stream_rate)
+                     ],
                      process_spawn_opts: [type: :map, default: %{}],
                      consumer_gc_heap_threshold: [
                        type: {:or, [:non_neg_integer, nil]},

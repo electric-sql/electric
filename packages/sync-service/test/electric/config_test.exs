@@ -206,6 +206,16 @@ defmodule Electric.ConfigTest do
       [initial_config: initial_config]
     end
 
+    test "configuration/1 is accepted by the StackSupervisor options schema", ctx do
+      config =
+        Electric.Application.configuration(
+          Keyword.take(ctx.initial_config, [:replication_connection_opts])
+        )
+
+      assert {:ok, _} =
+               NimbleOptions.validate(Map.new(config), Electric.StackSupervisor.opts_schema())
+    end
+
     test "consumer_gc_heap_threshold opt is threaded into tweaks", ctx do
       threshold = 209_715_200
 
