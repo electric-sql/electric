@@ -14,9 +14,9 @@ export class ExpiredShapesCache {
   getExpiredHandle(shapeUrl: string): string | null {
     const entry = this.data[shapeUrl]
     if (entry) {
-      // Update last used time when accessed
+      // Not persisted: this runs on every shape request, and markExpired reads
+      // lastUsed from memory.
       entry.lastUsed = Date.now()
-      this.save()
       return entry.expiredHandle
     }
     return null
