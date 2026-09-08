@@ -1,10 +1,11 @@
 import type {
+  ChildStatusEntry,
   EntityRegistry,
   HandlerContext,
+  ManifestEntry,
   SharedStateHandle,
 } from '@electric-ax/agents-runtime'
 import { db } from '@electric-ax/agents-runtime'
-import { queryOnce } from '@durable-streams/state/db'
 import { Type } from '@sinclair/typebox'
 import { exec, execFile } from 'node:child_process'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
@@ -141,9 +142,7 @@ function createExploreCorpusTool(
         topics: string[]
       }
 
-      const existing = await queryOnce((q) =>
-        q.from({ manifests: ctx.db.collections.manifests })
-      )
+      const existing = ctx.db.collections.manifests.toArray as ManifestEntry[]
       const hasChildren = existing.some(
         (m) => m.kind === `child` && m.entity_type === SURVEY_WORKER_ENTITY_TYPE
       )
@@ -269,12 +268,11 @@ function createSwarmStatusTool(
       const entries = readWiki(shared)
       const xrefs = readXrefs(shared)
 
-      const children = await queryOnce((q) =>
-        q.from({ cs: ctx.db.collections.childStatus })
-      )
+      const children = ctx.db.collections.childStatus
+        .toArray as ChildStatusEntry[]
       const byStatus = { spawning: 0, running: 0, idle: 0, stopped: 0 }
       for (const c of children) {
-        const s = (c as any).status as string
+        const s = c.status
         if (s in byStatus) byStatus[s as keyof typeof byStatus]++
       }
       const total = children.length
