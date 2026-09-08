@@ -1312,3 +1312,85 @@ describe(`ExpiredShapesCache`, () => {
     expect(snapshotHasCacheBuster).toBe(false)
   })
 })
+
+describe(`ExpiredShapesCache write amplification`, () => {
+  const shapeUrl = `https://example.com/v1/shape?table=test`
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  // setItem is a persistent mock whose history survives restoreAllMocks.
+  function countWrites(): { calls: () => number } {
+    const spy = vi.spyOn(localStorage, `setItem`)
+    const base = spy.mock.calls.length
+    return { calls: () => spy.mock.calls.length - base }
+  }
+
+  it(`counts a write when the cache is mutated`, () => {
+    const cache = new ExpiredShapesCache()
+    const writes = countWrites()
+    cache.markExpired(shapeUrl, `handle-1`)
+    expect(writes.calls()).toBe(1)
+  })
+
+  it(`does not write to localStorage when reading an existing entry`, () => {
+    const cache = new ExpiredShapesCache()
+    cache.markExpired(shapeUrl, `handle-1`)
+
+    const writes = countWrites()
+    for (let i = 0; i < 25; i++) {
+      expect(cache.getExpiredHandle(shapeUrl)).toBe(`handle-1`)
+    }
+
+    expect(writes.calls()).toBe(0)
+  })
+
+  it(`does not write to localStorage when reading a missing entry`, () => {
+    const cache = new ExpiredShapesCache()
+
+    const writes = countWrites()
+    expect(cache.getExpiredHandle(shapeUrl)).toBe(null)
+
+    expect(writes.calls()).toBe(0)
+  })
+
+  it(`still persists the entry so a later cache reloads it`, () => {
+    const cache = new ExpiredShapesCache()
+    cache.markExpired(shapeUrl, `handle-1`)
+    for (let i = 0; i < 25; i++) cache.getExpiredHandle(shapeUrl)
+
+    const reloaded = new ExpiredShapesCache()
+    expect(reloaded.getExpiredHandle(shapeUrl)).toBe(`handle-1`)
+  })
+
+  it(`still persists a changed handle`, () => {
+    const cache = new ExpiredShapesCache()
+    cache.markExpired(shapeUrl, `handle-1`)
+    cache.getExpiredHandle(shapeUrl)
+    cache.markExpired(shapeUrl, `handle-2`)
+
+    expect(new ExpiredShapesCache().getExpiredHandle(shapeUrl)).toBe(`handle-2`)
+  })
+
+  it(`still persists a delete`, () => {
+    const cache = new ExpiredShapesCache()
+    cache.markExpired(shapeUrl, `handle-1`)
+    cache.delete(shapeUrl)
+
+    expect(new ExpiredShapesCache().getExpiredHandle(shapeUrl)).toBe(null)
+  })
+
+  it(`keeps LRU ordering accurate in memory despite not persisting each touch`, () => {
+    const cache = new ExpiredShapesCache()
+    for (let i = 0; i < 250; i++)
+      cache.markExpired(`${shapeUrl}&i=${i}`, `h${i}`)
+
+    cache.getExpiredHandle(`${shapeUrl}&i=0`)
+    cache.markExpired(`${shapeUrl}&overflow`, `h-overflow`)
+
+    expect(cache.getExpiredHandle(`${shapeUrl}&i=0`)).toBe(`h0`)
+    expect(cache.getExpiredHandle(`${shapeUrl}&i=1`)).toBe(null)
+  })
+})
