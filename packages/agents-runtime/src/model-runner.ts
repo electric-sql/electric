@@ -7,6 +7,11 @@ import {
   getMoonshotApiKey,
   getMoonshotModel,
 } from './moonshot-models'
+import {
+  ORCAROUTER_PROVIDER,
+  getOrcaRouterApiKey,
+  getOrcaRouterModel,
+} from './orcarouter-models'
 import type { AgentConfig } from './types'
 import type { KnownProvider } from '@mariozechner/pi-ai'
 
@@ -32,6 +37,11 @@ const PREFERRED_IDS_BY_PROVIDER: Record<string, Array<string>> = {
   'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
   deepseek: [`deepseek-v4-flash`, `deepseek-v4-pro`],
   moonshot: [`kimi-k2.6`, `kimi-k2.5`, `moonshot-v1-8k`],
+  orcarouter: [
+    `orcarouter/auto`,
+    `orcarouter/fusion`,
+    `orcarouter/fusion-flash`,
+  ],
 }
 
 function hasEnv(name: string): boolean {
@@ -65,6 +75,7 @@ export type AvailableProvider =
   | `openai-codex`
   | `deepseek`
   | typeof MOONSHOT_PROVIDER
+  | typeof ORCAROUTER_PROVIDER
 
 export function detectAvailableProviders(): Array<AvailableProvider> {
   const providers: Array<AvailableProvider> = []
@@ -72,6 +83,7 @@ export function detectAvailableProviders(): Array<AvailableProvider> {
   if (hasEnv(`OPENAI_API_KEY`)) providers.push(`openai`)
   if (hasEnv(`DEEPSEEK_API_KEY`)) providers.push(`deepseek`)
   if (getMoonshotApiKey()) providers.push(MOONSHOT_PROVIDER)
+  if (getOrcaRouterApiKey()) providers.push(ORCAROUTER_PROVIDER)
   if (readCodexAccessToken() !== undefined) providers.push(`openai-codex`)
   return providers
 }
@@ -116,6 +128,13 @@ function envCatalog(): LowCostModelCatalog {
       reasoning: false,
     })
   }
+  if (providers.includes(ORCAROUTER_PROVIDER)) {
+    choices.push({
+      provider: ORCAROUTER_PROVIDER,
+      id: `orcarouter/auto`,
+      reasoning: true,
+    })
+  }
   return { choices, defaultChoice: choices[0] }
 }
 
@@ -131,6 +150,7 @@ export function selectLowCostModelChoice(
     `anthropic`,
     `deepseek`,
     MOONSHOT_PROVIDER,
+    ORCAROUTER_PROVIDER,
   ].filter((provider): provider is string => Boolean(provider))
 
   for (const provider of providerOrder) {
@@ -167,6 +187,8 @@ export function selectLowCostModelChoice(
 
 function resolveLowCostModel(choice: LowCostModelChoice) {
   if (choice.provider === MOONSHOT_PROVIDER) return getMoonshotModel(choice.id)
+  if (choice.provider === ORCAROUTER_PROVIDER)
+    return getOrcaRouterModel(choice.id)
   return getModel(
     choice.provider as Parameters<typeof getModel>[0],
     choice.id as Parameters<typeof getModel>[1]
@@ -182,6 +204,7 @@ async function resolveLowCostApiKey(input: {
   }
   if (input.provider === `openai-codex`) return readCodexAccessToken()
   if (input.provider === MOONSHOT_PROVIDER) return getMoonshotApiKey()
+  if (input.provider === ORCAROUTER_PROVIDER) return getOrcaRouterApiKey()
   return undefined
 }
 

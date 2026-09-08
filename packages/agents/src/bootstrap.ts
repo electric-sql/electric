@@ -181,7 +181,7 @@ export async function createBuiltinAgentHandler(
 
   if (!modelCatalog) {
     serverLog.warn(
-      `[builtin-agents] no supported model provider API key found — set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY`
+      `[builtin-agents] no supported model provider API key found — set ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, MOONSHOT_API_KEY, or ORCAROUTER_API_KEY`
     )
     return null
   }

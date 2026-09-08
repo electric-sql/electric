@@ -7,6 +7,7 @@ export const EMPTY_API_KEYS: ApiKeys = {
   openai: null,
   deepseek: null,
   moonshot: null,
+  orcarouter: null,
   brave: null,
   e2b: null,
 }
@@ -19,6 +20,7 @@ export function captureEnvApiKeys(env: NodeJS.ProcessEnv): ApiKeys {
     openai: env.OPENAI_API_KEY?.trim() || null,
     deepseek: env.DEEPSEEK_API_KEY?.trim() || null,
     moonshot: env.MOONSHOT_API_KEY?.trim() || null,
+    orcarouter: env.ORCAROUTER_API_KEY?.trim() || null,
     brave: env.BRAVE_SEARCH_API_KEY?.trim() || null,
     e2b: env.E2B_API_KEY?.trim() || null,
   }
@@ -37,6 +39,7 @@ export function normalizeApiKeys(value: unknown): ApiKeys {
     openai: pick(maybe.openai),
     deepseek: pick(maybe.deepseek),
     moonshot: pick(maybe.moonshot),
+    orcarouter: pick(maybe.orcarouter),
     brave: pick(maybe.brave),
     e2b: pick(maybe.e2b),
   }
@@ -48,6 +51,7 @@ export function hasAnyApiKey(keys: ApiKeys): boolean {
       keys.openai ||
       keys.deepseek ||
       keys.moonshot ||
+      keys.orcarouter ||
       keys.brave ||
       keys.e2b
   )
@@ -96,6 +100,7 @@ export function applyApiKeysToEnv(
       | `OPENAI_API_KEY`
       | `DEEPSEEK_API_KEY`
       | `MOONSHOT_API_KEY`
+      | `ORCAROUTER_API_KEY`
       | `BRAVE_SEARCH_API_KEY`
       | `E2B_API_KEY`
   ): void => {
@@ -110,6 +115,7 @@ export function applyApiKeysToEnv(
   resolveSlot(saved.openai, launchEnv.openai, `OPENAI_API_KEY`)
   resolveSlot(saved.deepseek, launchEnv.deepseek, `DEEPSEEK_API_KEY`)
   resolveSlot(saved.moonshot, launchEnv.moonshot, `MOONSHOT_API_KEY`)
+  resolveSlot(saved.orcarouter, launchEnv.orcarouter, `ORCAROUTER_API_KEY`)
   resolveSlot(saved.brave, launchEnv.brave, `BRAVE_SEARCH_API_KEY`)
   resolveSlot(saved.e2b, launchEnv.e2b, `E2B_API_KEY`)
 }
@@ -128,13 +134,18 @@ export async function getApiKeysStatus(
   // Brave and E2B are optional: search falls back to Anthropic's built-in tool,
   // and E2B only enables the remote sandbox profile.
   const hasAnyKey = Boolean(
-    saved.anthropic || saved.openai || saved.deepseek || saved.moonshot
+    saved.anthropic ||
+      saved.openai ||
+      saved.deepseek ||
+      saved.moonshot ||
+      saved.orcarouter
   )
   const suggested: ApiKeys = {
     anthropic: saved.anthropic ? null : deps.launchEnv.anthropic,
     openai: saved.openai ? null : deps.launchEnv.openai,
     deepseek: saved.deepseek ? null : deps.launchEnv.deepseek,
     moonshot: saved.moonshot ? null : deps.launchEnv.moonshot,
+    orcarouter: saved.orcarouter ? null : deps.launchEnv.orcarouter,
     brave: saved.brave ? null : deps.launchEnv.brave,
     e2b: saved.e2b ? null : deps.launchEnv.e2b,
   }
@@ -174,6 +185,7 @@ export async function setApiKeys(
     normalized.openai !== deps.apiKeys.openai ||
     normalized.deepseek !== deps.apiKeys.deepseek ||
     normalized.moonshot !== deps.apiKeys.moonshot ||
+    normalized.orcarouter !== deps.apiKeys.orcarouter ||
     normalized.brave !== deps.apiKeys.brave ||
     normalized.e2b !== deps.apiKeys.e2b
   Object.assign(deps.apiKeys, normalized)

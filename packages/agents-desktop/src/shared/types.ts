@@ -99,6 +99,7 @@ export type ApiKeys = {
   openai: string | null
   deepseek: string | null
   moonshot: string | null
+  orcarouter: string | null
   brave: string | null
   e2b: string | null
 }

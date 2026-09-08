@@ -13,6 +13,7 @@ export type ApiKeysFormValues = {
   openai: string
   deepseek: string
   moonshot: string
+  orcarouter: string
   brave: string
   e2b: string
 }
@@ -89,6 +90,7 @@ export function ApiKeysForm({
   const [openai, setOpenai] = useState(initial.openai)
   const [deepseek, setDeepseek] = useState(initial.deepseek)
   const [moonshot, setMoonshot] = useState(initial.moonshot)
+  const [orcarouter, setOrcarouter] = useState(initial.orcarouter)
   const [brave, setBrave] = useState(initial.brave)
   const [e2b, setE2b] = useState(initial.e2b)
   const [visibleKeys, setVisibleKeys] = useState<
@@ -98,6 +100,7 @@ export function ApiKeysForm({
     openai: false,
     deepseek: false,
     moonshot: false,
+    orcarouter: false,
     brave: false,
     e2b: false,
   })
@@ -115,6 +118,7 @@ export function ApiKeysForm({
     openai: false,
     deepseek: false,
     moonshot: false,
+    orcarouter: false,
     brave: false,
     e2b: false,
   })
@@ -124,7 +128,8 @@ export function ApiKeysForm({
       (anthropic.trim().length > 0 ||
         openai.trim().length > 0 ||
         deepseek.trim().length > 0 ||
-        moonshot.trim().length > 0)) ||
+        moonshot.trim().length > 0 ||
+        orcarouter.trim().length > 0)) ||
     (showBrave && brave.trim().length > 0) ||
     (showE2b && e2b.trim().length > 0)
 
@@ -132,12 +137,21 @@ export function ApiKeysForm({
     if (!canSave || saving) return
     setSaving(true)
     try {
-      await onSave({ anthropic, openai, deepseek, moonshot, brave, e2b })
+      await onSave({
+        anthropic,
+        openai,
+        deepseek,
+        moonshot,
+        orcarouter,
+        brave,
+        e2b,
+      })
       persistedRef.current = {
         anthropic,
         openai,
         deepseek,
         moonshot,
+        orcarouter,
         brave,
         e2b,
       }
@@ -149,6 +163,7 @@ export function ApiKeysForm({
     openai,
     deepseek,
     moonshot,
+    orcarouter,
     brave,
     e2b,
     canSave,
@@ -191,6 +206,7 @@ export function ApiKeysForm({
         openai,
         deepseek,
         moonshot,
+        orcarouter,
         brave,
         e2b,
       })
@@ -201,6 +217,7 @@ export function ApiKeysForm({
       openai,
       deepseek,
       moonshot,
+      orcarouter,
       brave,
       e2b,
       persistIfDirty,
@@ -315,6 +332,23 @@ export function ApiKeysForm({
               }
             />
             {modelControls?.moonshot}
+            <SettingsRow
+              label="OrcaRouter API"
+              description="Smart-routed gateway for open models. Looks like sk-orca-…"
+              splitLayout
+              control={
+                <ApiKeyInput
+                  field="orcarouter"
+                  placeholder="sk-orca-…"
+                  value={orcarouter}
+                  visible={visibleKeys.orcarouter}
+                  onChange={wrapOnChange(`orcarouter`, setOrcarouter)}
+                  onBlur={() => handleAutoSaveBlur(`orcarouter`)}
+                  onToggleVisible={toggleVisible}
+                />
+              }
+            />
+            {modelControls?.orcarouter}
           </>
         )}
         {showBrave && (
@@ -446,6 +480,19 @@ export function ApiKeysForm({
                 value={moonshot}
                 visible={visibleKeys.moonshot}
                 onChange={setMoonshot}
+                onToggleVisible={toggleVisible}
+              />
+            </Field>
+            <Field
+              label="OrcaRouter API (optional)"
+              description="Smart-routed gateway for open models. Looks like sk-orca-…"
+            >
+              <ApiKeyInput
+                field="orcarouter"
+                placeholder="sk-orca-…"
+                value={orcarouter}
+                visible={visibleKeys.orcarouter}
+                onChange={setOrcarouter}
                 onToggleVisible={toggleVisible}
               />
             </Field>

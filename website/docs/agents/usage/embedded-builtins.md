@@ -88,7 +88,7 @@ interface BuiltinAgentsServerOptions {
 | `openAuthorizeUrl`     | Hook invoked when an `authorizationCode` MCP server first needs user consent. Receives the SDK-generated authorize URL. The desktop opens it in a sandboxed `BrowserWindow`; headless embedders can read the URL from the `authenticating` envelope of `addServer` and surface it themselves. |
 | `onConfigError`        | Invoked when applying an MCP config (initial boot or watcher reload) fails. Errors are always logged; this hook is for surfacing them programmatically.                                                                                                                                |
 
-Without `mockStreamFn`, at least one supported provider must be configured before the built-in handler starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, or a valid OpenAI Codex CLI auth file for the `openai-codex` provider.
+Without `mockStreamFn`, at least one supported provider must be configured before the built-in handler starts: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`, `ORCAROUTER_API_KEY`, or a valid OpenAI Codex CLI auth file for the `openai-codex` provider.
 
 ### Pull-wake headers and principals
 
