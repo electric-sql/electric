@@ -386,6 +386,15 @@ export class EntityManager {
     SpawnPersistResult
   >
   private readonly stopWakeRegistryOnShutdown: boolean
+  /**
+   * When enabled, entity session streams are created (and forked) with
+   * `Write-Fence: true` and runtime appends forward the claim write token
+   * plus the fenced-class assertion to the Durable Streams backend, so a
+   * backend implementing the Write Fencing extension can reject deposed or
+   * lapsed writers itself. Off by default; a backend without the extension
+   * ignores the headers either way.
+   */
+  readonly fencedSessionStreams: boolean
 
   constructor(opts: {
     registry: PostgresRegistry
@@ -397,6 +406,7 @@ export class EntityManager {
     writeTokenValidator?: WriteTokenValidator
     spawnConcurrency?: number
     stopWakeRegistryOnShutdown?: boolean
+    fencedSessionStreams?: boolean
   }) {
     this.registry = opts.registry
     this.tenantId = opts.registry.tenantId ?? DEFAULT_TENANT_ID
@@ -407,6 +417,9 @@ export class EntityManager {
     this.entityBridgeManager = opts.entityBridgeManager ?? null
     this.writeTokenValidator = opts.writeTokenValidator ?? null
     this.stopWakeRegistryOnShutdown = opts.stopWakeRegistryOnShutdown ?? true
+    this.fencedSessionStreams =
+      opts.fencedSessionStreams ??
+      process.env.ELECTRIC_AGENTS_FENCED_SESSION_STREAMS === `true`
 
     const spawnConcurrency =
       opts.spawnConcurrency ??
@@ -853,6 +866,7 @@ export class EntityManager {
           this.streamClient.create(mainPath, {
             contentType,
             body: initialBody,
+            writeFence: this.fencedSessionStreams,
           }),
         ])
 
@@ -1194,9 +1208,12 @@ export class EntityManager {
           await this.streamClient.fork(
             plan.fork.streams.main,
             plan.source.streams.main,
-            isRoot && effectiveForkPointer
-              ? { forkPointer: effectiveForkPointer }
-              : undefined
+            {
+              ...(isRoot && effectiveForkPointer
+                ? { forkPointer: effectiveForkPointer }
+                : {}),
+              writeFence: this.fencedSessionStreams,
+            }
           )
           createdStreams.push(plan.fork.streams.main)
         }

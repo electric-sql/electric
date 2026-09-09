@@ -3,7 +3,7 @@ import {
   isChangeMessage,
   isControlMessage,
 } from '@electric-sql/client'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import { wakeRegistrations } from './db/schema.js'
 import { serverLog } from './utils/log.js'
 import { electricUrlWithPath } from './utils/electric-url.js'
@@ -329,17 +329,7 @@ export class WakeRegistry {
     const tenantId = this.resolveTenantId(reg.tenantId)
     const result = await this.db
       .insert(wakeRegistrations)
-      .values({
-        tenantId,
-        subscriberUrl: reg.subscriberUrl,
-        sourceUrl: reg.sourceUrl,
-        condition: reg.condition,
-        debounceMs: reg.debounceMs ?? 0,
-        timeoutMs: reg.timeoutMs ?? 0,
-        oneShot: reg.oneShot,
-        includeResponse: reg.includeResponse !== false,
-        manifestKey: reg.manifestKey ?? null,
-      })
+      .values(this.registrationRow(reg, tenantId))
       .onConflictDoNothing()
       .returning({ id: wakeRegistrations.id })
 
@@ -358,6 +348,111 @@ export class WakeRegistry {
       createdAt: new Date(),
       timeoutConsumed: false,
     })
+  }
+
+  /**
+   * Makes `reg` the one registration its manifest entry owns, without a
+   * moment in which the entry owns none. The replacement is upserted first
+   * and only then are the entry's other rows removed, so a source event
+   * evaluated in between — a child's run finishing while its parent's
+   * manifest lands — matches the old row or the new one, never neither. An
+   * unregister-then-register sequence leaves exactly that gap, and a wake
+   * missed there is never re-evaluated. A manifest that re-describes the
+   * registration spawn already made (the usual case) resolves to that same
+   * row, so nothing is deleted or re-created at all.
+   */
+  async replaceByManifestKey(
+    reg: WakeRegistration & { manifestKey: string }
+  ): Promise<void> {
+    const tenantId = this.resolveTenantId(reg.tenantId)
+    const kept = await this.upsertRegistration(reg, tenantId)
+
+    await this.db
+      .delete(wakeRegistrations)
+      .where(
+        and(
+          eq(wakeRegistrations.tenantId, tenantId),
+          eq(wakeRegistrations.subscriberUrl, reg.subscriberUrl),
+          eq(wakeRegistrations.manifestKey, reg.manifestKey),
+          ne(wakeRegistrations.id, kept.dbId)
+        )
+      )
+
+    const stale = Array.from(this.registrationCache.values()).flatMap((regs) =>
+      regs
+        .filter(
+          (r) =>
+            r.tenantId === tenantId &&
+            r.subscriberUrl === reg.subscriberUrl &&
+            r.manifestKey === reg.manifestKey &&
+            r.dbId !== kept.dbId
+        )
+        .map((r) => r.dbId)
+    )
+    for (const dbId of stale) {
+      this.removeCachedRegistrationByDbId(dbId)
+    }
+  }
+
+  /**
+   * Inserts the registration, or adopts the row `uq_wake_registration` says
+   * already exists for it, and caches whichever it is. `include_response` is
+   * outside that constraint, so the conflict branch writes it — that is what
+   * makes RETURNING yield the existing row, and it is the one field a
+   * re-described registration can legitimately change.
+   */
+  private async upsertRegistration(
+    reg: WakeRegistration,
+    tenantId: string
+  ): Promise<CachedWakeRegistration> {
+    const rows = await this.db
+      .insert(wakeRegistrations)
+      .values(this.registrationRow(reg, tenantId))
+      .onConflictDoUpdate({
+        target: [
+          wakeRegistrations.tenantId,
+          wakeRegistrations.subscriberUrl,
+          wakeRegistrations.sourceUrl,
+          wakeRegistrations.oneShot,
+          wakeRegistrations.debounceMs,
+          wakeRegistrations.timeoutMs,
+          wakeRegistrations.condition,
+          wakeRegistrations.manifestKey,
+        ],
+        set: { includeResponse: sql`excluded.include_response` },
+      })
+      .returning({
+        id: wakeRegistrations.id,
+        createdAt: wakeRegistrations.createdAt,
+        timeoutConsumed: wakeRegistrations.timeoutConsumed,
+      })
+    const row = rows[0]!
+    const cached: CachedWakeRegistration = {
+      ...reg,
+      tenantId,
+      dbId: row.id,
+      createdAt: row.createdAt,
+      timeoutConsumed: row.timeoutConsumed,
+    }
+    this.upsertCachedRegistration(cached)
+    return cached
+  }
+
+  private registrationRow(
+    reg: WakeRegistration,
+    tenantId: string
+  ): typeof wakeRegistrations.$inferInsert {
+    return {
+      tenantId,
+      subscriberUrl: reg.subscriberUrl,
+      sourceUrl: reg.sourceUrl,
+      condition: reg.condition,
+      debounceMs: reg.debounceMs ?? 0,
+      timeoutMs: reg.timeoutMs ?? 0,
+      oneShot: reg.oneShot,
+      includeResponse: reg.includeResponse !== false,
+      manifestKey: reg.manifestKey ?? null,
+    }
   }
 
   private startTimeoutTimer(reg: CachedWakeRegistration, dbId: number): void {

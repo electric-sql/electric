@@ -244,6 +244,67 @@ describe(`createRuntimeHandler`, () => {
     })
   })
 
+  it(`acknowledges a redelivered wake for an in-flight (stream, epoch) without starting it again`, async () => {
+    defineEntity(`test-agent`, { handler: async () => {} })
+
+    const resolvers: Array<() => void> = []
+    processWakeMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve)
+        })
+    )
+
+    const notification = {
+      consumerId: `wake-1`,
+      epoch: 1,
+      wakeId: `wake-1`,
+      streamPath: `/streams/entity:test-1`,
+      streams: [{ path: `/streams/entity:test-1`, offset: `0_0` }],
+      callback: `http://localhost:3000/_electric/wakes/wake-1`,
+      claimToken: `tok-1`,
+      entity: {
+        type: `test-agent`,
+        status: `active`,
+        url: `http://localhost:3000/test-agent/test-1`,
+        streams: {
+          main: `/streams/entity:test-1`,
+        },
+      },
+    }
+
+    const handler = createRuntimeHandler({
+      baseUrl: `http://localhost:3000`,
+      handlerUrl: `http://localhost:4000/electric-agents`,
+      webhookSignature: false,
+    })
+    const deliver = (body: unknown): Promise<Response> =>
+      handler.handleWebhookRequest(
+        new Request(`http://localhost/electric-agents`, {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify(body),
+        })
+      )
+
+    expect((await deliver(notification)).status).toBe(200)
+    // The backend's retry of the same wake (its 2xx was lost) must be
+    // acknowledged — the in-flight wake's done settles it — not run twice.
+    expect((await deliver(notification)).status).toBe(200)
+    expect(processWakeMock).toHaveBeenCalledTimes(1)
+
+    // A later generation for the same stream is a new wake, not a redelivery.
+    expect(
+      (await deliver({ ...notification, epoch: 2, wakeId: `wake-2` })).status
+    ).toBe(200)
+    expect(processWakeMock).toHaveBeenCalledTimes(2)
+    expect(handler.debugState()).toMatchObject({ pendingWakeCount: 2 })
+
+    for (const resolve of resolvers) resolve()
+    await handler.waitForSettled()
+    expect(handler.isWakeActive(`/streams/entity:test-1`, 1)).toBe(false)
+  })
+
   it(`records wake errors in debugState() until drained`, async () => {
     defineEntity(`test-agent`, { handler: async () => {} })
     processWakeMock.mockRejectedValueOnce(new Error(`wake failed`))
