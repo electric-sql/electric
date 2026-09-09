@@ -84,6 +84,14 @@ export interface ElectricAgentsServerOptions {
    * Defaults to dispatchRecoveryIntervalMs when periodic recovery is enabled.
    */
   staleOutstandingWakeAfterMs?: number
+  /**
+   * Create entity session streams with `Write-Fence: true` and forward the
+   * claim write token on runtime appends, letting a Durable Streams backend
+   * that implements the Write Fencing extension fence deposed writers
+   * itself. Off by default; falls back to the
+   * ELECTRIC_AGENTS_FENCED_SESSION_STREAMS env var.
+   */
+  fencedSessionStreams?: boolean
 }
 
 interface MockAgentBootstrap {
@@ -245,6 +253,7 @@ export class ElectricAgentsServer {
         electricUrl: this.options.electricUrl,
         electricSecret: this.options.electricSecret,
         pgSync: this.options.pgSync,
+        fencedSessionStreams: this.options.fencedSessionStreams,
       })
       this.electricAgentsManager = this.standaloneRuntime.manager
       this.entityBridgeManager = this.standaloneRuntime.entityBridgeManager

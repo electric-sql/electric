@@ -612,6 +612,16 @@ async function notificationFromClaim(
       },
     })
 
+  if (input.claim.write_token) {
+    // The backend minted a write token with this claim (Write Fencing
+    // extension); hold it for the runner's claim callback to adopt.
+    ctx.runtime.claimWriteTokens.recordDelivered(
+      ctx.service,
+      input.claim.wake_id,
+      input.claim.write_token
+    )
+  }
+
   await ctx.entityManager.registry.materializeActiveClaim({
     consumerId: input.claim.wake_id,
     epoch: input.claim.generation,

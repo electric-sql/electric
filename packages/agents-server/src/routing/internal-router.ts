@@ -84,6 +84,7 @@ const subscriptionWebhookBodySchema = Type.Object(
     streams: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Any()))),
     callback_url: Type.Optional(Type.String()),
     callback_token: Type.Optional(Type.String()),
+    write_token: Type.Optional(Type.String()),
     primary_stream: Type.Optional(Type.String()),
     primaryStream: Type.Optional(Type.String()),
     streamPath: Type.Optional(Type.String()),
@@ -315,6 +316,7 @@ function newWebhookPayload(body: SubscriptionWebhookBody | undefined): {
   tailOffset: string
   callbackUrl: string
   callbackToken: string
+  writeToken?: string
 } | null {
   if (
     !body ||
@@ -358,6 +360,7 @@ function newWebhookPayload(body: SubscriptionWebhookBody | undefined): {
     tailOffset: selectedStream.tail_offset,
     callbackUrl: body.callback_url,
     callbackToken: body.callback_token,
+    ...(body.write_token ? { writeToken: body.write_token } : {}),
   }
 }
 
@@ -585,6 +588,22 @@ async function subscriptionWebhook(
         )
       }
 
+      if (newWebhook?.writeToken) {
+        // The backend minted this wake's write token before delivery (Write
+        // Fencing extension); hold it for the runtime's claim callback to
+        // adopt. Recorded only after the stopped/paused auto-ack and
+        // fork-lock rejections above, so a wake that never reaches the
+        // runtime — and therefore never claims — leaves no store entry
+        // behind. It must be recorded before the forward below, because the
+        // runtime's claim callback can arrive while the forward is still in
+        // flight.
+        ctx.runtime.claimWriteTokens.recordDelivered(
+          ctx.service,
+          newWebhook.wakeId,
+          newWebhook.writeToken
+        )
+      }
+
       if (entity) {
         rootSpan?.setAttribute(ATTR.ENTITY_URL, entity.url)
         await tracer.startActiveSpan(
@@ -789,6 +808,29 @@ async function wakeCallback(
         responseBytes = new TextEncoder().encode(JSON.stringify(responseBody))
       }
     }
+  } else if (!isDoneRequest && upstream.ok && target.primaryStream) {
+    // Heartbeat: a backend implementing the Write Fencing extension re-mints
+    // the claim's write token on every ack. Adopt the refresh so the active
+    // token tracks the backend's, and surface it to the runtime as
+    // `writeToken` alongside the passed-through ack body.
+    const responseBody = decodeJsonObject(responseBytes)
+    const refreshedToken = responseBody?.write_token
+    if (
+      responseBody?.ok === true &&
+      typeof refreshedToken === `string` &&
+      refreshedToken !== ``
+    ) {
+      const writeToken = await mintClaimWriteToken(
+        ctx,
+        target.primaryStream,
+        consumerId,
+        refreshedToken
+      )
+      if (writeToken) {
+        responseBody.writeToken = writeToken
+        responseBytes = new TextEncoder().encode(JSON.stringify(responseBody))
+      }
+    }
   }
 
   try {
@@ -904,12 +946,45 @@ async function wakeCallback(
 async function mintClaimWriteToken(
   ctx: TenantContext,
   streamPath: string,
-  consumerId: string
+  consumerId: string,
+  backendToken?: string
 ): Promise<string | undefined> {
   const entity = await ctx.entityManager.registry.getEntityByStream(streamPath)
   if (!entity) return undefined
 
-  return ctx.runtime.claimWriteTokens.mint(ctx.service, streamPath, consumerId)
+  // When the Durable Streams backend issued a write token for this claim
+  // (Write Fencing extension), adopt it as the claim's write token so the
+  // store stays the single validation authority while the backend is the
+  // mint. When the backend supplied none, the store mints its own token and
+  // behaviour is byte-for-byte what it is today.
+  //
+  // Version-skew matrix — adoption is data-driven (it follows `write_token`
+  // fields wherever the backend sends them), while stream fencing is a
+  // separate opt-in (`fencedSessionStreams`):
+  // - Base backend (no Write Fencing), any server/runtime: no `write_token`
+  //   ever appears, so the store mints and nothing changes. With
+  //   `fencedSessionStreams` on, the fencing headers are sent but a base
+  //   backend ignores them (additive headers, base spec §11), so
+  //   enforcement remains this store only.
+  // - Token-minting backend, older server (no adoption): the optional
+  //   fields are ignored and the old server mints its own tokens; it never
+  //   creates streams fenced, so the backend enforces nothing.
+  // - Token-minting backend, this server, older runtime (one that ignores
+  //   the heartbeat response's `writeToken`): adoption still happens here,
+  //   so a backend that rotates the token on ack refresh ages the runtime's
+  //   original token out of the store's one-refresh grace, and the
+  //   runtime's appends start failing 401 mid-activation. Upgrade runtimes
+  //   before pointing this server at a token-minting backend (and before
+  //   enabling `fencedSessionStreams`).
+  const token =
+    backendToken ??
+    ctx.runtime.claimWriteTokens.takeDelivered(ctx.service, consumerId)
+  return ctx.runtime.claimWriteTokens.mint(
+    ctx.service,
+    streamPath,
+    consumerId,
+    token
+  )
 }
 
 function encodeWakeCallbackBody(
