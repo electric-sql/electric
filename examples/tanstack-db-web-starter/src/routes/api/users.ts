@@ -14,7 +14,7 @@ const serve = async ({ request }: { request: Request }) => {
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set(`table`, `users`)
 
-  return proxyElectricRequest(originUrl)
+  return proxyElectricRequest(originUrl, request.signal)
 }
 
 export const Route = createFileRoute(`/api/users`)({
