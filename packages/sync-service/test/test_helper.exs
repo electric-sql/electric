@@ -55,6 +55,7 @@ if not skip_repatch_prewarm? do
       Electric.Shapes.Consumer.Snapshotter,
       Electric.Shapes.DynamicConsumerSupervisor,
       Electric.Shapes.Shape,
+      Task.Supervisor,
       :otel_tracer
     ]
   )
