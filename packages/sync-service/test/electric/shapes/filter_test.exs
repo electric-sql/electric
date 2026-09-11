@@ -707,12 +707,43 @@ defmodule Electric.Shapes.FilterTest do
     assert snapshot_filter_ets(filter) == state_before
   end
 
+  test "no ETS row grows with the number of non-indexed shapes on a node" do
+    # Non-indexed shapes are stored per where-condition node. If a node kept
+    # them in a single aggregate row, every add/remove would copy the node's
+    # whole population in and out of ETS: O(n) per operation and O(n²) to
+    # (re)build the filter on startup.
+    filter = Filter.new()
+
+    add_non_indexed_shapes = fn range ->
+      Enum.each(range, fn i ->
+        shape = Shape.new!("t1", where: "number > #{i}", inspector: @inspector)
+        Filter.add_shape(filter, i, shape)
+      end)
+    end
+
+    add_non_indexed_shapes.(1..10)
+    largest_row_with_few_shapes = largest_ets_row_size(filter)
+
+    add_non_indexed_shapes.(11..1000)
+    assert largest_ets_row_size(filter) == largest_row_with_few_shapes
+  end
+
+  defp largest_ets_row_size(filter) do
+    filter
+    |> snapshot_filter_ets()
+    |> Map.values()
+    |> Enum.concat()
+    |> Enum.map(&:erts_debug.flat_size/1)
+    |> Enum.max()
+  end
+
   # Captures the full state of all ETS tables in a filter for comparison
   defp snapshot_filter_ets(filter) do
     %{
       shapes: :ets.tab2list(filter.shapes_table) |> Enum.sort(),
       tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
+      other_shapes: :ets.tab2list(filter.other_shapes_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
       incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
       subquery_index: :ets.tab2list(filter.subquery_index) |> Enum.sort()
