@@ -6,6 +6,29 @@ defmodule Electric.StackSupervisorTest do
 
   import Support.ComponentSetup
 
+  describe "opts_schema/0" do
+    test "every tweak read with Keyword.fetch! at stack start has a schema default" do
+      tweaks_schema = StackSupervisor.opts_schema().schema[:tweaks][:keys]
+
+      assert {:ok, tweaks} = NimbleOptions.validate([], tweaks_schema)
+
+      for key <- [
+            :shape_hibernate_after,
+            :shape_enable_suspend?,
+            :shape_suspend_after,
+            :flush_stall_grace_period,
+            :process_spawn_opts,
+            :consumer_gc_heap_threshold,
+            :shape_filter_max_distributed_leaves
+          ] do
+        assert Keyword.has_key?(tweaks, key), "tweaks schema has no default for #{inspect(key)}"
+      end
+
+      assert Keyword.fetch!(tweaks, :shape_filter_max_distributed_leaves) ==
+               Electric.Config.default(:shape_filter_max_distributed_leaves)
+    end
+  end
+
   describe "Telemetry" do
     setup [:with_stack_id_from_test]
 

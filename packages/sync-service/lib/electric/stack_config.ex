@@ -35,7 +35,9 @@ defmodule Electric.StackConfig do
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
       process_spawn_opts: %{},
-      consumer_gc_heap_threshold: Electric.Config.default(:consumer_gc_heap_threshold)
+      consumer_gc_heap_threshold: Electric.Config.default(:consumer_gc_heap_threshold),
+      shape_filter_max_distributed_leaves:
+        Electric.Config.default(:shape_filter_max_distributed_leaves)
     ]
   end
 
