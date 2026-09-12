@@ -147,9 +147,6 @@ vi.mock(`../src/wake-registry`, () => ({
     stopSync(): Promise<void> {
       return Promise.resolve()
     }
-    loadRegistrations(): Promise<void> {
-      return Promise.resolve()
-    }
   },
 }))
 
@@ -279,6 +276,19 @@ describe(`ElectricAgentsServer.start`, () => {
     }
   })
 
+  it(`fails host startup without Electric URL for wake registry sync`, async () => {
+    server = new ElectricAgentsServer({
+      durableStreamsUrl: `http://durable.test`,
+      port: 0,
+      postgresUrl: TEST_POSTGRES_URL,
+      electricUrl: undefined,
+    })
+
+    await expect(server.start()).rejects.toThrow(
+      `WakeRegistry runtime requires an Electric URL`
+    )
+  })
+
   it(`rejects startup and cleans up when scheduler startup fails`, async () => {
     schedulerStartMock.mockRejectedValueOnce(new Error(`scheduler exploded`))
 
@@ -286,6 +296,7 @@ describe(`ElectricAgentsServer.start`, () => {
       durableStreamsUrl: `http://durable.test`,
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
+      electricUrl: `http://electric.test`,
     })
 
     await expect(server.start()).rejects.toThrow(`scheduler exploded`)
@@ -313,6 +324,7 @@ describe(`ElectricAgentsServer.start`, () => {
       durableStreamsUrl: `http://durable.test`,
       port: 0,
       postgresUrl: `postgres://electric_agents:electric_agents@localhost:5432/electric_agents`,
+      electricUrl: `http://electric.test`,
     })
 
     await expect(server.start()).resolves.toMatch(/^http:\/\//)
@@ -354,6 +366,7 @@ describe(`ElectricAgentsServer.start`, () => {
       durableStreamsUrl: `http://durable.test`,
       port: 0,
       postgresUrl: `postgres://electric_agents:electric_agents@localhost:5432/electric_agents`,
+      electricUrl: `http://electric.test`,
     })
 
     await expect(server.start()).resolves.toMatch(/^http:\/\//)
@@ -376,6 +389,7 @@ describe(`ElectricAgentsServer.start`, () => {
       mockStreamFn: streamFn as any,
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
+      electricUrl: `http://electric.test`,
     })
 
     await expect(server.start()).resolves.toMatch(/^http:\/\//)
@@ -399,6 +413,7 @@ describe(`ElectricAgentsServer.start`, () => {
       mockStreamFn: streamFn as any,
       port: 0,
       postgresUrl: TEST_POSTGRES_URL,
+      electricUrl: `http://electric.test`,
     })
 
     await expect(server.start()).resolves.toMatch(/^http:\/\//)

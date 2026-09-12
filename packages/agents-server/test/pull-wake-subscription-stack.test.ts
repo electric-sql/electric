@@ -98,6 +98,69 @@ describe(`pull-wake subscription stack`, () => {
     })
   })
 
+  it(`emits another runner wake when ack leaves later work pending`, async () => {
+    dsServer = new DurableStreamTestServer({
+      port: 0,
+      longPollTimeout: 100,
+      webhooks: true,
+    })
+    await dsServer.start()
+    const streamBaseUrl = durableStreamTestServerUrl(dsServer.url)
+    const client = new StreamClient(streamBaseUrl)
+
+    await client.ensure(`/runners/runner-1/wake`, {
+      contentType: `application/json`,
+    })
+    await client.ensure(`/horton/one/main`, {
+      contentType: `application/json`,
+    })
+    await client.putSubscription(`runner:runner-1:one`, {
+      type: `pull-wake`,
+      streams: [`/horton/one/main`],
+      wake_stream: `/runners/runner-1/wake`,
+    })
+
+    const first = await client.append(
+      `/horton/one/main`,
+      JSON.stringify({ type: `message`, value: `first` })
+    )
+    const claim = await client.claimSubscription(
+      `runner:runner-1:one`,
+      `worker-1`
+    )
+    expect(claim).toMatchObject({
+      generation: 1,
+      token: expect.any(String),
+      streams: [expect.objectContaining({ has_pending: true })],
+    })
+
+    await client.append(
+      `/horton/one/main`,
+      JSON.stringify({ type: `message`, value: `second` })
+    )
+
+    const ack = await client.ackSubscription(
+      `runner:runner-1:one`,
+      claim!.token,
+      {
+        wake_id: claim!.wake_id,
+        generation: claim!.generation,
+        acks: [{ path: `horton/one/main`, offset: first.offset }],
+        done: true,
+      }
+    )
+    expect(ack).toMatchObject({ ok: true, next_wake: true })
+
+    const wakes = await readJsonStream<Record<string, unknown>>(
+      streamBaseUrl,
+      `/runners/runner-1/wake`
+    )
+    expect(wakes).toEqual([
+      expect.objectContaining({ generation: 1 }),
+      expect.objectContaining({ generation: 2 }),
+    ])
+  })
+
   it(`proxies pre-existing runner wake events to pull-wake runners`, async () => {
     dsServer = new DurableStreamTestServer({
       port: 0,

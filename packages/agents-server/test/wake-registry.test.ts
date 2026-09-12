@@ -29,6 +29,14 @@ import {
 import type { Server } from 'node:http'
 import type { WakeEvalResult } from '../src/wake-registry'
 
+async function createLocalRegistry(
+  tenantId?: string | null
+): Promise<WakeRegistry> {
+  const registry = new WakeRegistry(createMockDb(), tenantId)
+  await registry.startLocalForTests()
+  return registry
+}
+
 let nextDbId = 1
 function createMockDb(): any {
   return {
@@ -61,8 +69,237 @@ function createMockDb(): any {
 }
 
 describe(`Wake Registry`, () => {
+  it(`evaluates registrations from local TanStack DB collection`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.subscriberUrl).toBe(`/parent/p1`)
+    expect(results[0]!.registrationDbId).toBe(1)
+    expect(results[0]!.sourceEventKey).toBe(`update:run-1`)
+  })
+
+  it(`reconciles invisible insert conflicts to the locally allocated database row`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    ;(registry as any).allocateRuntimeId = async () => 42
+    ;(registry as any).persistInsert = async (row: any) => ({
+      txid: 123,
+      row,
+    })
+    const timeout = new Error(`timed out`)
+    timeout.name = `TimeoutWaitingForTxIdError`
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {
+      throw timeout
+    }
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/conflict`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/conflict`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]!.registrationDbId).toBe(42)
+  })
+
+  it(`keeps registrations locally visible when Electric tx visibility times out`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    ;(registry as any).allocateRuntimeId = async () => 42
+    ;(registry as any).persistInsert = async (row: any) => ({ txid: 123, row })
+    const timeout = new Error(`timed out`)
+    timeout.name = `TimeoutWaitingForTxIdError`
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {
+      throw timeout
+    }
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/slow-visible`,
+      condition: `runFinished`,
+      oneShot: false,
+    })
+
+    const results = await registry.evaluate(`/child/slow-visible`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(results).toHaveLength(1)
+  })
+
+  it(`keeps committed one-shot deletes locally deleted when Electric tx visibility times out`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/one-shot-timeout`,
+      condition: `runFinished`,
+      oneShot: true,
+    })
+    ;(registry as any).mode = `electric`
+    ;(registry as any).persistDeleteRows = async () => 123
+    const timeout = new Error(`timed out`)
+    timeout.name = `TimeoutWaitingForTxIdError`
+    ;(registry as any).requireCollection().utils.awaitTxId = async () => {
+      throw timeout
+    }
+
+    const first = await registry.evaluate(`/child/one-shot-timeout`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const second = await registry.evaluate(`/child/one-shot-timeout`, {
+      type: `run`,
+      key: `run-2`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(first).toHaveLength(1)
+    expect(second).toHaveLength(0)
+  })
+
+  it(`persists unregister predicates even when matching rows are not locally visible`, async () => {
+    const registry = await createLocalRegistry()
+    ;(registry as any).mode = `electric`
+    let persisted: unknown
+    ;(registry as any).persistDeleteRows = async (input: unknown) => {
+      persisted = input
+      return undefined
+    }
+
+    await registry.unregisterBySubscriber(`/parent/missing`)
+
+    expect(persisted).toEqual({
+      rows: [],
+      persist: {
+        kind: `subscriber`,
+        tenantId: `default`,
+        subscriberUrl: `/parent/missing`,
+      },
+    })
+  })
+
+  it(`cleans up the Electric collection on stopSync`, async () => {
+    const registry = await createLocalRegistry()
+    const cleanup = vi.fn(async () => undefined)
+    const dispose = vi.fn(async () => undefined)
+    ;(registry as any).registrationsCollection = { cleanup }
+    ;(registry as any).registrationsEffect = { dispose }
+
+    await registry.stopSync()
+
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
+
+  it(`starts the registration effect after retrying an existing collection preload`, async () => {
+    const registry = await createLocalRegistry()
+    const preload = vi.fn(async () => undefined)
+    const startEffect = vi.fn()
+    ;(registry as any).registrationsCollection = { preload }
+    ;(registry as any).startRegistrationEffect = startEffect
+
+    await registry.startSync(`http://electric.test`)
+
+    expect(preload).toHaveBeenCalledTimes(1)
+    expect(startEffect).toHaveBeenCalledTimes(1)
+  })
+
+  it(`does not await an invisible txid when runtime timeout update matches no rows`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/stale-timeout`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 1_000,
+    })
+    ;(registry as any).mode = `electric`
+    ;(registry as any).persistTimeoutConsumed = async () => undefined
+
+    await expect(
+      (registry as any).markTimeoutConsumed(1, `default`)
+    ).resolves.toBeUndefined()
+  })
+
+  it(`timeout effect delivers timeout wake once and marks row consumed`, async () => {
+    const registry = await createLocalRegistry()
+    const delivered: Array<WakeEvalResult> = []
+    registry.setTimeoutCallback((result) => delivered.push(result))
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 25,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]!.wakeMessage.timeout).toBe(true)
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(delivered).toHaveLength(1)
+  })
+
+  it(`local timeout effect does not consume timeout before callback is registered`, async () => {
+    const registry = await createLocalRegistry()
+    const delivered: Array<WakeEvalResult> = []
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: false,
+      timeoutMs: 25,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(delivered).toHaveLength(0)
+
+    registry.setTimeoutCallback((result) => delivered.push(result))
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(delivered).toHaveLength(1)
+    expect(delivered[0]!.sourceEventKey).toBe(`timeout`)
+  })
+
   it(`keeps shared registrations scoped by tenant`, async () => {
-    const registry = new WakeRegistry(createMockDb(), null)
+    const registry = await createLocalRegistry(null)
     await registry.register({
       tenantId: `tenant-a`,
       subscriberUrl: `/tenant-a/parent`,
@@ -84,8 +321,8 @@ describe(`Wake Registry`, () => {
       value: {},
       headers: { operation: `insert` },
     }
-    const tenantA = registry.evaluate(`/source/shared`, event, `tenant-a`)
-    const tenantB = registry.evaluate(`/source/shared`, event, `tenant-b`)
+    const tenantA = await registry.evaluate(`/source/shared`, event, `tenant-a`)
+    const tenantB = await registry.evaluate(`/source/shared`, event, `tenant-b`)
 
     expect(tenantA).toHaveLength(1)
     expect(tenantA[0]!.tenantId).toBe(`tenant-a`)
@@ -96,7 +333,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`dispatches shared timeout callbacks by tenant`, async () => {
-    const registry = new WakeRegistry(createMockDb(), null)
+    const registry = await createLocalRegistry(null)
     const tenantA: Array<WakeEvalResult> = []
     const tenantB: Array<WakeEvalResult> = []
     registry.setTimeoutCallback((result) => tenantA.push(result), `tenant-a`)
@@ -128,7 +365,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`does not consume shared timeout before tenant callback is registered`, async () => {
-    const registry = new WakeRegistry(createMockDb(), null)
+    const registry = await createLocalRegistry(null)
     const delivered: Array<WakeEvalResult> = []
 
     await registry.register({
@@ -148,6 +385,7 @@ describe(`Wake Registry`, () => {
       (result) => delivered.push(result),
       `tenant-late`
     )
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(delivered).toHaveLength(1)
     expect(delivered[0]!.tenantId).toBe(`tenant-late`)
@@ -155,7 +393,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`evaluates runFinished condition on completed run event`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -163,7 +401,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -181,7 +419,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`returns registrationDbId and sourceEventKey for immediate matches`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/_cron/abc`,
@@ -189,7 +427,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_cron/abc`, {
+    const results = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-7`,
       value: {},
@@ -201,40 +439,8 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.sourceEventKey).toBe(`insert:tick-7`)
   })
 
-  it(`removes cached registrations from shape delete old_value ids`, async () => {
-    const registry = new WakeRegistry(createMockDb())
-    await registry.register({
-      subscriberUrl: `/watcher/w1`,
-      sourceUrl: `/_cron/abc`,
-      condition: { on: `change` },
-      oneShot: false,
-    })
-
-    const before = registry.evaluate(`/_cron/abc`, {
-      type: `cron_tick`,
-      key: `tick-7`,
-      value: {},
-      headers: { operation: `insert` },
-    })
-    expect(before).toHaveLength(1)
-
-    await (registry as any).applyShapeMessage({
-      key: `shape-key-is-not-the-registration-id`,
-      old_value: { id: before[0]!.registrationDbId },
-      headers: { operation: `delete` },
-    })
-
-    const after = registry.evaluate(`/_cron/abc`, {
-      type: `cron_tick`,
-      key: `tick-8`,
-      value: {},
-      headers: { operation: `insert` },
-    })
-    expect(after).toHaveLength(0)
-  })
-
   it(`keeps distinct registrations distinct for the same source event`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/_cron/abc`,
@@ -248,7 +454,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_cron/abc`, {
+    const results = await registry.evaluate(`/_cron/abc`, {
       type: `cron_tick`,
       key: `tick-7`,
       value: {},
@@ -263,7 +469,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`runFinished remains active for repeated child completions`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -271,7 +477,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const first = registry.evaluate(`/child/c1`, {
+    const first = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -279,7 +485,7 @@ describe(`Wake Registry`, () => {
     })
     expect(first).toHaveLength(1)
 
-    const second = registry.evaluate(`/child/c1`, {
+    const second = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-2`,
       value: { status: `completed` },
@@ -289,7 +495,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`evaluates collection change condition`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/source/s1`,
@@ -297,7 +503,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/source/s1`, {
+    const results = await registry.evaluate(`/source/s1`, {
       type: `texts`,
       key: `text-1`,
       value: { content: `hello` },
@@ -310,7 +516,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`includes inbox message details in wake changes`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/agent/self`,
       sourceUrl: `/agent/self`,
@@ -318,7 +524,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/agent/self`, {
+    const results = await registry.evaluate(`/agent/self`, {
       type: `inbox`,
       key: `msg-1`,
       value: {
@@ -347,7 +553,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`ignores events for non-matching collections`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/source/s1`,
@@ -355,7 +561,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/source/s1`, {
+    const results = await registry.evaluate(`/source/s1`, {
       type: `toolCalls`,
       key: `tc-1`,
       value: {},
@@ -366,7 +572,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`filters collection wakes by operation kind when ops is provided`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/source/s1`,
@@ -378,13 +584,13 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const insertResults = registry.evaluate(`/source/s1`, {
+    const insertResults = await registry.evaluate(`/source/s1`, {
       type: `members`,
       key: `/task/a`,
       value: { url: `/task/a` },
       headers: { operation: `insert` },
     })
-    const deleteResults = registry.evaluate(`/source/s1`, {
+    const deleteResults = await registry.evaluate(`/source/s1`, {
       type: `members`,
       key: `/task/a`,
       old_value: { url: `/task/a` },
@@ -401,7 +607,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`maps pg-sync old_value from the event value into change.oldValue`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/watcher/w1`,
       sourceUrl: `/_electric/pg-sync/default/pg-source-1`,
@@ -409,7 +615,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(
+    const results = await registry.evaluate(
       `/_electric/pg-sync/default/pg-source-1`,
       {
         type: `pg_sync_change`,
@@ -434,8 +640,71 @@ describe(`Wake Registry`, () => {
     })
   })
 
+  it(`unregisterBySource removes all matching local collection rows`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/a`,
+      sourceUrl: `/source/1`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+    await registry.register({
+      subscriberUrl: `/parent/b`,
+      sourceUrl: `/source/1`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+    await registry.register({
+      subscriberUrl: `/parent/c`,
+      sourceUrl: `/source/2`,
+      condition: { on: `change` },
+      oneShot: false,
+    })
+
+    await registry.unregisterBySource(`/source/1`)
+
+    expect(
+      await registry.evaluate(`/source/1`, {
+        type: `texts`,
+        key: `t1`,
+        value: {},
+        headers: { operation: `insert` },
+      })
+    ).toHaveLength(0)
+    expect(
+      await registry.evaluate(`/source/2`, {
+        type: `texts`,
+        key: `t2`,
+        value: {},
+        headers: { operation: `insert` },
+      })
+    ).toHaveLength(1)
+  })
+
+  it(`oneShot match removes row before a second immediate evaluation`, async () => {
+    const registry = await createLocalRegistry()
+
+    await registry.register({
+      subscriberUrl: `/parent/p1`,
+      sourceUrl: `/child/c1`,
+      condition: `runFinished`,
+      oneShot: true,
+    })
+
+    const event = {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    }
+
+    expect(await registry.evaluate(`/child/c1`, event)).toHaveLength(1)
+    expect(await registry.evaluate(`/child/c1`, event)).toHaveLength(0)
+  })
+
   it(`cleanup on subscriber deletion removes all registrations`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -451,13 +720,13 @@ describe(`Wake Registry`, () => {
 
     await registry.unregisterBySubscriber(`/parent/p1`)
 
-    const r1 = registry.evaluate(`/child/c1`, {
+    const r1 = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
       headers: { operation: `update` },
     })
-    const r2 = registry.evaluate(`/child/c2`, {
+    const r2 = await registry.evaluate(`/child/c2`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -469,7 +738,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`surgical unregister removes only the targeted subscriber+source pair`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -485,13 +754,13 @@ describe(`Wake Registry`, () => {
 
     await registry.unregisterBySubscriberAndSource(`/parent/p1`, `/child/c1`)
 
-    const r1 = registry.evaluate(`/child/c1`, {
+    const r1 = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
       headers: { operation: `update` },
     })
-    const r2 = registry.evaluate(`/child/c2`, {
+    const r2 = await registry.evaluate(`/child/c2`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -502,7 +771,7 @@ describe(`Wake Registry`, () => {
     expect(r2).toHaveLength(1)
   })
 
-  it(`register() rejects when DB insert fails so callers can catch`, async () => {
+  it(`local register does not require a backing DB insert`, async () => {
     const failingDb = {
       ...createMockDb(),
       insert: () => ({
@@ -514,6 +783,7 @@ describe(`Wake Registry`, () => {
       }),
     }
     const registry = new WakeRegistry(failingDb)
+    await registry.startLocalForTests()
 
     await expect(
       registry.register({
@@ -522,11 +792,11 @@ describe(`Wake Registry`, () => {
         condition: `runFinished`,
         oneShot: false,
       })
-    ).rejects.toThrow(`connection refused`)
+    ).resolves.toBeUndefined()
   })
 
   it(`rebuilds registry from register calls`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -540,7 +810,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const runResults = registry.evaluate(`/child/c1`, {
+    const runResults = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -549,7 +819,7 @@ describe(`Wake Registry`, () => {
     expect(runResults).toHaveLength(1)
     expect(runResults[0]!.subscriberUrl).toBe(`/parent/p1`)
 
-    const changeResults = registry.evaluate(`/source/s1`, {
+    const changeResults = await registry.evaluate(`/source/s1`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -560,7 +830,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`evaluates shared-state wakes against the shared-state stream path`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/_electric/shared-state/board-1`,
@@ -568,7 +838,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/_electric/shared-state/board-1`, {
+    const results = await registry.evaluate(`/_electric/shared-state/board-1`, {
       type: `texts`,
       key: `t-1`,
       value: {},
@@ -580,7 +850,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`delivers timeout wake when timeoutMs expires`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     const delivered: Array<WakeEvalResult> = []
     registry.setTimeoutCallback((result) => {
       delivered.push(result)
@@ -605,7 +875,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`debounce coalesces rapid events into single wake`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     const debounced: Array<WakeEvalResult> = []
     registry.setDebounceCallback((result) => {
       debounced.push(result)
@@ -620,7 +890,7 @@ describe(`Wake Registry`, () => {
     })
 
     for (let i = 0; i < 3; i++) {
-      const immediate = registry.evaluate(`/source/s1`, {
+      const immediate = await registry.evaluate(`/source/s1`, {
         type: `texts`,
         key: `text-${i}`,
         value: { content: `msg-${i}` },
@@ -639,7 +909,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`keeps debounced registrations distinct for different conditions on the same source`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     const debounced: Array<WakeEvalResult> = []
     registry.setDebounceCallback((result) => {
       debounced.push(result)
@@ -661,7 +931,7 @@ describe(`Wake Registry`, () => {
     })
 
     expect(
-      registry.evaluate(`/source/s1`, {
+      await registry.evaluate(`/source/s1`, {
         type: `texts`,
         key: `text-1`,
         value: { content: `hello` },
@@ -670,7 +940,7 @@ describe(`Wake Registry`, () => {
     ).toHaveLength(0)
 
     expect(
-      registry.evaluate(`/source/s1`, {
+      await registry.evaluate(`/source/s1`, {
         type: `toolCalls`,
         key: `tool-1`,
         value: { name: `search` },
@@ -692,6 +962,40 @@ describe(`Wake Registry`, () => {
     expect(
       new Set(debounced.map((result) => result.registrationDbId)).size
     ).toBe(2)
+  })
+
+  it(`awaits wake registration evaluation results`, async () => {
+    const wakeResult = {
+      tenantId: `default`,
+      subscriberUrl: `/parent/p1`,
+      registrationDbId: 12,
+      sourceEventKey: `run-1`,
+      wakeMessage: {
+        source: `/child/c1`,
+        timeout: false,
+        changes: [{ collection: `runs`, kind: `update`, key: `run-1` }],
+      },
+      runFinishedStatus: `completed`,
+    }
+    const wakeRegistry = {
+      evaluate: vi.fn().mockResolvedValue([wakeResult]),
+    }
+    const deliverWakeResult = vi.fn().mockResolvedValue(undefined)
+    const manager = {
+      tenantId: `default`,
+      wakeRegistry,
+      deliverWakeResult,
+    } as any
+
+    await EntityManager.prototype.evaluateWakes.call(manager, `/child/c1`, {
+      type: `run`,
+      key: `run-1`,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+
+    expect(wakeRegistry.evaluate).toHaveBeenCalledTimes(1)
+    expect(deliverWakeResult).toHaveBeenCalledWith(wakeResult)
   })
 
   it(`deliverWakeResult keys fanout by registrationDbId and sourceEventKey`, async () => {
@@ -736,7 +1040,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`passes includeResponse through evaluate result`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -745,7 +1049,7 @@ describe(`Wake Registry`, () => {
       includeResponse: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -756,8 +1060,8 @@ describe(`Wake Registry`, () => {
     expect(results[0]!.includeResponse).toBe(false)
   })
 
-  it(`includeResponse defaults to undefined when not set`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+  it(`includeResponse defaults to true when not set`, async () => {
+    const registry = await createLocalRegistry()
     await registry.register({
       subscriberUrl: `/parent/p1`,
       sourceUrl: `/child/c1`,
@@ -765,7 +1069,7 @@ describe(`Wake Registry`, () => {
       oneShot: false,
     })
 
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -773,11 +1077,11 @@ describe(`Wake Registry`, () => {
     })
 
     expect(results).toHaveLength(1)
-    expect(results[0]!.includeResponse).toBeUndefined()
+    expect(results[0]!.includeResponse).toBe(true)
   })
 
   it(`debounced runFinished preserves runFinishedStatus and includeResponse`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     const delivered: Array<WakeEvalResult> = []
     registry.setDebounceCallback((result) => {
       delivered.push(result)
@@ -793,7 +1097,7 @@ describe(`Wake Registry`, () => {
     })
 
     // Immediate evaluate should return nothing (debounced)
-    const results = registry.evaluate(`/child/c1`, {
+    const results = await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -812,7 +1116,7 @@ describe(`Wake Registry`, () => {
   })
 
   it(`debounced multi-run: status matches changes[0] run key`, async () => {
-    const registry = new WakeRegistry(createMockDb())
+    const registry = await createLocalRegistry()
     const delivered: Array<WakeEvalResult> = []
     registry.setDebounceCallback((result) => {
       delivered.push(result)
@@ -827,7 +1131,7 @@ describe(`Wake Registry`, () => {
     })
 
     // run-1 completes
-    registry.evaluate(`/child/c1`, {
+    await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-1`,
       value: { status: `completed` },
@@ -835,7 +1139,7 @@ describe(`Wake Registry`, () => {
     })
 
     // run-2 fails in the same debounce window
-    registry.evaluate(`/child/c1`, {
+    await registry.evaluate(`/child/c1`, {
       type: `run`,
       key: `run-2`,
       value: { status: `failed` },
@@ -967,6 +1271,79 @@ describe(`Wake Registry Integration`, () => {
     )
     expect(subRes.status).toBeLessThan(300)
   }
+
+  it(`delivers concurrent runFinished wakes from multiple children to the same parent`, async () => {
+    const ts = Date.now()
+    const typeName = `wakemulti${ts}`
+
+    const typeRes = await fetch(`${baseUrl}/_electric/entity-types`, {
+      method: `POST`,
+      headers: { 'content-type': `application/json` },
+      body: JSON.stringify({
+        name: typeName,
+        description: `multiple child runFinished wake test`,
+      }),
+    })
+    expect(typeRes.status).toBe(201)
+
+    const parentRes = await fetch(
+      `${baseUrl}/_electric/entities/${typeName}/parent-${ts}`,
+      {
+        method: `PUT`,
+        headers: { 'content-type': `application/json` },
+        body: JSON.stringify({}),
+      }
+    )
+    expect(parentRes.status).toBe(201)
+    const parent = (await parentRes.json()) as {
+      url: string
+      streams: { main: string }
+    }
+
+    const manager = getElectricAgentsManager()
+    const children: Array<{ url: string; streams: { main: string } }> = []
+    for (const childName of [`a`, `b`, `c`]) {
+      const childRes = await fetch(
+        `${baseUrl}/_electric/entities/${typeName}/child-${childName}-${ts}`,
+        {
+          method: `PUT`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ parent: parent.url }),
+        }
+      )
+      expect(childRes.status).toBe(201)
+      const child = (await childRes.json()) as {
+        url: string
+        streams: { main: string }
+      }
+      children.push(child)
+      await manager.wakeRegistry.register({
+        subscriberUrl: parent.url,
+        sourceUrl: child.url,
+        condition: `runFinished`,
+        oneShot: false,
+      })
+    }
+
+    await Promise.all(
+      children.map((child, index) =>
+        manager.evaluateWakes(child.url, {
+          type: `run`,
+          key: `run-${index}`,
+          value: { status: `completed`, result: `done-${index}` },
+          headers: { operation: `update` },
+        })
+      )
+    )
+
+    const wakeEvents = await waitForWakeEvents(parent.streams.main, 3)
+    expect(wakeEvents).toHaveLength(3)
+    expect(
+      new Set(
+        wakeEvents.map((event) => (event.value as { source?: string }).source)
+      )
+    ).toEqual(new Set(children.map((child) => child.url)))
+  }, 15_000)
 
   it(`spawn with wake registers condition and delivers wake on child run completion`, async () => {
     const ts = Date.now()

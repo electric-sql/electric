@@ -86,7 +86,10 @@ describe(`AgentsHost`, () => {
     const host = new AgentsHost({
       db: createMockDb(),
       pgClient: vi.fn() as any,
+      electricUrl: `http://electric.test`,
     })
+
+    vi.spyOn(host.wakeRegistry, `startSync`).mockResolvedValue(undefined)
 
     const runtime = await host.registerTenant({
       serviceId: `svc-before-start`,
@@ -98,6 +101,8 @@ describe(`AgentsHost`, () => {
     const loadTenantBridges = vi
       .spyOn(host.entityProjector, `loadTenantBridges`)
       .mockResolvedValue(undefined)
+    vi.spyOn(host.entityProjector, `start`).mockResolvedValue(undefined)
+    vi.spyOn(host.entityProjector, `stop`).mockResolvedValue(undefined)
     vi.spyOn(host.scheduler, `start`).mockResolvedValue(undefined)
     vi.spyOn(host.scheduler, `stop`).mockResolvedValue(undefined)
     vi.spyOn(host.tagStreamOutboxDrainer, `start`).mockImplementation(() => {})

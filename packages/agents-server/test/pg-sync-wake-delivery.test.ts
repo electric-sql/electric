@@ -31,6 +31,7 @@ function event(operation: `insert` | `update` | `delete`, key = operation) {
 describe(`pgSync wake delivery matching`, () => {
   it(`insert wakes insert subscriber and delete does not wake insert-only subscriber`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,
@@ -38,7 +39,7 @@ describe(`pgSync wake delivery matching`, () => {
       oneShot: false,
     })
 
-    const insertResults = registry.evaluate(
+    const insertResults = await registry.evaluate(
       `/_electric/pg-sync/test`,
       event(`insert`),
       `default`
@@ -49,12 +50,17 @@ describe(`pgSync wake delivery matching`, () => {
       oldValue: { id: `entity-1`, status: `spawning` },
     })
     expect(
-      registry.evaluate(`/_electric/pg-sync/test`, event(`delete`), `default`)
+      await registry.evaluate(
+        `/_electric/pg-sync/test`,
+        event(`delete`),
+        `default`
+      )
     ).toEqual([])
   })
 
   it(`splits two subscribers on the same source by operation`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,
@@ -69,19 +75,28 @@ describe(`pgSync wake delivery matching`, () => {
     })
 
     expect(
-      registry
-        .evaluate(`/_electric/pg-sync/test`, event(`insert`), `default`)
-        .map((r) => r.subscriberUrl)
+      (
+        await registry.evaluate(
+          `/_electric/pg-sync/test`,
+          event(`insert`),
+          `default`
+        )
+      ).map((r) => r.subscriberUrl)
     ).toEqual([`/horton/a`])
     expect(
-      registry
-        .evaluate(`/_electric/pg-sync/test`, event(`delete`), `default`)
-        .map((r) => r.subscriberUrl)
+      (
+        await registry.evaluate(
+          `/_electric/pg-sync/test`,
+          event(`delete`),
+          `default`
+        )
+      ).map((r) => r.subscriberUrl)
     ).toEqual([`/horton/b`])
   })
 
   it(`filters pgSync events by collection`, async () => {
     const registry = new WakeRegistry(createDb() as any, `default`)
+    await registry.startLocalForTests()
     await registry.register({
       subscriberUrl: `/horton/a`,
       sourceUrl: `/_electric/pg-sync/test`,
@@ -90,10 +105,14 @@ describe(`pgSync wake delivery matching`, () => {
     })
 
     expect(
-      registry.evaluate(`/_electric/pg-sync/test`, event(`insert`), `default`)
+      await registry.evaluate(
+        `/_electric/pg-sync/test`,
+        event(`insert`),
+        `default`
+      )
     ).toHaveLength(1)
     expect(
-      registry.evaluate(
+      await registry.evaluate(
         `/_electric/pg-sync/test`,
         { ...event(`insert`), type: `other` },
         `default`

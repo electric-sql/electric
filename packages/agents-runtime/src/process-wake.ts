@@ -75,6 +75,7 @@ interface ClaimCallbackResponse {
   claimToken?: string
   token?: string
   writeToken?: string
+  next_wake?: boolean
   error?: { code?: string; message?: string }
 }
 
@@ -644,7 +645,47 @@ export async function processWake(
     return left < right ? -1 : 1
   }
 
+  const firstPendingRunnableFreshOffset = (): string | null => {
+    for (const batch of pendingLiveBatches) {
+      const events = toChangeEvents(batch)
+      const cancelledInboxKeys = new Set(
+        events.filter(isInboxCancellationEvent).map(inboxEventKey)
+      )
+      for (const event of events) {
+        if (event.type === `wake`) {
+          return event.headers.offset ?? batch.offset
+        }
+        if (isInboxEvent(event)) {
+          if (cancelledInboxKeys.has(inboxEventKey(event))) continue
+          const value = event.value as
+            | {
+                payload?: unknown
+                mode?: `immediate` | `queued` | `paused` | `steer`
+                status?: `pending` | `processed` | `cancelled`
+              }
+            | undefined
+          if (
+            value?.status !== `cancelled` &&
+            (value?.payload !== undefined ||
+              value?.mode === `queued` ||
+              value?.mode === `steer`)
+          ) {
+            return event.headers.offset ?? batch.offset
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const setSafeAckOffset = (offset: string): void => {
+    const pendingFreshOffset = firstPendingRunnableFreshOffset()
+    if (
+      pendingFreshOffset !== null &&
+      compareOffsets(offset, pendingFreshOffset) >= 0
+    ) {
+      return
+    }
     if (compareOffsets(offset, safeAckOffset) > 0) {
       safeAckOffset = offset
     }
@@ -2604,7 +2645,7 @@ export async function processWake(
         log.info(`shutdown requested, sending done callback at checkpoint`)
       }
       try {
-        await sendDone(
+        const doneResponse = await sendDone(
           callback,
           activeClaimToken,
           claimHeaderConfig,
@@ -2612,6 +2653,9 @@ export async function processWake(
           streamPath,
           doneOffset === `-1` ? null : doneOffset
         )
+        if (doneResponse.next_wake) {
+          config.onDoneNextWake?.(streamPath)
+        }
       } catch (err) {
         cleanupErrors.push(toError(err))
       }
@@ -2653,7 +2697,7 @@ async function sendDone(
   epoch: number,
   streamPath: string,
   offset: string | null
-): Promise<void> {
+): Promise<ClaimCallbackResponse> {
   const response = await fetch(callback, {
     method: `POST`,
     headers: await createClaimCallbackHeaders(claimHeaderConfig, token),
@@ -2664,15 +2708,16 @@ async function sendDone(
     }),
   })
 
+  const body = await response.text().catch(() => `<body unreadable>`)
   if (!response.ok) {
-    let body = ``
-    try {
-      body = await response.text()
-    } catch {
-      body = `<body unreadable>`
-    }
     throw new Error(
       `Done callback failed (${response.status}): ${body || response.statusText}`
     )
+  }
+
+  const raw = parseClaimCallbackResponseBody(body)
+  return {
+    ...raw,
+    ok: raw.ok === undefined ? response.ok && raw.error === undefined : raw.ok,
   }
 }
