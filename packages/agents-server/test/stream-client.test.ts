@@ -7,6 +7,7 @@ const {
   flushMock,
   detachMock,
   headMock,
+  streamMock,
   MockFetchError,
   MockDurableStreamError,
 } = vi.hoisted(() => {
@@ -29,6 +30,7 @@ const {
     flushMock: vi.fn().mockResolvedValue(undefined),
     detachMock: vi.fn().mockResolvedValue(undefined),
     headMock: vi.fn(),
+    streamMock: vi.fn(),
     MockFetchError: HoistedFetchError,
     MockDurableStreamError: HoistedDurableStreamError,
   }
@@ -37,6 +39,8 @@ const {
 vi.mock(`@durable-streams/client`, () => ({
   DurableStream: class {
     constructor(_opts: { url: string; contentType?: string }) {}
+
+    stream = streamMock
 
     static create = vi.fn()
     static delete = vi.fn()
@@ -58,6 +62,31 @@ describe(`StreamClient`, () => {
     flushMock.mockClear()
     detachMock.mockClear()
     headMock.mockReset()
+    streamMock.mockReset()
+  })
+
+  it(`readJson reads large batches without using StreamResponse.json`, async () => {
+    const largeBatch = Array.from({ length: 70_000 }, (_, i) => ({ i }))
+    const jsonMock = vi.fn(() => {
+      throw new RangeError(`Maximum call stack size exceeded`)
+    })
+    streamMock.mockResolvedValueOnce({
+      json: jsonMock,
+      async *jsonStream() {
+        for (const item of largeBatch) {
+          yield item
+        }
+      },
+    })
+
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    await expect(client.readJson(`/large-json`)).resolves.toEqual(largeBatch)
+    expect(jsonMock).not.toHaveBeenCalled()
+    expect(streamMock).toHaveBeenCalledWith({
+      offset: `-1`,
+      live: false,
+    })
   })
 
   it(`appendIdempotent uses IdempotentProducer append/flush/detach`, async () => {
