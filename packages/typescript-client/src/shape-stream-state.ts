@@ -27,6 +27,7 @@
  *   Any state ─markMustRefetch─► Initial (offset reset)
  */
 import { Offset, Schema } from './types'
+import { isOffsetAhead } from './helpers'
 import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
@@ -328,7 +329,14 @@ abstract class ActiveState extends ShapeStreamState {
 
     // Has up-to-date message — compute shared fields for the transition
     let offset = this.#shared.offset
-    if (input.isSse && input.upToDateOffset) {
+    // The SSE up-to-date offset is derived from the LSN alone (`${lsn}_0`),
+    // so it regresses behind the header offset when the LSN carries multiple
+    // ops. Only accept it when strictly ahead to never replay seen operations.
+    if (
+      input.isSse &&
+      input.upToDateOffset &&
+      isOffsetAhead(input.upToDateOffset, offset)
+    ) {
       offset = input.upToDateOffset
     }
 
