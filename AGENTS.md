@@ -364,13 +364,7 @@ const { data, isLoading } = useLiveQuery((q) =>
 
 ## Deployment
 
-Electric is self-hosted. For local development, scaffold a starter app wired to a local Electric + Postgres (via Docker):
-
-```sh
-npx @electric-sql/start my-app
-```
-
-In production, run the Electric Docker image against your Postgres ([Electric][11]):
+Electric is self-hosted. Run the Electric Docker image against your Postgres ([Electric][11]):
 
 ```sh
 docker run -e DATABASE_URL=postgres://... -e ELECTRIC_SECRET=... electricsql/electric
