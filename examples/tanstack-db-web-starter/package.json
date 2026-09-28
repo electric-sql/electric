@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "backend:up": "docker compose up -d",
+    "backend:up": "docker compose up -d --wait",
     "backend:down": "docker compose down",
     "backend:clear": "docker compose down -v",
     "start": "node .output/server/index.mjs",
