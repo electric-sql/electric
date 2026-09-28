@@ -33,6 +33,8 @@ Start the example backend services using [Docker Compose](https://docs.docker.co
 pnpm backend:up
 ```
 
+This starts Postgres and a local Electric sync service (at `http://localhost:3000`, running in insecure mode for development) using the [shared Docker Compose file](../../.support/docker-compose.yml). To point the app at a different Electric instance, set the `ELECTRIC_URL` environment variable (and `ELECTRIC_SECRET` if that instance requires an [API secret](https://electric-sql.com/docs/guides/security)).
+
 > Note that this always stops and deletes the volumes mounted by any other example backend containers that are running or have been run before. This ensures that the example always starts with a clean database and clean disk.
 
 Now start the dev server:

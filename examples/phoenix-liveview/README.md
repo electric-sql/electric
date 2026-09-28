@@ -15,7 +15,7 @@ for more details.
 
 To start your Phoenix server:
 
-- Run `mix electric.start` to start an Electric instance and associated Postgres DB.
+- Run `mix electric.start` to start a local Electric instance (at `http://localhost:3000`) and associated Postgres DB, using the [shared Docker Compose file](../../.support/docker-compose.yml).
 - Run `mix setup` to install and setup dependencies
 - Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
 
@@ -23,6 +23,8 @@ Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
 
 If you open two separate windows, you will see you changes happen
 simultaneously in both windows.
+
+To point the app at a different Electric instance, set the `ELECTRIC_URL` environment variable (and `ELECTRIC_SECRET` if that instance requires an [API secret](https://electric-sql.com/docs/guides/security)).
 
 ## Implementation
 
