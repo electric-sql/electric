@@ -11,11 +11,11 @@
 - **Electric Collection:** subscribes to Electric Shapes (single-table, optional `where`/`columns`) ([TanStack][3])
 - **Writes:** mutations→API→Postgres txid→await in Electric collection→drop optimistic state when change arrives ([TanStack][3])
 - **Live queries:** differential dataflow→sub-ms updates+cross-collection joins ([TanStack][2])
-- **Security/scale:** proxy auth, shape-scoped authorization, CDN caching. Use Electric Cloud to skip ops ([Electric][4])
+- **Security/scale:** proxy auth, shape-scoped authorization, CDN caching ([Electric][4])
 
 ## 🔒 Security Rules (ALWAYS)
 
-1. **Never expose `SOURCE_SECRET` to browser** – inject server-side via proxy
+1. **Never expose `ELECTRIC_SECRET` to browser** – inject server-side via proxy
 2. **Electric HTTP API public by default** – enforce auth at proxy
 3. **Put Electric behind server/proxy** – never call directly from production ([Electric][10])
 4. **Define shapes in server/proxy** – no client-defined tables/WHERE clauses
@@ -41,7 +41,7 @@ pnpm migrate
 import { createServerFileRoute } from '@tanstack/react-start/server'
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 
-const ELECTRIC_URL = 'https://api.electric-sql.cloud/v1/shape'
+const ELECTRIC_URL = 'http://localhost:3000/v1/shape' // your self-hosted Electric
 
 const serve = async ({ request }: { request: Request }) => {
   const url = new URL(request.url)
@@ -57,8 +57,7 @@ const serve = async ({ request }: { request: Request }) => {
   origin.searchParams.set('table', 'todos')
   // Tenant isolation: origin.searchParams.set('where', `user_id=$1`)
   // origin.searchParams.set('params', JSON.stringify([user.id]))
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+  origin.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 
   const res = await fetch(origin)
   const headers = new Headers(res.headers)
@@ -329,7 +328,7 @@ docker compose -f docker-compose.yml -f docker-compose-electric.yml down
 
 1. **Use latest packages** - Check npm for `@electric-sql/*` & `@tanstack/*-db`
 2. **txid handshake required** - Prevents UI flicker when optimistic→synced state
-3. **Local dev slow shapes** - HTTP/1.1 6-connection limit. Fix: HTTP/2 proxy (Caddy/nginx) or Electric Cloud ([Electric][18])
+3. **Local dev slow shapes** - HTTP/1.1 6-connection limit. Fix: HTTP/2 proxy (Caddy/nginx) ([Electric][18])
 4. **Proxy must forward headers/params** - Preserve Electric query params
 5. **Parse custom types:**
 
@@ -365,17 +364,16 @@ const { data, isLoading } = useLiveQuery((q) =>
 
 ## Deployment
 
-### Electric Cloud
+Electric is self-hosted. For local development, scaffold a starter app wired to a local Electric + Postgres (via Docker):
 
 ```sh
 npx @electric-sql/start my-app
-pnpm claim && pnpm deploy
 ```
 
-### Self-hosted
+In production, run the Electric Docker image against your Postgres ([Electric][11]):
 
 ```sh
-docker run -e DATABASE_URL=postgres://... electricsql/electric
+docker run -e DATABASE_URL=postgres://... -e ELECTRIC_SECRET=... electricsql/electric
 ```
 
 Docker compose:
@@ -440,7 +438,7 @@ Prefer TanStack DB collections over lower-level Shape/ShapeStream/useShape APIs.
 [8]: https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api.md
 [9]: https://electric-sql.com/docs/api/clients/typescript.md
 [10]: https://electric-sql.com/docs/guides/security.md
-[11]: https://electric-sql.com/product/cloud.md
+[11]: https://electric-sql.com/docs/sync/guides/deployment.md
 [12]: https://tanstack.com/db/latest/docs/collections/query-collection.md
 [13]: https://tanstack.com/db/latest/docs/guides/error-handling.md
 [14]: https://electric-sql.com/docs/stacks.md
