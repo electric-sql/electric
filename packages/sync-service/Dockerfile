@@ -7,7 +7,6 @@ ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
 ARG MIX_TARGET=application
 
 FROM ${BUILDER_IMAGE} AS builder
-LABEL maintainer="info@electric-sql.com"
 
 RUN apt-get update -y && \
   apt-get install -y build-essential git curl && \
@@ -69,6 +68,14 @@ RUN chown nobody /app
 
 FROM runner_setup AS runner
 
+LABEL org.opencontainers.image.title="Electric Sync" \
+  org.opencontainers.image.description="Postgres sync engine: syncs subsets of Postgres data into local apps and services over HTTP" \
+  org.opencontainers.image.url="https://electric.ax" \
+  org.opencontainers.image.documentation="https://electric.ax/docs/sync" \
+  org.opencontainers.image.source="https://github.com/electric-sql/electric" \
+  org.opencontainers.image.licenses="Apache-2.0" \
+  org.opencontainers.image.vendor="ElectricSQL"
+
 ARG MIX_TARGET
 ARG RELEASE_NAME=electric
 
@@ -83,3 +90,13 @@ ENTRYPOINT ["/app/bin/entrypoint"]
 
 CMD ["start"]
 
+# Build-specific labels come last to keep every step above cacheable across builds.
+# IMAGE_CREATED is the commit timestamp rather than the wall-clock build time so that
+# rebuilding the same commit yields the same image config.
+ARG ELECTRIC_VERSION
+ARG GIT_REVISION
+ARG IMAGE_CREATED
+
+LABEL org.opencontainers.image.version="${ELECTRIC_VERSION}" \
+  org.opencontainers.image.revision="${GIT_REVISION}" \
+  org.opencontainers.image.created="${IMAGE_CREATED}"
