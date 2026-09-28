@@ -20,13 +20,6 @@ vi.mock(`fs`, () => ({
 }))
 
 describe(`template-setup`, () => {
-  const mockCredentials = {
-    source_id: `test-source-id`,
-    secret: `test-secret`,
-    DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
-    claimId: `test-claim-id`,
-  }
-
   let mockExecSync: ReturnType<typeof vi.fn>
   let mockWriteFileSync: ReturnType<typeof vi.fn>
   let mockReadFileSync: ReturnType<typeof vi.fn>
@@ -54,7 +47,7 @@ describe(`template-setup`, () => {
       mockReadFileSync.mockReturnValue(`{}`)
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       expect(mockExecSync).toHaveBeenCalledWith(
         `npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-app`,
@@ -62,12 +55,12 @@ describe(`template-setup`, () => {
       )
     })
 
-    it(`should generate .env file with credentials`, async () => {
+    it(`should generate .env file for the local Docker services`, async () => {
       mockExistsSync.mockReturnValue(true)
       mockReadFileSync.mockReturnValue(`{}`)
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       // Find the .env write call
       const envWriteCall = mockWriteFileSync.mock.calls.find(
@@ -77,15 +70,16 @@ describe(`template-setup`, () => {
       expect(envWriteCall).toBeDefined()
       const envContent = envWriteCall![1] as string
       expect(envContent).toContain(
-        `DATABASE_URL=${mockCredentials.DATABASE_URL}`
+        `DATABASE_URL=postgresql://postgres:password@localhost:54321/electric`
       )
-      expect(envContent).toContain(`ELECTRIC_SECRET=${mockCredentials.secret}`)
+      expect(envContent).toContain(`ELECTRIC_URL=http://localhost:30000`)
       expect(envContent).toContain(
-        `ELECTRIC_SOURCE_ID=${mockCredentials.source_id}`
+        `BETTER_AUTH_SECRET=mock-random-secret-0123456789abcdef0123456789abcdef`
       )
-      expect(envContent).toMatch(/ELECTRIC_URL=https?:\/\//)
-      expect(envContent).toContain(`BETTER_AUTH_SECRET=`)
       expect(envContent).toContain(`DO NOT COMMIT THIS FILE`)
+      expect(envContent).not.toContain(`ELECTRIC_SOURCE_ID`)
+      expect(envContent).not.toContain(`ELECTRIC_SECRET`)
+      expect(envContent).not.toContain(`electric-sql.cloud`)
     })
 
     it(`should update .gitignore to include .env`, async () => {
@@ -102,7 +96,7 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       const gitignoreWriteCall = mockWriteFileSync.mock.calls.find(
         (call: unknown[]) => (call[0] as string).endsWith(`.gitignore`)
@@ -122,7 +116,7 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       const gitignoreWriteCall = mockWriteFileSync.mock.calls.find(
         (call: unknown[]) => (call[0] as string).endsWith(`.gitignore`)
@@ -132,16 +126,13 @@ describe(`template-setup`, () => {
       expect(gitignoreWriteCall).toBeUndefined()
     })
 
-    it(`should patch package.json with Electric scripts`, async () => {
+    it(`should not modify package.json`, async () => {
       mockExistsSync.mockReturnValue(true)
       mockReadFileSync.mockImplementation((path: string) => {
         if (path.endsWith(`package.json`)) {
           return JSON.stringify({
             name: `my-app`,
-            scripts: {
-              dev: `vinxi dev`,
-              build: `vinxi build`,
-            },
+            scripts: { dev: `vite dev` },
           })
         }
         if (path.endsWith(`.gitignore`)) return `.env\n`
@@ -149,20 +140,12 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       const packageJsonWriteCall = mockWriteFileSync.mock.calls.find(
         (call: unknown[]) => (call[0] as string).endsWith(`package.json`)
       )
-
-      expect(packageJsonWriteCall).toBeDefined()
-      const packageJson = JSON.parse(packageJsonWriteCall![1] as string)
-
-      // Electric-specific commands
-      expect(packageJson.scripts).toHaveProperty(`claim`)
-      expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
-
-      expect(packageJson.scripts.build).toBe(`vinxi build`)
+      expect(packageJsonWriteCall).toBeUndefined()
     })
 
     it(`should not overwrite existing tsconfig.json`, async () => {
@@ -174,7 +157,7 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
+      await setupTemplate(`my-app`)
 
       const tsconfigWriteCall = mockWriteFileSync.mock.calls.find(
         (call: unknown[]) => (call[0] as string).endsWith(`tsconfig.json`)
@@ -191,35 +174,9 @@ describe(`template-setup`, () => {
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
 
-      await expect(setupTemplate(`my-app`, mockCredentials)).rejects.toThrow(
+      await expect(setupTemplate(`my-app`)).rejects.toThrow(
         `Template setup failed: gitpick failed`
       )
-    })
-
-    it(`should handle missing package.json gracefully`, async () => {
-      mockExistsSync.mockImplementation((path: string) => {
-        if (path.endsWith(`package.json`)) return false
-        if (path.endsWith(`.gitignore`)) return true
-        if (path.endsWith(`tsconfig.json`)) return true
-        return false
-      })
-      mockReadFileSync.mockImplementation((path: string) => {
-        if (path.endsWith(`.gitignore`)) return `.env\n`
-        return ``
-      })
-
-      const { setupTemplate } = await import(`../src/template-setup.js`)
-
-      // Should not throw - just skip package.json patching
-      await expect(
-        setupTemplate(`my-app`, mockCredentials)
-      ).resolves.toBeUndefined()
-
-      // Verify package.json was not written
-      const packageJsonWriteCall = mockWriteFileSync.mock.calls.find(
-        (call: unknown[]) => (call[0] as string).endsWith(`package.json`)
-      )
-      expect(packageJsonWriteCall).toBeUndefined()
     })
 
     it(`should skip gitpick when appName is "."`, async () => {
@@ -231,7 +188,7 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`.`, mockCredentials)
+      await setupTemplate(`.`)
 
       // gitpick should NOT be called
       expect(mockExecSync).not.toHaveBeenCalled()
@@ -246,7 +203,7 @@ describe(`template-setup`, () => {
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`.`, mockCredentials)
+      await setupTemplate(`.`)
 
       // .env should be written to current directory (not a subdirectory)
       const envWriteCall = mockWriteFileSync.mock.calls.find(
@@ -257,37 +214,22 @@ describe(`template-setup`, () => {
       expect(envWriteCall![0]).not.toContain(`/./.env`)
     })
 
-    it(`should still generate .env and patch package.json when appName is "."`, async () => {
+    it(`should still generate .env when appName is "."`, async () => {
       mockExistsSync.mockReturnValue(true)
       mockReadFileSync.mockImplementation((path: string) => {
-        if (path.endsWith(`package.json`)) {
-          return JSON.stringify({
-            name: `existing-app`,
-            scripts: { dev: `vite dev` },
-          })
-        }
         if (path.endsWith(`.gitignore`)) return `.env\n`
         return ``
       })
 
       const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`.`, mockCredentials)
+      await setupTemplate(`.`)
 
-      // .env should be generated
       const envWriteCall = mockWriteFileSync.mock.calls.find(
         (call: unknown[]) => (call[0] as string).endsWith(`.env`)
       )
       expect(envWriteCall).toBeDefined()
       expect(envWriteCall![1]).toContain(`DATABASE_URL=`)
-
-      // package.json should be patched
-      const packageJsonWriteCall = mockWriteFileSync.mock.calls.find(
-        (call: unknown[]) => (call[0] as string).endsWith(`package.json`)
-      )
-      expect(packageJsonWriteCall).toBeDefined()
-      const packageJson = JSON.parse(packageJsonWriteCall![1] as string)
-      expect(packageJson.scripts).toHaveProperty(`claim`)
-      expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
+      expect(envWriteCall![1]).toContain(`ELECTRIC_URL=`)
     })
   })
 })
