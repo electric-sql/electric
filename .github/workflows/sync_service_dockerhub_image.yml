@@ -42,6 +42,8 @@ jobs:
       git_ref: ${{ steps.git_ref.outputs.git_ref }}
       build_mode: ${{ steps.git_ref.outputs.build_mode }}
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
+      commit_sha: ${{ steps.vars.outputs.commit_sha }}
+      commit_timestamp: ${{ steps.vars.outputs.commit_timestamp }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
       docker_tag: ${{ steps.vars.outputs.docker_tag }}
       image_tags: ${{ steps.vars.outputs.image_tags }}
@@ -98,6 +100,8 @@ jobs:
           INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
         run: |
           short_commit_sha="$(git rev-parse --short HEAD)"
+          commit_sha="$(git rev-parse HEAD)"
+          commit_timestamp="$(TZ=UTC0 git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ)"
 
           electric_version="$(
             git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
@@ -130,6 +134,8 @@ jobs:
           fi
 
           echo "short_commit_sha=$short_commit_sha" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+          echo "commit_timestamp=$commit_timestamp" >> "$GITHUB_OUTPUT"
           echo "electric_version=$electric_version" >> "$GITHUB_OUTPUT"
           echo "docker_tag=$docker_tag" >> "$GITHUB_OUTPUT"
 
@@ -153,4 +159,6 @@ jobs:
         electric-telemetry=packages/electric-telemetry
       build_args: |
         ELECTRIC_VERSION=${{ needs.derive_build_vars.outputs.build_mode == 'custom' && needs.derive_build_vars.outputs.docker_tag || needs.derive_build_vars.outputs.electric_version }}
+        GIT_REVISION=${{ needs.derive_build_vars.outputs.commit_sha }}
+        IMAGE_CREATED=${{ needs.derive_build_vars.outputs.commit_timestamp }}
       tags: ${{ needs.derive_build_vars.outputs.image_tags }}
