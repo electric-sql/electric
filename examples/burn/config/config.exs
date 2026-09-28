@@ -14,7 +14,7 @@ config :burn,
 config :burn, Burn.Adapters.Anthropic,
   api_url: "https://api.anthropic.com/v1/messages",
   api_version: "2023-06-01",
-  # Only Haiku is resolvable in the deployed demo — any code path that
+  # Only Haiku is resolvable — any code path that
   # asks for another model alias fails fast rather than spending on a
   # more expensive model.
   models: [

@@ -50,7 +50,7 @@ if config_env() == :prod do
   # variable instead.
   secret_key_base = env!("SECRET_KEY_BASE")
 
-  host = env!("PHX_HOST", :string!, "burn.examples.electric-sql.com")
+  host = env!("PHX_HOST", :string!, "localhost")
   port = env!("PORT", :integer!, 4000)
 
   config :burn, :dns_cluster_query, env!("DNS_CLUSTER_QUERY", :string!, :ignore)
