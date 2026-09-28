@@ -31,24 +31,26 @@ Electric [benefits significantly from `HTTP/2` multiplexing](https://electric-sq
 Create a new project based on this starter:
 
 ```sh
-npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
+npx @electric-sql/start my-tanstack-db-project
 cd my-tanstack-db-project
 ```
 
-Copy the `.env.example` file to `.env`:
+This pulls in the starter, generates a `.env` file configured for the local Docker services and installs the dependencies.
+
+<details>
+<summary>Alternatively, set up the project manually</summary>
 
 ```sh
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
+cd my-tanstack-db-project
 cp .env.example .env
-```
-
-> [!Tip]
-> You can edit the values in the `.env` file. The default values are configured for local development with Docker. You can run against a different Postgres and Electric, for example using the Electric Cloud, by changing the `DATABASE_URL` and `ELECTRIC_URL`.
-
-Install the dependencies:
-
-```sh
 pnpm install
 ```
+
+</details>
+
+> [!Tip]
+> You can edit the values in the `.env` file. The default values are configured for local development with Docker. You can run against a different Postgres and Electric by changing the `DATABASE_URL` and `ELECTRIC_URL` (and `ELECTRIC_SECRET`, if your Electric instance requires one).
 
 Start the backend services (Postgres and Electric) running in the background using Docker:
 
@@ -538,9 +540,9 @@ Before deploying to production, ensure you have configured:
 # Authentication - REQUIRED in production
 BETTER_AUTH_SECRET=your-secret-key-here
 
-# Electric Cloud (if using hosted Electric)
-ELECTRIC_SOURCE_ID=your-source-id
-ELECTRIC_SOURCE_SECRET=your-source-secret
+# Electric (your production Electric instance and its API secret)
+ELECTRIC_URL=https://your-electric-host
+ELECTRIC_SECRET=your-electric-secret
 
 # Database (adjust for your production database)
 DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname

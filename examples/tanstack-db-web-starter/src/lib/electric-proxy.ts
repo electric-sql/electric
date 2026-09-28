@@ -4,9 +4,8 @@ import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 /**
  * Gets the Electric SQL endpoint URL based on environment configuration.
  *
- * If running in production, or `USE_ELECTRIC_URL` is set to `true`, the `ELECTRIC_URL` env var is used,
- * if available, otherwise the default cloud endpoint is used.
- * Otherwise, the local docker endpoint is used, assuming default port 30000.
+ * Uses the `ELECTRIC_URL` env var if set, otherwise defaults to the local
+ * Electric service from `docker-compose.yaml` on port 30000.
  */
 function getElectricUrl(): string {
   return process.env.ELECTRIC_URL || `http://localhost:30000`
@@ -30,9 +29,9 @@ export function prepareElectricUrl(requestUrl: string): URL {
     }
   })
 
-  // Add Electric Cloud authentication if configured
-  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
-    originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
+  // Add the Electric API secret if configured (required when Electric runs
+  // with `ELECTRIC_SECRET` set instead of `ELECTRIC_INSECURE=true`)
+  if (process.env.ELECTRIC_SECRET) {
     originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
   }
 
