@@ -133,9 +133,26 @@ jobs:
 
       - name: Create multi-arch manifest list
         env:
+          IMAGE_REPO: ${{ inputs.image_repo }}
           IMAGE_TAGS: ${{ inputs.tags }}
         run: |
           set -euo pipefail
+
+          # Copy the image's OCI labels onto the manifest list as index annotations, so that
+          # registries which only look at the index (rather than a platform image's config)
+          # show them too. All platform images are built from the same Dockerfile, so the
+          # first one's labels stand for all of them.
+          first_digest="$(cat "$(ls /tmp/digests/*.digest | head -n 1)")"
+          oci_labels="$(
+            docker buildx imagetools inspect "$IMAGE_REPO@$first_digest" --format '{{json .Image}}' \
+              | jq -r '.config.Labels // {} | to_entries[] | select(.key | startswith("org.opencontainers.image.")) | "\(.key)=\(.value)"'
+          )"
+          annotation_args=()
+          while IFS= read -r label; do
+            if [ -n "$label" ]; then
+              annotation_args+=(--annotation "index:$label")
+            fi
+          done <<< "$oci_labels"
 
           while IFS= read -r tag; do
             if [ -z "$tag" ]; then
@@ -149,5 +166,5 @@ jobs:
               done
             )
 
-            docker buildx imagetools create -t "$tag" $image_sources
+            docker buildx imagetools create -t "$tag" "${annotation_args[@]}" $image_sources
           done <<< "$IMAGE_TAGS"
