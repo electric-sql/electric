@@ -51,8 +51,6 @@ They are introduced in order of simplicity. So the simplest and easiest to imple
 
 > [!Warning] Write-patterns example on GitHub
 > This guide has an accompanying [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) on GitHub. This implements each of the patterns described below and combines them into a single React application.
->
-> You can see the example running online at [write-patterns.examples.electric-sql.com](https://write-patterns.examples.electric-sql.com)
 
 <h3 id="online-writes" tabindex="-1" style="display: inline-block">
   1. Online writes
