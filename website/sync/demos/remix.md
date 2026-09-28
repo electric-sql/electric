@@ -2,7 +2,6 @@
 title: Remix
 description: >-
   Example of an Electric app using Remix.
-deployed_url: https://remix.examples.electric-sql.com/
 image: /img/demos/items-screenshot.png
 example: true
 ---

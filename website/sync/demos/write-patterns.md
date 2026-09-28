@@ -2,7 +2,6 @@
 title: Write patterns
 description: >-
   Four different patterns for handling writes in an Electric application.
-deployed_url: https://write-patterns.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/write-patterns
 image: /img/demos/write-patterns-screenshot.png
 example: true

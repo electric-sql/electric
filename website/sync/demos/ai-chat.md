@@ -2,7 +2,6 @@
 title: AI Chat
 description: >-
   Resilient, multi-user, multi-agent AI chat app powered by Electric.
-deployed_url: https://electric-ai-chat.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric-ai-chat
 blog_post_url: /blog/2025/04/09/building-ai-apps-on-sync
 image: /img/demos/ai-chat-demo.png

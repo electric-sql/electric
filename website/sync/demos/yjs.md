@@ -2,7 +2,6 @@
 title: Yjs
 description: >-
   This is an example application using Electric with Yjs.
-deployed_url: https://yjs.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/yjs
 image: /img/demos/yjs-screenshot.png
 example: true
