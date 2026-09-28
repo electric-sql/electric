@@ -1,7 +1,7 @@
 ---
 name: electric-deployment
 description: >
-  Deploy Electric via Docker, Docker Compose, or Electric Cloud. Covers
+  Deploy Electric via Docker or Docker Compose. Covers
   DATABASE_URL (direct connection, not pooler), ELECTRIC_SECRET (required
   since v1.x), ELECTRIC_INSECURE for dev, wal_level=logical,
   max_replication_slots, ELECTRIC_STORAGE_DIR persistence,
@@ -57,13 +57,6 @@ services:
 
 volumes:
   electric_data:
-```
-
-### Electric Cloud
-
-```sh
-npx @electric-sql/start my-app
-pnpm claim && pnpm deploy
 ```
 
 ## Core Patterns

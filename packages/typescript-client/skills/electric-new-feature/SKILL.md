@@ -98,9 +98,8 @@ const serve = async ({ request }: { request: Request }) => {
 
   origin.searchParams.set('table', 'todos')
 
-  // Add auth if using Electric Cloud
-  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
-    origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID)
+  // Authenticate with Electric (required unless ELECTRIC_INSECURE=true)
+  if (process.env.ELECTRIC_SECRET) {
     origin.searchParams.set('secret', process.env.ELECTRIC_SECRET)
   }
 
