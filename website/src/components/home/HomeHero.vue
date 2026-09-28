@@ -12,8 +12,8 @@ withDefaults(
        (sync / streams / agents canvases). Used by the OG capture so
        the screenshotted frame is a stable, deterministic still. */
     paused?: boolean
-    /* hideActions removes the row of CTA buttons (Electric Cloud,
-       Quickstart) below the headline copy. Set on the OG capture so
+    /* hideActions removes the row of CTA buttons (Agents,
+       Streams, Sync) below the headline copy. Set on the OG capture so
        the social graphic shows just the headline + supporting copy +
        iso composition, not interactive CTAs that have no meaning on
        a static image. */

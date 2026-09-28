@@ -9,8 +9,8 @@ const posts = data
 
 const actions = [
   {
-    href: '/cloud',
-    text: 'Data platform',
+    href: '/docs/sync',
+    text: 'Get started',
     theme: 'brand',
   },
   {

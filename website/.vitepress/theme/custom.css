@@ -691,7 +691,7 @@ span.no-visual {
 /* Hide navbar bottom divider on home pages regardless of scroll position.
    Includes `.ea-homepage` (Electric Agents landing page),
    `.ds-homepage` (Durable Streams landing page), `.sync-page` (Electric
-   Sync landing page), `.pricing-page` (Cloud pricing) and `.home-page`
+   Sync landing page) and `.home-page`
    (the site root homepage), all of which use `layout: page` rather than
    `layout: home` and so don't pick up the `.VPNavBar.home` class on
    their own. */
@@ -700,7 +700,6 @@ span.no-visual {
   .ea-homepage .VPNavBar:not(.top),
   .ds-homepage .VPNavBar:not(.top),
   .sync-page .VPNavBar:not(.top),
-  .pricing-page .VPNavBar:not(.top),
   .home-page .VPNavBar:not(.top) {
     background-color: transparent !important;
   }
@@ -712,8 +711,6 @@ span.no-visual {
   .ds-homepage .VPNavBar .divider-line,
   .sync-page .VPNavBar .divider,
   .sync-page .VPNavBar .divider-line,
-  .pricing-page .VPNavBar .divider,
-  .pricing-page .VPNavBar .divider-line,
   .home-page .VPNavBar .divider,
   .home-page .VPNavBar .divider-line {
     background-color: transparent !important;
@@ -781,12 +778,6 @@ span.no-visual {
   margin-top: -1px;
 }
 
-@media (min-width: 768px) {
-  .VPNavBarMenu .nav-item.VPNavBarCTA {
-    display: none !important;
-  }
-}
-
 @media (min-width: 768px) and (max-width: 1029px) {
   .VPNavBar:not(.has-sidebar) .VPNavBarMenu > a.VPNavBarMenuLink:last-of-type {
     display: none !important;
@@ -799,21 +790,6 @@ span.no-visual {
   }
 }
 
-@media (max-width: 767px) {
-  .nav-item.VPNavBarCTA {
-    display: none;
-  }
-  .VPNavScreenMenu .nav-item.VPNavBarCTA {
-    display: flex;
-    text-align: center;
-    margin: auto;
-    width: 100%;
-    justify-content: center;
-
-    border-bottom: 1px solid var(--vp-c-divider);
-    padding: 12px 0 11px;
-  }
-}
 .VPNavScreenMenuLink {
   text-align: center;
 }
@@ -842,11 +818,6 @@ span.no-visual {
   .VPNavBarSocialLinks::after {
     margin-left: 10px !important;
     margin-right: 10px !important;
-  }
-}
-@media (min-width: 960px) {
-  .VPNavBarCTA {
-    padding: 0 10px 0 12px;
   }
 }
 @media (min-width: 1200px) {
@@ -982,9 +953,6 @@ span.no-visual {
 @media (min-width: 768px) {
   .VPNavBarSocialLinks {
     order: 2;
-  }
-  .VPNavBarCTA {
-    order: 4;
   }
   .VPNavBarExtra {
     display: none !important;
@@ -1833,23 +1801,13 @@ ul.demo-actions li .VPButton {
 }
 
 /* Defeat VitePress default `.VPNavBarMenuLink:last-of-type{display:none!important}`
-   which would hide the last <a> (Pricing) and the last <button> in MegaNav. */
+   which would hide the last <a> (Blog) and the last <button> in MegaNav. */
 .MegaNav .mega-nav-link {
   display: inline-flex !important;
 }
 
-.MegaNav .mega-nav-fallback-pricing,
 .MegaNav .mega-nav-fallback-blog {
   display: none !important;
-}
-
-@media (max-width: 1059px) {
-  .MegaNav .mega-nav-top-pricing {
-    display: none !important;
-  }
-  .MegaNav .mega-nav-fallback-pricing {
-    display: flex !important;
-  }
 }
 
 @media (max-width: 959px) {
@@ -1866,7 +1824,7 @@ ul.demo-actions li .VPButton {
 }
 
 /* Give the `More v` trigger a touch more breathing room before the
-   signup button on the right. */
+   nav bar content on the right. */
 .MegaNav .mega-nav-trigger-wrap[data-id='resources'] {
   margin-right: 8px;
 }

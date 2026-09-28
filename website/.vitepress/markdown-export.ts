@@ -222,7 +222,7 @@ type ExportOverride = {
 const DEFAULT_EXPORT_MODE: ExportMode = `source-with-explicit`
 const DEFAULT_PARSE_HTML_SELECTOR = `[data-md-export="parse-html"]`
 const DEFAULT_SOURCE_WITH_EXPLICIT_SELECTOR = `.main .vp-doc`
-const GLOBAL_EXPORT_IGNORE_PATHS = new Set([`404.html`, `old-index.html`])
+const GLOBAL_EXPORT_IGNORE_PATHS = new Set([`404.html`])
 
 const DEFAULT_IGNORE_SELECTORS = [
   `.md-exclude`,

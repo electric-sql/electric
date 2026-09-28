@@ -11,7 +11,6 @@ import HTML5Video from '../../src/components/HTML5Video.vue'
 import MarkdownContent from '../../src/components/MarkdownContent.vue'
 import MdExportExplicit from '../../src/components/MdExportExplicit.vue'
 import MdExportParseHtml from '../../src/components/MdExportParseHtml.vue'
-import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 import MegaNav from './components/MegaNav.vue'
@@ -33,7 +32,6 @@ export default {
     app.component(`MegaNavPanel`, MegaNavPanel)
     app.component(`MdExportExplicit`, MdExportExplicit)
     app.component(`MdExportParseHtml`, MdExportParseHtml)
-    app.component(`NavSignupButton`, NavSignupButton)
     app.component(`VPButton`, VPButton)
     app.component(`YoutubeEmbed`, YoutubeEmbed)
     enhanceAppWithTabs(app)

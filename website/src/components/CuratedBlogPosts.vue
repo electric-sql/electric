@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /* CuratedBlogPosts — section-scoped panel of blog post cards.
    ──────────────────────────────────────────────────────────
-   Sections (Streams, Sync, Cloud, Agents) curate their own short
+   Sections (Streams, Sync, Agents) curate their own short
    list of related posts using ONE of two inputs:
 
      posts: string[]   — explicit, ordered list of slugs (the
