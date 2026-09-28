@@ -19,14 +19,6 @@ import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.pn
 
 How to deploy the [Electric sync engine](/sync/), with links to integration docs for specific platforms like [Supabase](/docs/sync/integrations/supabase), [Neon](/docs/sync/integrations/neon), [Render](/docs/sync/integrations/render) and [AWS](/docs/sync/integrations/aws).
 
-> [!TIP] Electric Cloud &ndash; the simplest way to use Electric
-> The simplest way to use Electric is via the [Electric Cloud](/cloud/), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
->
->   <p class="action cloud-cta">
->     <a href="/cloud/" class="VPButton small brand vspace">
->       <span class="vpi-electric-icon"></span> View Cloud</a>
->   </p>
-
 ## The ingredients of a successful deployment
 
 An Electric deployment has three main components. Your Postgres database, the Electric sync service and your app.

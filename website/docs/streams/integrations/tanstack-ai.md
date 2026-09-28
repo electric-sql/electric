@@ -14,8 +14,6 @@ outline: [2, 3]
 
 It provides a unified interface across multiple LLM providers. With no vendor lock-in and no proprietary formats &mdash; just clean TypeScript and honest open source.
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="tanstack-ai" />
-
 ## Resilience and collaboration
 
 TanStack AI provides a [Connection Adapter](https://tanstack.com/ai/latest/docs/guides/connection-adapters) interface that allows you to customise the communication between your client and server when building TanStack AI apps.

@@ -118,11 +118,9 @@ Get your [connection string from PlanetScale](https://planetscale.com/docs/postg
 > - See [Table Ownership](#table-ownership) for user requirements
 > - See [PlanetScale connection strings documentation](https://planetscale.com/docs/postgres/connection-strings)
 
-### Using Electric Cloud
+### Running Electric
 
-The simplest way to connect is via [Electric Cloud](/cloud/). Use the **direct connection string** (port 5432) with `sslmode=require`. The database user must be the same one that ran your migrations (see [Table Ownership](#table-ownership)).
-
-### Self-hosted
+Use the **direct connection string** (port 5432) with `sslmode=require`. The database user must be the same one that ran your migrations (see [Table Ownership](#table-ownership)).
 
 ```shell
 docker run -it \

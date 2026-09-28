@@ -15,8 +15,6 @@ It gives you:
 - `DurableStream` and `AsyncDurableStream` for read/write operations
 - `IdempotentProducer` for exactly-once writes with batching and retries
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="json" />
-
 ## Install
 
 ```bash

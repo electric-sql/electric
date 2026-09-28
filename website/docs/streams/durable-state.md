@@ -9,8 +9,6 @@ outline: [2, 3]
 
 Durable State adds structured state changes on top of Durable Streams. Instead of treating a stream as raw bytes, you work with typed `insert`, `update`, and `delete` events.
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="state" />
-
 ## Protocol overview
 
 Durable State uses JSON streams (`Content-Type: application/json`) and define two message types:

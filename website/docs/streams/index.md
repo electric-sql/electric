@@ -8,11 +8,11 @@ outline: [2, 3]
 
 # Electric Streams
 
-**Electric Streams** is a hosted, fully-managed implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time&nbsp;data.
+**Electric Streams** is an implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time&nbsp;data.
 
 A stream is a URL you can `POST` to and `GET` from. Producers append events; any number of consumers &mdash; services, agents, browsers &mdash; read live or replay from any offset. Streams are durable, ordered and CDN-cacheable, so the same primitive serves catch-up reads, real-time fan-out and resumable&nbsp;subscriptions.
 
-Out of the box, Electric Streams gives you a managed [stream server](/streams/), [client SDKs](/docs/streams/clients/typescript) for TypeScript and Python, a [CLI](/docs/streams/cli), [JSON&nbsp;mode](/docs/streams/json-mode), [Durable&nbsp;Proxy](/docs/streams/durable-proxy), [Durable&nbsp;State](/docs/streams/durable-state), [StreamDB](/docs/streams/stream-db), [StreamFS](/docs/streams/stream-fs) and integrations for [TanStack&nbsp;AI](/docs/streams/integrations/tanstack-ai), the [Vercel AI SDK](/docs/streams/integrations/vercel-ai-sdk) and [Yjs](/docs/streams/integrations/yjs).
+Out of the box, Electric Streams gives you a [stream server](/docs/streams/quickstart#_1-start-the-server) you can run yourself, [client SDKs](/docs/streams/clients/typescript) for TypeScript and Python, a [CLI](/docs/streams/cli), [JSON&nbsp;mode](/docs/streams/json-mode), [Durable&nbsp;Proxy](/docs/streams/durable-proxy), [Durable&nbsp;State](/docs/streams/durable-state), [StreamDB](/docs/streams/stream-db), [StreamFS](/docs/streams/stream-fs) and integrations for [TanStack&nbsp;AI](/docs/streams/integrations/tanstack-ai), the [Vercel AI SDK](/docs/streams/integrations/vercel-ai-sdk) and [Yjs](/docs/streams/integrations/yjs).
 
 This page introduces the core protocol concepts that the rest of the docs build on &mdash; streams, offsets, content types, producers, consumers, live modes, the stream lifecycle and CDN caching. If you'd rather start coding, jump straight to the [Quickstart](/docs/streams/quickstart).
 
