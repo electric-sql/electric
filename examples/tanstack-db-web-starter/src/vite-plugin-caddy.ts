@@ -24,7 +24,13 @@ export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   let caddyStarted = false
 
   const generateCaddyfile = (vitePort: number) => {
-    const config = `localhost:${httpsPort} {
+    // Skip Caddy's HTTP->HTTPS redirect listener: it binds port 80, which
+    // needs elevated privileges and isn't used for local development.
+    const config = `{
+  auto_https disable_redirects
+}
+
+localhost:${httpsPort} {
   reverse_proxy ${host}:${vitePort}${
     encoding
       ? `

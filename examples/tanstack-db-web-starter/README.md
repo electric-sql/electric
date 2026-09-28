@@ -490,7 +490,7 @@ If Caddy fails to start:
    ```
 
 5. **Check for port conflicts:**
-   Caddy needs ports 80 and 443 available
+   Caddy needs port 5173 (HTTPS) and its admin port 2019 available
 
 ## Troubleshooting
 
