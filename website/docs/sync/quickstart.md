@@ -18,7 +18,7 @@ Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electr
 
 ## Setup
 
-You'll need [Node](https://nodejs.org/en), [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com) installed. If you haven't used Caddy before, you'll need to install it's [root certificate](https://caddyserver.com/docs/command-line#caddy-trust) using:
+You'll need [Node](https://nodejs.org/en), [pnpm](https://pnpm.io), [Docker](https://docs.docker.com/get-started/get-docker/) and [Caddy](https://caddyserver.com) installed. If you haven't used Caddy before, you'll need to install it's [root certificate](https://caddyserver.com/docs/command-line#caddy-trust) using:
 
 ```sh
 caddy trust # may require sudo
@@ -28,24 +28,25 @@ caddy trust # may require sudo
 
 ## Get started
 
-A quick way to get started is to run the [starter template](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) with local backend services in Docker:
+Run the starter script:
+
+```sh
+npx @electric-sql/start my-electric-app
+cd my-electric-app
+```
+
+This creates your app from the [starter template](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter), writes a `.env` configured for the local backend services and installs the dependencies.
+
+::: details Or set up the starter manually
 
 ```sh
 npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-electric-app
 cd my-electric-app
-```
-
-Copy the `.env.example` file to `.env`:
-
-```sh
 cp .env.example .env
-```
-
-Install the dependencies:
-
-```sh
 pnpm install
 ```
+
+:::
 
 Start Postgres and Electric running as background services using Docker Compose:
 
