@@ -8,6 +8,12 @@ http://electric-sql.com/* https://electric-sql.com/:splat 301!
 http://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
+# Proxy PostHog analytics through our own domain so ad-blockers don't drop
+# events. Must come before any catch-all rules.
+
+/ph/static/*  https://us-assets.i.posthog.com/static/:splat  200
+/ph/*         https://us.i.posthog.com/:splat                200
+
 # Redirect legacy website paths to existing pages
 
 /about                          /about/community
