@@ -2,7 +2,6 @@
 title: Collaborative AI Editor
 description: >-
   Collaborative rich text editor where an AI agent is a server-side CRDT peer.
-deployed_url: https://collaborative-ai-editor.examples.electric-sql.com
 source_url: https://github.com/electric-sql/collaborative-ai-editor
 blog_post_url: /blog/2026/04/08/ai-agents-as-crdt-peers-with-yjs
 image: /img/blog/building-a-collaborative-ai-editor/header.jpg
