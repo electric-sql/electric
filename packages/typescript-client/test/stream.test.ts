@@ -1681,6 +1681,389 @@ describe(`ShapeStream`, () => {
     expect(requestCount).toBeLessThan(200)
   })
 
+  describe(`requestSnapshot offset coordination`, () => {
+    const schema = `{"id":{"type":"text"},"status":{"type":"text"}}`
+
+    const streamResponse = (messages: unknown[], offset: string): Response =>
+      new Response(JSON.stringify(messages), {
+        status: 200,
+        headers: {
+          'content-type': `application/json`,
+          'electric-handle': `handle-1`,
+          'electric-offset': offset,
+          'electric-schema': schema,
+          'electric-up-to-date': ``,
+        },
+      })
+
+    const snapshotResponse = (
+      snapshotMark: number,
+      offset: string,
+      data: unknown[]
+    ): Response =>
+      new Response(
+        JSON.stringify({
+          metadata: {
+            snapshot_mark: snapshotMark,
+            xmin: `1`,
+            xmax: `10`,
+            xip_list: [],
+            database_lsn: offset.split(`_`)[0],
+          },
+          data,
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `handle-1`,
+            'electric-offset': offset,
+            'electric-schema': schema,
+            'electric-snapshot': `true`,
+          },
+        }
+      )
+
+    const pendingUntilAbort = (
+      signal?: AbortSignal | null
+    ): Promise<Response> =>
+      new Promise((_resolve, reject) => {
+        const rejectAbort = () =>
+          reject(new DOMException(`Aborted`, `AbortError`))
+        if (signal?.aborted) {
+          rejectAbort()
+          return
+        }
+        signal?.addEventListener(`abort`, rejectAbort, { once: true })
+      })
+
+    const collectChanges = (
+      stream: ShapeStream,
+      seenChanges: string[]
+    ): void => {
+      stream.subscribe((messages) => {
+        for (const message of messages) {
+          if (isChangeMessage(message)) {
+            seenChanges.push(`${message.key}:${message.value.status}`)
+          }
+        }
+      })
+    }
+
+    it(`retains an established offset and replays changes outside the subset`, async () => {
+      const seenChanges: string[] = []
+      const resumedOffsets: string[] = []
+      let initialServed = false
+      let liveRequestStarted = false
+      let snapshotStarted = false
+      let updateCommitted = false
+      let resolveSnapshot!: (response: Response) => void
+
+      const fetchClient = (
+        input: string | URL | Request,
+        init?: RequestInit
+      ): Promise<Response> => {
+        const url = new URL(input.toString())
+
+        if (url.searchParams.has(`subset__limit`)) {
+          snapshotStarted = true
+          return new Promise((resolve) => {
+            resolveSnapshot = resolve
+          })
+        }
+
+        if (!initialServed) {
+          initialServed = true
+          return Promise.resolve(
+            streamResponse(
+              [
+                {
+                  key: `run-a`,
+                  value: { id: `a`, status: `running` },
+                  headers: {
+                    operation: `insert`,
+                    relation: [`public`, `runs`],
+                    txids: [1],
+                  },
+                  offset: `1_0`,
+                },
+                { headers: { control: `up-to-date` }, offset: `1_0` },
+              ],
+              `1_0`
+            )
+          )
+        }
+
+        if (!snapshotStarted) {
+          liveRequestStarted = true
+          return pendingUntilAbort(init?.signal)
+        }
+
+        if (resumedOffsets.length === 0) {
+          const offset = url.searchParams.get(`offset`) ?? ``
+          resumedOffsets.push(offset)
+          return Promise.resolve(
+            streamResponse(
+              [
+                ...(offset === `1_0` && updateCommitted
+                  ? [
+                      {
+                        key: `run-a`,
+                        value: { id: `a`, status: `completed` },
+                        headers: {
+                          operation: `update`,
+                          relation: [`public`, `runs`],
+                          txids: [2],
+                        },
+                        offset: `2_0`,
+                      },
+                    ]
+                  : []),
+                { headers: { control: `up-to-date` }, offset: `5_0` },
+              ],
+              `5_0`
+            )
+          )
+        }
+
+        return pendingUntilAbort(init?.signal)
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `runs` },
+        log: `changes_only`,
+        offset: `1_0`,
+        handle: `handle-1`,
+        liveSse: false,
+        signal: aborter.signal,
+        fetchClient,
+      })
+      collectChanges(stream, seenChanges)
+
+      await vi.waitFor(() => {
+        expect(stream.isUpToDate).toBe(true)
+        expect(liveRequestStarted).toBe(true)
+      })
+
+      const snapshotRequest = stream.requestSnapshot({
+        where: `id = 'b'`,
+        limit: 1,
+      })
+      await vi.waitFor(() => expect(snapshotStarted).toBe(true))
+
+      // Commit A's update while the subset request that excludes A is in
+      // flight, then return that snapshot from the newer stream position.
+      updateCommitted = true
+      resolveSnapshot(
+        snapshotResponse(1, `5_0`, [
+          {
+            key: `run-b`,
+            value: { id: `b`, status: `running` },
+            headers: {
+              operation: `insert`,
+              relation: [`public`, `runs`],
+            },
+            offset: `5_0`,
+          },
+        ])
+      )
+      await snapshotRequest
+
+      await vi.waitFor(() => expect(resumedOffsets).toHaveLength(1))
+      expect(resumedOffsets).toEqual([`1_0`])
+      expect(seenChanges).toContain(`run-a:running`)
+      expect(seenChanges).toContain(`run-a:completed`)
+    })
+
+    it.each([`now`, `-1`] as const)(
+      `adopts the snapshot position when the stream starts at %s`,
+      async (initialOffset) => {
+        const seenChanges: string[] = []
+        const resumedOffsets: string[] = []
+        let snapshotServed = false
+
+        const fetchClient = (
+          input: string | URL | Request,
+          init?: RequestInit
+        ): Promise<Response> => {
+          const url = new URL(input.toString())
+
+          if (url.searchParams.has(`subset__limit`)) {
+            snapshotServed = true
+            return Promise.resolve(
+              snapshotResponse(2, `5_0`, [
+                {
+                  key: `run-a`,
+                  value: { id: `a`, status: `running` },
+                  headers: {
+                    operation: `insert`,
+                    relation: [`public`, `runs`],
+                  },
+                  offset: `5_0`,
+                },
+              ])
+            )
+          }
+
+          if (!snapshotServed || resumedOffsets.length > 0) {
+            return pendingUntilAbort(init?.signal)
+          }
+
+          const offset = url.searchParams.get(`offset`) ?? ``
+          resumedOffsets.push(offset)
+          return Promise.resolve(
+            streamResponse(
+              [
+                ...(offset === `5_0`
+                  ? [
+                      {
+                        key: `run-a`,
+                        value: { id: `a`, status: `completed` },
+                        headers: {
+                          operation: `update`,
+                          relation: [`public`, `runs`],
+                          txids: [11],
+                        },
+                        offset: `6_0`,
+                      },
+                    ]
+                  : []),
+                { headers: { control: `up-to-date` }, offset: `6_0` },
+              ],
+              `6_0`
+            )
+          )
+        }
+
+        const stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `runs` },
+          log: `changes_only`,
+          offset: initialOffset,
+          liveSse: false,
+          signal: aborter.signal,
+          fetchClient,
+        })
+        collectChanges(stream, seenChanges)
+
+        await stream.requestSnapshot({ limit: 1 })
+
+        await vi.waitFor(() => expect(resumedOffsets).toHaveLength(1))
+        expect(resumedOffsets).toEqual([`5_0`])
+        expect(seenChanges).toContain(`run-a:running`)
+        expect(seenChanges).toContain(`run-a:completed`)
+      }
+    )
+
+    it(`uses the earliest position from concurrent cold snapshots`, async () => {
+      const seenChanges: string[] = []
+      const resumedOffsets: string[] = []
+      const snapshotResolvers = new Map<string, (response: Response) => void>()
+      let snapshotsStarted = 0
+
+      const fetchClient = (
+        input: string | URL | Request,
+        init?: RequestInit
+      ): Promise<Response> => {
+        const url = new URL(input.toString())
+        const where = url.searchParams.get(`subset__where`)
+
+        if (where) {
+          snapshotsStarted++
+          const id = where.includes(`later`) ? `later` : `earlier`
+          return new Promise((resolve) => snapshotResolvers.set(id, resolve))
+        }
+
+        if (snapshotsStarted < 2 || resumedOffsets.length > 0) {
+          return pendingUntilAbort(init?.signal)
+        }
+
+        const offset = url.searchParams.get(`offset`) ?? ``
+        resumedOffsets.push(offset)
+        return Promise.resolve(
+          streamResponse(
+            [
+              ...(offset === `3_0`
+                ? [
+                    {
+                      key: `run-a`,
+                      value: { id: `a`, status: `completed` },
+                      headers: {
+                        operation: `update`,
+                        relation: [`public`, `runs`],
+                        txids: [11],
+                      },
+                      offset: `4_0`,
+                    },
+                  ]
+                : []),
+              { headers: { control: `up-to-date` }, offset: `5_0` },
+            ],
+            `5_0`
+          )
+        )
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `runs` },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse: false,
+        signal: aborter.signal,
+        fetchClient,
+      })
+      collectChanges(stream, seenChanges)
+
+      const laterRequest = stream.requestSnapshot({
+        where: `id = 'later'`,
+        limit: 1,
+      })
+      const earlierRequest = stream.requestSnapshot({
+        where: `id = 'earlier'`,
+        limit: 1,
+      })
+
+      await vi.waitFor(() => expect(snapshotResolvers.size).toBe(2))
+
+      snapshotResolvers.get(`later`)!(
+        snapshotResponse(3, `5_0`, [
+          {
+            key: `run-b`,
+            value: { id: `b`, status: `running` },
+            headers: {
+              operation: `insert`,
+              relation: [`public`, `runs`],
+            },
+            offset: `5_0`,
+          },
+        ])
+      )
+      await laterRequest
+
+      snapshotResolvers.get(`earlier`)!(
+        snapshotResponse(4, `3_0`, [
+          {
+            key: `run-a`,
+            value: { id: `a`, status: `running` },
+            headers: {
+              operation: `insert`,
+              relation: [`public`, `runs`],
+            },
+            offset: `3_0`,
+          },
+        ])
+      )
+      await earlierRequest
+
+      await vi.waitFor(() => expect(resumedOffsets).toHaveLength(1))
+      expect(resumedOffsets).toEqual([`3_0`])
+      expect(seenChanges).toContain(`run-a:running`)
+      expect(seenChanges).toContain(`run-a:completed`)
+    })
+  })
+
   describe(`HTTP URL warning`, () => {
     let windowWasPresent: boolean
     let originalWindow: typeof globalThis.window

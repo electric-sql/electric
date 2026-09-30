@@ -104,6 +104,27 @@ function createCacheBuster(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 }
 
+type ConcreteOffset = Exclude<Offset, `-1` | `now`>
+
+function compareLogOffsets(
+  left: ConcreteOffset,
+  right: ConcreteOffset
+): -1 | 0 | 1 {
+  const [leftTransaction, leftOperation] = left.split(`_`)
+  const [rightTransaction, rightOperation] = right.split(`_`)
+  const leftTransactionOffset = BigInt(leftTransaction)
+  const rightTransactionOffset = BigInt(rightTransaction)
+
+  if (leftTransactionOffset < rightTransactionOffset) return -1
+  if (leftTransactionOffset > rightTransactionOffset) return 1
+
+  const leftOperationOffset = BigInt(leftOperation)
+  const rightOperationOffset = BigInt(rightOperation)
+  if (leftOperationOffset < rightOperationOffset) return -1
+  if (leftOperationOffset > rightOperationOffset) return 1
+  return 0
+}
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -679,6 +700,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #refreshCount = 0
   #refreshCatchUpWatchdogActive = false
   #snapshotCounter = 0
+  #coldSnapshotRequests = 0
 
   get #isRefreshing(): boolean {
     return this.#refreshCount > 0
@@ -2158,6 +2180,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
       )
     }
+
+    // Snapshot metadata may establish the starting position of a genuinely
+    // cold stream, but it must never advance a stream that already has a real
+    // log position. Keep concurrent cold snapshots in the same cohort so their
+    // responses can select the earliest insertion point regardless of response
+    // order.
+    const isColdSnapshotRequest =
+      this.#coldSnapshotRequests > 0 ||
+      this.lastOffset === `now` ||
+      this.lastOffset === `-1`
+    if (isColdSnapshotRequest) this.#coldSnapshotRequests++
+
     // Start the stream if not started — fire-and-forget like subscribe() does.
     // We must NOT await #start() because it runs the full request loop. The
     // PauseLock acquire below will abort the in-flight request, and the
@@ -2199,9 +2233,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
         allowReentrantPublishBypass: true,
       })
 
-      // On cold start the stream's offset is still at "now". Advance it
-      // to the snapshot's position so no updates are missed in between.
-      if (responseOffset !== null || responseHandle !== null) {
+      // A cold stream needs a concrete position to resume from. With concurrent
+      // cold snapshots, retain the earliest response position so every change
+      // after every injected snapshot is replayed. Established streams retain
+      // their pre-snapshot position and replay the log from there.
+      const currentOffset = this.lastOffset
+      const shouldAdoptSnapshotPosition =
+        isColdSnapshotRequest &&
+        (currentOffset === `now` ||
+          currentOffset === `-1` ||
+          (responseOffset !== null &&
+            responseOffset !== `now` &&
+            responseOffset !== `-1` &&
+            compareLogOffsets(responseOffset, currentOffset) <= 0))
+
+      if (
+        shouldAdoptSnapshotPosition &&
+        (responseOffset !== null || responseHandle !== null)
+      ) {
         const transition = this.#syncState.handleResponseMetadata({
           status: 200,
           responseHandle,
@@ -2230,6 +2279,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     } finally {
       clearTimeout(snapshotWarnTimer)
+      if (isColdSnapshotRequest) this.#coldSnapshotRequests--
       this.#pauseLock.release(snapshotReason)
     }
   }
