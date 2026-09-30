@@ -334,9 +334,13 @@ they form one cohort and the stream retains the earliest response offset,
 regardless of response order. Replaying from the earliest insertion point is
 required because each snapshot covers only its own subset.
 
+Offsets are ordered numerically by transaction and then operation, preserving
+integer precision. The `inf` operation sorts after all finite operations at the
+same transaction offset; `0_inf` is a valid initial snapshot boundary.
+
 **Enforcement**: Dedicated unit tests in `test/stream.test.ts` verify established
-stream replay, single-snapshot cold start, and out-of-order concurrent cold
-snapshots.
+stream replay and deduplication, single-snapshot cold start, both completion orders
+of concurrent cold snapshots, and numeric/infinity offset boundaries.
 
 ## Shape notification semantics
 

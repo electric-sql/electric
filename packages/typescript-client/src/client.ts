@@ -118,6 +118,12 @@ function compareLogOffsets(
   if (leftTransactionOffset < rightTransactionOffset) return -1
   if (leftTransactionOffset > rightTransactionOffset) return 1
 
+  // Electric uses "inf" for the boundary after all operations at an LSN
+  // (notably 0_inf, the end of the initial snapshot).
+  if (leftOperation === rightOperation) return 0
+  if (leftOperation === `inf`) return 1
+  if (rightOperation === `inf`) return -1
+
   const leftOperationOffset = BigInt(leftOperation)
   const rightOperationOffset = BigInt(rightOperation)
   if (leftOperationOffset < rightOperationOffset) return -1
