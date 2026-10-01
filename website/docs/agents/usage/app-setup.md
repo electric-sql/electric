@@ -115,6 +115,16 @@ server.listen(PORT, async () => {
 })
 ```
 
+::: warning Local Docker networking
+
+In local development the runtime server runs in a Docker container (started by the CLI) while your app runs on the host. Two things make webhook callbacks reach your app:
+
+1. **Your app must listen on all interfaces (`0.0.0.0`), not just loopback.** The container reaches your app across the Docker host boundary, so an app bound only to `127.0.0.1`/`localhost` is unreachable — the agent spawns but never responds, and **no error is surfaced**. Node's `http` server and `@hono/node-server` listen on all interfaces by default; some frameworks default to loopback only (e.g. Nuxt/Nitro, which needs `devServer.host: '0.0.0.0'`).
+
+2. **Loopback `serveEndpoint` URLs are rewritten automatically.** A `serveEndpoint` whose host is `localhost`, `127.0.0.1`, or `::1` is rewritten by the server to the Docker host (`host.docker.internal`) before it dispatches webhooks — which is why a configured `http://localhost:3000/webhook` shows up as `http://host.docker.internal:3000/webhook` in `electric-ax agents types`. This is controlled by `ELECTRIC_AGENTS_REWRITE_LOOPBACK_WEBHOOKS_TO`, which the CLI's docker-compose sets to `host.docker.internal`. If you run the runtime server **directly on the host** (not in Docker) the variable is unset, so loopback URLs are left as-is — leave it unset in that case, or on-host loopback callbacks will break.
+
+:::
+
 ## registerTypes
 
 Registers all entity types with the Electric Agents runtime server and creates webhook subscriptions. Uses upsert semantics — re-registering an existing type updates it rather than erroring.
