@@ -2201,7 +2201,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       // On cold start the stream's offset is still at "now". Advance it
       // to the snapshot's position so no updates are missed in between.
-      if (responseOffset !== null || responseHandle !== null) {
+      // A stream that already has a log position keeps it: jumping to the
+      // snapshot's offset would skip changes the snapshot doesn't contain.
+      if (
+        (responseOffset !== null || responseHandle !== null) &&
+        this.#syncState.offset === `now`
+      ) {
         const transition = this.#syncState.handleResponseMetadata({
           status: 200,
           responseHandle,
