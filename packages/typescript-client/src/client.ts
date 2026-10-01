@@ -104,6 +104,25 @@ function createCacheBuster(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 }
 
+function parseLogOffset(offset: Offset) {
+  const match = /^(\d+)_(\d+|inf)$/.exec(offset)
+  if (!match) return null
+  return {
+    txOffset: BigInt(match[1]),
+    opOffset: match[2] === `inf` ? Infinity : Number(match[2]),
+  }
+}
+
+// `-1` and `now` are not log positions, so they are never before or after one.
+function isLogOffsetBefore(offset: Offset, other: Offset): boolean {
+  const a = parseLogOffset(offset)
+  const b = parseLogOffset(other)
+  if (!a || !b) return false
+  return a.txOffset === b.txOffset
+    ? a.opOffset < b.opOffset
+    : a.txOffset < b.txOffset
+}
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -2199,13 +2218,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         allowReentrantPublishBypass: true,
       })
 
-      // On cold start the stream's offset is still at "now". Advance it
-      // to the snapshot's position so no updates are missed in between.
-      // A stream that already has a log position keeps it: jumping to the
-      // snapshot's offset would skip changes the snapshot doesn't contain.
+      // The stream resumes from the earliest position it has, so it skips no
+      // change the snapshot doesn't contain. On cold start it is still at
+      // "now" and takes the snapshot's offset; concurrent cold snapshots keep
+      // the earliest one. A stream that already reads the log keeps its own.
+      const streamOffset = this.#syncState.offset
       if (
         (responseOffset !== null || responseHandle !== null) &&
-        this.#syncState.offset === `now`
+        (streamOffset === `now` ||
+          (responseOffset !== null &&
+            isLogOffsetBefore(responseOffset, streamOffset)))
       ) {
         const transition = this.#syncState.handleResponseMetadata({
           status: 200,
