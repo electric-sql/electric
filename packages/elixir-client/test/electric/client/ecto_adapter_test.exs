@@ -200,6 +200,23 @@ defmodule Electric.Client.EctoAdapterTest do
              } = EctoAdapter.shape_from_query!(query)
     end
 
+    test "supports where clause with Ecto.ULID bound params" do
+      ulid = "01KNN1EKXZ6QX7RBY56M1GYDYC"
+      column_names = column_names(ULIDTable)
+
+      query =
+        from(t in ULIDTable,
+          where: t.id == ^ulid
+        )
+
+      assert %Electric.Client.ShapeDefinition{
+               table: "ulid_table",
+               where: ~s[("id" = '019d6a17-4fbf-35fa-7c2f-c535030f37cc')],
+               columns: ^column_names,
+               parser: {EctoAdapter, ULIDTable}
+             } = EctoAdapter.shape_from_query!(query)
+    end
+
     test "with where clause" do
       price1 = Decimal.new("2.0")
       net_price1 = Decimal.new("2.5")
