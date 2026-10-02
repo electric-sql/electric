@@ -399,6 +399,79 @@ describe(`Claim-scoped write tokens`, () => {
     expect(currentOwnerTokenRes.status).toBe(204)
   }, 20_000)
 
+  it(`heartbeat acks carrying a backend write token refresh the active claim token`, async () => {
+    const typeName = `claim-heartbeat-refresh-${Date.now()}`
+    const entity = await createEntity(typeName, `owner`)
+    const pgDb = (electricAgentsServer as any).pgDb
+
+    // A callback receiver that answers heartbeats the way a Durable Streams
+    // backend with the Write Fencing extension does: ok plus a re-minted
+    // write token.
+    const refreshingReceiver = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': `application/json` })
+      res.end(JSON.stringify({ ok: true, write_token: `backend-refresh-1` }))
+    })
+    await new Promise<void>((resolve) =>
+      refreshingReceiver.listen(0, `127.0.0.1`, () => resolve())
+    )
+    const refreshingReceiverUrl = `http://127.0.0.1:${
+      (refreshingReceiver.address() as { port: number }).port
+    }`
+
+    try {
+      await pgDb.insert(consumerCallbacks).values({
+        consumerId: `consumer-refresh`,
+        callbackUrl: refreshingReceiverUrl,
+        primaryStream: entity.streams.main,
+      })
+
+      const claim = await claimConsumer({
+        consumerId: `consumer-refresh`,
+        epoch: 4,
+        wakeId: `wake-refresh`,
+      })
+      expect(claim.ok).toBe(true)
+      expect(claim.writeToken).toBeTruthy()
+
+      const heartbeatRes = await fetch(
+        `${baseUrl}/_electric/wake-callbacks/consumer-refresh`,
+        {
+          method: `POST`,
+          headers: { 'content-type': `application/json` },
+          body: JSON.stringify({ epoch: 4, acks: [] }),
+        }
+      )
+      expect(heartbeatRes.status).toBe(200)
+      const heartbeatBody = (await heartbeatRes.json()) as {
+        ok: boolean
+        writeToken?: string
+      }
+      expect(heartbeatBody.ok).toBe(true)
+      expect(heartbeatBody.writeToken).toBe(`backend-refresh-1`)
+
+      // The refreshed token writes, and the pre-refresh token stays valid
+      // so an append already in flight with it is not rejected.
+      const refreshedTokenRes = await appendEntityEvent({
+        streamPath: entity.streams.main,
+        writeToken: `backend-refresh-1`,
+        key: `manifest-refreshed-token`,
+      })
+      expect(refreshedTokenRes.status).toBe(204)
+
+      const previousTokenRes = await appendEntityEvent({
+        streamPath: entity.streams.main,
+        writeToken: claim.writeToken!,
+        key: `manifest-previous-token`,
+      })
+      expect(previousTokenRes.status).toBe(204)
+    } finally {
+      refreshingReceiver.closeAllConnections()
+      await new Promise<void>((resolve) =>
+        refreshingReceiver.close(() => resolve())
+      )
+    }
+  }, 20_000)
+
   it(`kill clears the active claim token for the entity stream`, async () => {
     const typeName = `claim-kill-cleanup-${Date.now()}`
     const entity = await createEntity(typeName, `owner`)
@@ -656,14 +729,15 @@ describe(`Claim-scoped write tokens`, () => {
     await registry.updateStatus(entity.url, `running`)
     expect(await getEntityStatus(entity.url)).toBe(`running`)
 
-    const origUpdateStatus = registry.updateStatus.bind(registry)
+    const origUpdateStatusAfterDone =
+      registry.updateStatusAfterDone.bind(registry)
     let shouldFail = true
-    registry.updateStatus = async (...args: [string, string]) => {
+    registry.updateStatusAfterDone = async (entityUrl: string) => {
       if (shouldFail) {
         shouldFail = false
         throw new Error(`simulated DB failure`)
       }
-      return origUpdateStatus(...args)
+      return origUpdateStatusAfterDone(entityUrl)
     }
 
     const firstDone = await sendDone({
@@ -674,7 +748,7 @@ describe(`Claim-scoped write tokens`, () => {
     expect(firstDone.status).toBe(200)
     expect(await getEntityStatus(entity.url)).toBe(`running`)
 
-    registry.updateStatus = origUpdateStatus
+    registry.updateStatusAfterDone = origUpdateStatusAfterDone
 
     const retryDone = await sendDone({
       consumerId: `consumer-done-retry`,

@@ -148,8 +148,11 @@ export interface RuntimeRouter {
     options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
   ) => void
 
-  /** True when a wake for the stream path is already in flight. */
-  isWakeActive: (streamPath: string) => boolean
+  /**
+   * True when a wake for the stream path is already in flight — with
+   * `epoch`, only one for that generation.
+   */
+  isWakeActive: (streamPath: string, epoch?: number) => boolean
 
   /** Dispatch an already-parsed webhook wake notification. */
   dispatchWebhookWake: (notification: WebhookNotification) => void
@@ -372,6 +375,7 @@ export function createRuntimeRouter(
     process.env.ELECTRIC_AGENTS_DEBUG_REGISTRATION_TIMING === `1`
   const pendingWakes = new Set<Promise<void>>()
   const pendingWakeLabels = new Map<Promise<void>, string>()
+  const pendingWakeEpochs = new Map<Promise<void>, number>()
   const pendingWakeControllers = new Map<Promise<void>, AbortController>()
   const wakeErrors: Array<Error> = []
   const debugCleanup = process.env.ELECTRIC_AGENTS_DEBUG_CLEANUP === `1`
@@ -434,15 +438,26 @@ export function createRuntimeRouter(
       .finally(() => {
         pendingWakes.delete(wake)
         pendingWakeLabels.delete(wake)
+        pendingWakeEpochs.delete(wake)
         pendingWakeControllers.delete(wake)
       })
     pendingWakes.add(wake)
     pendingWakeLabels.set(wake, wakeLabel)
+    pendingWakeEpochs.set(wake, notification.epoch)
     pendingWakeControllers.set(wake, controller)
   }
 
-  const isWakeActive: RuntimeRouter[`isWakeActive`] = (streamPath) =>
-    [...pendingWakeLabels.values()].includes(streamPath)
+  const isWakeActive: RuntimeRouter[`isWakeActive`] = (streamPath, epoch) => {
+    for (const [wake, label] of pendingWakeLabels) {
+      if (
+        label === streamPath &&
+        (epoch === undefined || pendingWakeEpochs.get(wake) === epoch)
+      ) {
+        return true
+      }
+    }
+    return false
+  }
 
   const dispatchWebhookWake: RuntimeRouter[`dispatchWebhookWake`] = dispatchWake
 
@@ -522,6 +537,19 @@ export function createRuntimeRouter(
         { error: `Unknown entity type: ${typeName ?? `(none)`}` },
         503
       )
+    }
+
+    if (isWakeActive(notification.streamPath, notification.epoch)) {
+      // The backend redelivers a wake whose 2xx it never saw; a second wake
+      // for the same generation would claim it again (the backend accepts
+      // that — the lease is live) and run the handler twice. The in-flight
+      // wake's done settles the delivery, so acknowledge without starting
+      // another.
+      runtimeLog.warn(
+        `[agent-runtime]`,
+        `wake for ${notification.streamPath} (epoch=${notification.epoch}) is already in flight; ignoring redelivery`
+      )
+      return json({ ok: true }, 200)
     }
 
     dispatchWebhookWake(notification)

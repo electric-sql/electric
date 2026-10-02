@@ -548,6 +548,11 @@ export async function processWake(
       return globalThis.fetch(input, { ...init, headers })
     },
     onError: (error) => {
+      // A batch that fails once this wake's failure is on record may be the
+      // one carrying the error event failBackgroundWake appended; whether it
+      // was is settled at done time against the producer's last written
+      // offset. See errorEventUnrecorded.
+      if (liveProcessError) writeFailedAfterErrorEvent = true
       failBackgroundWake(error, `WRITE_FAILED`)
     },
   })
@@ -634,6 +639,16 @@ export async function processWake(
     close: () => void
   }> = []
   let liveProcessError: Error | null = null
+  // Set when a producer batch fails after failBackgroundWake appended this
+  // wake's error event — possibly the batch carrying it, since batches are
+  // sent concurrently. `producer.lastSuccessfulOffset` as it stood when the
+  // event was appended decides which: an append that landed after it proves
+  // the error event landed too. When it did not, nothing durable records that
+  // the wake failed, so the done carries no acks — the trigger stays pending
+  // and the backend re-wakes the entity instead of consuming a message no run
+  // answered, the same shape as a crash mid-wake.
+  let writeFailedAfterErrorEvent = false
+  let offsetBeforeErrorEvent: string | undefined
   let acceptLiveInputs = false
   const handledSignalKeys = new Set<string>()
 
@@ -701,6 +716,7 @@ export async function processWake(
 
     liveProcessError = toError(err)
     log.error(`wake background task failed for ${entityUrl}:`, liveProcessError)
+    offsetBeforeErrorEvent = producer.lastSuccessfulOffset
     writeEvent(
       entityStateSchema.errors.insert({
         key: `error-${epoch}-${crypto.randomUUID()}`,
@@ -1222,7 +1238,7 @@ export async function processWake(
       return null
     }
     claimedWake = true
-    writeToken = claimed.writeToken ?? ``
+    writeToken = claimed.writeToken ?? notification.write_token ?? ``
 
     handleRuntimeSideEffectEvents(catchUpEvents)
 
@@ -1248,6 +1264,7 @@ export async function processWake(
             ok: boolean
             claimToken?: string
             token?: string
+            writeToken?: string
           }
           if (!data.ok) {
             failBackgroundWake(
@@ -1258,6 +1275,10 @@ export async function processWake(
           }
           if (data.claimToken) activeClaimToken = data.claimToken
           if (data.token) activeClaimToken = data.token
+          // The server may re-mint the write token on each heartbeat (its
+          // backend's token TTL tracks the claim lease); adopt the refresh
+          // so appends from a long-running activation keep a live token.
+          if (data.writeToken) writeToken = data.writeToken
         })
         .catch((err: unknown) => {
           failBackgroundWake(err, `HEARTBEAT_FAILED`)
@@ -2556,7 +2577,12 @@ export async function processWake(
         cleanupErrors.push(toError(err))
       }
     }
-    const doneOffset = safeAckOffset
+    // Every batch has been flushed by now, so an offset past the one the
+    // error event was queued behind is an append that succeeded after it.
+    const errorEventUnrecorded =
+      writeFailedAfterErrorEvent &&
+      producer.lastSuccessfulOffset === offsetBeforeErrorEvent
+    const doneOffset = errorEventUnrecorded ? `-1` : safeAckOffset
     for (const sdb of secondaryDbs) {
       try {
         await sdb.flushWrites?.()
@@ -2595,11 +2621,22 @@ export async function processWake(
       }
     }
     if (claimedWake) {
-      log.info(
-        doneOffset === `-1`
-          ? `done without ack (no consumed offset)`
-          : `done acking ${streamPath} at ${doneOffset}`
-      )
+      if (errorEventUnrecorded) {
+        // Warn, not info: the trigger stays pending, so the backend re-wakes
+        // this entity immediately and the whole handler — model and tool
+        // calls included — runs again. One line is a duplicated run; a stream
+        // of them for the same entity is a wake loop over a write failure
+        // that is not clearing, and the writes are what to fix.
+        log.warn(
+          `done without ack for ${streamPath} (epoch=${epoch}): the write failure was never recorded on the stream, leaving the wake pending for redelivery`
+        )
+      } else {
+        log.info(
+          doneOffset === `-1`
+            ? `done without ack (no consumed offset)`
+            : `done acking ${streamPath} at ${doneOffset}`
+        )
+      }
       if (shutdownRequested) {
         log.info(`shutdown requested, sending done callback at checkpoint`)
       }
