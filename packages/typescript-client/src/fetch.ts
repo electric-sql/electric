@@ -78,6 +78,11 @@ export function parseRetryAfterHeader(retryAfter: string | undefined): number {
   return 0
 }
 
+// Positive jitter added when the server sends Retry-After: up to 10% of the
+// requested delay, capped at 5 seconds.
+const RETRY_AFTER_JITTER_RATIO = 0.1
+const RETRY_AFTER_JITTER_MAX_MS = 5_000
+
 async function abortableSleep(
   waitMs: number,
   signal?: AbortSignal
@@ -169,13 +174,28 @@ export function createFetchWithBackoff(
           const jitter = Math.random() * delay // random value between 0 and current delay
           const clientBackoffMs = Math.min(jitter, maxDelay) // cap at maxDelay
 
-          // 3. Server minimum is the floor, client cap is the ceiling
-          const waitMs = Math.max(serverMinimumMs, clientBackoffMs)
+          // 3. Add bounded positive jitter on top of the server minimum so
+          // clients that receive the same Retry-After do not retry in lockstep.
+          // The jitter is additive, so a retry never happens before the
+          // server-requested time.
+          const retryAfterJitterMs =
+            serverMinimumMs > 0
+              ? Math.random() *
+                Math.min(
+                  serverMinimumMs * RETRY_AFTER_JITTER_RATIO,
+                  RETRY_AFTER_JITTER_MAX_MS
+                )
+              : 0
+
+          // 4. Server minimum is the floor, client cap is the ceiling for the
+          // client backoff, and the Retry-After jitter is added on top
+          const waitMs =
+            Math.max(serverMinimumMs, clientBackoffMs) + retryAfterJitterMs
 
           if (debug) {
             const source = serverMinimumMs > 0 ? `server+client` : `client`
             console.log(
-              `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms)`
+              `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms, retryAfterJitter=${retryAfterJitterMs}ms)`
             )
           }
 
