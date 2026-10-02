@@ -39,6 +39,7 @@ export interface StandaloneAgentsRuntimeOptions {
   entityBridgeManager?: EntityBridgeCoordinator
   pgSyncBridgeManager?: PgSyncBridgeCoordinator
   pgSync?: PgSyncBridgeManagerOptions
+  fencedSessionStreams?: boolean
 }
 
 export interface StartedStandaloneAgentsRuntime {
@@ -115,6 +116,7 @@ export async function startStandaloneAgentsRuntime(
     pgSyncBridgeManager: options.pgSyncBridgeManager,
     pgSync: options.pgSync,
     stopWakeRegistryOnShutdown: options.wakeRegistry ? false : true,
+    fencedSessionStreams: options.fencedSessionStreams,
   })
 
   const startWakeRegistry = options.startWakeRegistry ?? true

@@ -811,6 +811,7 @@ describe(`ElectricAgentsManager.forkSubtree`, () => {
     expect(rootForkCall).toBeDefined()
     expect(rootForkCall?.opts).toEqual({
       forkPointer: { offset: `C`, subOffset: 1 },
+      writeFence: false,
     })
   })
 

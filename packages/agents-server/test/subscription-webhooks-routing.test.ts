@@ -633,6 +633,192 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
     }
   })
 
+  it(`adopts the write token a backend delivers with a webhook wake`, async () => {
+    const claimWriteTokens = new ClaimWriteTokenStore()
+    const webhookSelect = selectDb([
+      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+    ])
+    const insert = insertDb()
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+
+    try {
+      const webhookResponse = await globalRouter.fetch(
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
+          subscription_id: `horton-handler`,
+          wake_id: `wake-fenced`,
+          generation: 9,
+          streams: [
+            {
+              path: `horton/demo/main`,
+              acked_offset: `0`,
+              tail_offset: `1`,
+              has_pending: true,
+            },
+          ],
+          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_token: `callback-token`,
+          write_token: `backend-token-1`,
+        }),
+        buildContext({
+          pgDb: {
+            select: webhookSelect.select,
+            insert: insert.insert,
+          } as any,
+          runtime: { claimWriteTokens } as any,
+        })
+      )
+      expect(webhookResponse.status).toBe(200)
+
+      const callbackSelect = selectDb([
+        {
+          callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          primaryStream: `/horton/demo/main`,
+        },
+      ])
+      const claimResponse = await globalRouter.fetch(
+        request(`POST`, `/_electric/wake-callbacks/wake-fenced`, {
+          wakeId: `wake-fenced`,
+          epoch: 9,
+        }),
+        buildContext({
+          pgDb: { select: callbackSelect.select } as any,
+          runtime: { claimWriteTokens } as any,
+        })
+      )
+
+      expect(claimResponse.status).toBe(200)
+      const body = await responseJson(claimResponse)
+      expect(body.ok).toBe(true)
+      expect(body.writeToken).toBe(`backend-token-1`)
+      expect(
+        claimWriteTokens.isValid(
+          `tenant-a`,
+          `/horton/demo/main`,
+          `backend-token-1`
+        )
+      ).toBe(true)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`refreshes the claim write token from heartbeat ack responses`, async () => {
+    const select = selectDb([
+      {
+        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        primaryStream: `/horton/demo/main`,
+      },
+    ])
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, write_token: `ds-refresh-1` }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const ctx = buildContext({
+      pgDb: { select: select.select } as any,
+    })
+    const activeToken = ctx.runtime.claimWriteTokens.mint(
+      `tenant-a`,
+      `/horton/demo/main`,
+      `wake-1`
+    )
+
+    try {
+      const response = await globalRouter.fetch(
+        new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
+          method: `POST`,
+          headers: {
+            'content-type': `application/json`,
+            authorization: `Bearer callback-token`,
+          },
+          body: JSON.stringify({
+            epoch: 7,
+            acks: [{ path: `/horton/demo/main`, offset: `1` }],
+          }),
+        }),
+        ctx
+      )
+
+      expect(response.status).toBe(200)
+      const body = await responseJson(response)
+      expect(body.ok).toBe(true)
+      expect(body.writeToken).toBe(`ds-refresh-1`)
+      // The refreshed token is active; the pre-refresh token stays valid so
+      // an append already in flight with it is not rejected.
+      expect(
+        ctx.runtime.claimWriteTokens.isValid(
+          `tenant-a`,
+          `/horton/demo/main`,
+          `ds-refresh-1`
+        )
+      ).toBe(true)
+      expect(
+        ctx.runtime.claimWriteTokens.isValid(
+          `tenant-a`,
+          `/horton/demo/main`,
+          activeToken
+        )
+      ).toBe(true)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`keeps heartbeat responses unchanged when the backend supplies no write token`, async () => {
+    const select = selectDb([
+      {
+        callbackUrl: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+        primaryStream: `/horton/demo/main`,
+      },
+    ])
+    const fetchSpy = vi.spyOn(globalThis, `fetch`).mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': `application/json` },
+      })
+    )
+    const ctx = buildContext({
+      pgDb: { select: select.select } as any,
+    })
+    const activeToken = ctx.runtime.claimWriteTokens.mint(
+      `tenant-a`,
+      `/horton/demo/main`,
+      `wake-1`
+    )
+
+    try {
+      const response = await globalRouter.fetch(
+        new Request(`http://agents.local/_electric/wake-callbacks/wake-1`, {
+          method: `POST`,
+          headers: {
+            'content-type': `application/json`,
+            authorization: `Bearer callback-token`,
+          },
+          body: JSON.stringify({
+            epoch: 7,
+            acks: [{ path: `/horton/demo/main`, offset: `1` }],
+          }),
+        }),
+        ctx
+      )
+
+      expect(response.status).toBe(200)
+      await expect(responseJson(response)).resolves.toEqual({ ok: true })
+      expect(
+        ctx.runtime.claimWriteTokens.isValid(
+          `tenant-a`,
+          `/horton/demo/main`,
+          activeToken
+        )
+      ).toBe(true)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it(`auto-acks webhook wakes for stopped entities`, async () => {
     const select = selectDb([
       { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
@@ -680,6 +866,126 @@ describe(`subscription webhooks for Durable Streams subscriptions`, () => {
 
       expect(response.status).toBe(200)
       await expect(response.json()).resolves.toEqual({ done: true })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`holds no delivered write token for a wake auto-acked for a stopped entity`, async () => {
+    const claimWriteTokens = new ClaimWriteTokenStore()
+    const select = selectDb([
+      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+    ])
+    const insert = insertDb()
+    const stoppedEntity = {
+      url: `/horton/demo`,
+      type: `horton`,
+      status: `stopped`,
+      streams: {
+        main: `/horton/demo/main`,
+      },
+    }
+    const fetchSpy = vi.spyOn(globalThis, `fetch`)
+
+    try {
+      const response = await globalRouter.fetch(
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
+          subscription_id: `horton-handler`,
+          wake_id: `wake-stopped`,
+          generation: 8,
+          streams: [
+            {
+              path: `horton/demo/main`,
+              acked_offset: `1`,
+              tail_offset: `2`,
+              has_pending: true,
+            },
+          ],
+          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_token: `callback-token`,
+          write_token: `backend-token-unclaimed`,
+        }),
+        buildContext({
+          pgDb: { select: select.select, insert: insert.insert } as any,
+          runtime: { claimWriteTokens } as any,
+          entityManager: {
+            registry: {
+              getEntityByStream: vi.fn().mockResolvedValue(stoppedEntity),
+              updateStatus: vi.fn().mockResolvedValue(undefined),
+            },
+            enrichPayload: vi.fn(async (payload) => payload),
+            isForkWorkLockedEntity: vi.fn(() => false),
+          } as any,
+        })
+      )
+
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({ done: true })
+      // The wake was auto-acked before any claim could happen, so the
+      // delivered token must not be left behind in the store.
+      expect(
+        claimWriteTokens.takeDelivered(`tenant-a`, `wake-stopped`)
+      ).toBeUndefined()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it(`holds no delivered write token for a wake rejected while the entity is fork-locked`, async () => {
+    const claimWriteTokens = new ClaimWriteTokenStore()
+    const select = selectDb([
+      { webhookUrl: `http://runtime.local/_electric/builtin-agent-handler` },
+    ])
+    const insert = insertDb()
+    const fetchSpy = vi.spyOn(globalThis, `fetch`)
+
+    try {
+      const response = await globalRouter.fetch(
+        request(`POST`, `/_electric/subscription-webhooks/horton-handler`, {
+          subscription_id: `horton-handler`,
+          wake_id: `wake-locked`,
+          generation: 8,
+          streams: [
+            {
+              path: `horton/demo/main`,
+              acked_offset: `1`,
+              tail_offset: `2`,
+              has_pending: true,
+            },
+          ],
+          callback_url: `http://durable.local/v1/stream/tenant-a/__ds/subscriptions/horton-handler/callback`,
+          callback_token: `callback-token`,
+          write_token: `backend-token-unclaimed`,
+        }),
+        buildContext({
+          pgDb: { select: select.select, insert: insert.insert } as any,
+          runtime: { claimWriteTokens } as any,
+          entityManager: {
+            registry: {
+              getEntityByStream: vi.fn().mockResolvedValue({
+                url: `/horton/demo`,
+                type: `horton`,
+                status: `idle`,
+                streams: {
+                  main: `/horton/demo/main`,
+                },
+              }),
+              updateStatus: vi.fn().mockResolvedValue(undefined),
+            },
+            enrichPayload: vi.fn(async (payload) => payload),
+            isForkWorkLockedEntity: vi.fn(() => true),
+          } as any,
+        })
+      )
+
+      expect(response.status).toBe(409)
+      // The wake was rejected before any claim could happen, so the
+      // delivered token must not be left behind in the store.
+      expect(
+        claimWriteTokens.takeDelivered(`tenant-a`, `wake-locked`)
+      ).toBeUndefined()
       expect(fetchSpy).not.toHaveBeenCalled()
     } finally {
       fetchSpy.mockRestore()
