@@ -147,6 +147,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Demos moved under /sync/demos
 /demos/durable-doom               /streams/demos/durable-doom
 /demos/territory-wars             /streams/demos/territory-wars
+/demos/territory-wars/*           /streams/demos/territory-wars
 /demos                            /sync/demos
 /demos/*                          /sync/demos/:splat
 

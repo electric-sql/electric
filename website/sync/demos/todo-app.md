@@ -2,7 +2,6 @@
 title: Todo app
 description: >-
   This is a classic TodoMVC example app, developed using Electric.
-deployed_url: https://todo-app.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/todo-app
 example: true
 ---

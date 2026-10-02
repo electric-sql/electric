@@ -3,12 +3,13 @@ const { demo } = defineProps(['demo'])
 </script>
 
 <template>
-  <div class="demo-embed" v-if="demo.deployed_url && demo.image">
+  <div class="demo-embed" v-if="demo.image">
     <figure>
-      <a :href="demo.deployed_url" target="_blank">
+      <a v-if="demo.deployed_url" :href="demo.deployed_url" target="_blank">
         <img :src="demo.image" />
       </a>
-      <figcaption>
+      <img v-else :src="demo.image" />
+      <figcaption v-if="demo.deployed_url">
         See the {{ demo.example ? 'example' : 'demo' }} running at
         <a :href="demo.deployed_url" target="_blank" class="no-wrap-sm">
           {{ demo.deployed_url.split('://').at(1) }}</a
