@@ -3,7 +3,7 @@
    ──────────────────────────────────────
    Originally inlined as `.ea-cta-strap` in `agents-home/HomePage.vue`.
    Lifted into a shared component so the same pattern can be reused on
-   the Streams / Sync / Cloud landing pages without copy-paste drift.
+   the Streams / Sync landing pages without copy-paste drift.
 
    Layout:
      [eyebrow chip]

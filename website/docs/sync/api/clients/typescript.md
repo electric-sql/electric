@@ -400,7 +400,6 @@ Note that certain parameter names are reserved for Electric's internal use and c
 - `handle`
 - `live`
 - `cursor`
-- `source_id`
 
 The following PostgreSQL-specific parameters should be included within the `params` object:
 

@@ -14,8 +14,6 @@ Use `@durable-streams/aisdk-transport` to make [Vercel AI SDK](https://ai-sdk.de
 
 This is the integration to use when you want a chat generation to survive refreshes and reconnect cleanly to the same stream. It plugs into the AI SDK's [Transport layer](https://ai-sdk.dev/docs/ai-sdk-ui/transport#transport), so you can keep the normal `useChat` flow while swapping in a durable transport.
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="vercel-ai-sdk" />
-
 ## Install
 
 ```bash

@@ -49,7 +49,7 @@ Electric caches [shape logs](/docs/sync/api/http#shape-log) on disk and treats t
 | EC2, storage&#8209;optimized instance (`i4i`, `m6id`) | Local NVMe instance store | Fastest possible disk; survives task restarts, not host replacement |
 | EC2, compute instance (`m6a`, `m6i`, `m7a`, `m7i`) | Attached gp3 EBS data volume | Cheaper; IOPS and throughput independently tunable, in place |
 
-Fargate is fine for evaluation and light workloads. For production workloads, EC2 gives you dramatically better disk for the money — this is how [Electric Cloud](/cloud/) runs.
+Fargate is fine for evaluation and light workloads. For production workloads, EC2 gives you dramatically better disk for the money.
 
 #### ECS on EC2
 

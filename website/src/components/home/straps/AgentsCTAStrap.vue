@@ -9,7 +9,7 @@ import StreamBanner from '../StreamBanner.vue'
 /* AgentsCTAStrap — final full-bleed strap on the homepage. Drives
    readers towards the Electric Agents landing page and quickstart so
    the page closes with a single, focused next step. Visual language
-   matches the other straps (NoSilosStrap, ManagedCloudStrap) for
+   matches the other straps (e.g. NoSilosStrap) for
    consistency, but with a slightly more emphatic gradient to mark
    the page-close. The shared `StreamBanner` runs flush along the
    bottom edge of the strap as the page's closing visual flourish. */

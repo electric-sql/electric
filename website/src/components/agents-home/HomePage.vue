@@ -365,7 +365,7 @@ const hasAgentBlogPosts = computed(() =>
           </div>
           <div class="stack-box streams-box">
             <div class="stack-label">Electric Streams</div>
-            <div class="stack-examples">Electric Cloud or self-hosted</div>
+            <div class="stack-examples">self-hosted · open source</div>
           </div>
         </div>
         <div class="ea-stack-code">
@@ -792,10 +792,8 @@ const hasAgentBlogPosts = computed(() =>
       a full-bleed strap (no border / radius, just background +
       gradient + eyebrow + title + install pill + buttons) so it
       visually matches the homepage `AgentsCTAStrap` and the new
-      mid-page strap above. The "Or sign up to Electric Cloud and
-      skip the ops" foot line was removed — Cloud is covered in the
-      composable-stack section and we don't want to dilute the
-      single end-of-page action.
+      mid-page strap above. There's no secondary foot line — we don't
+      want to dilute the single end-of-page action.
     -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>

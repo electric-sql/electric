@@ -1,8 +1,8 @@
 ---
 title: Benchmarks - Reference
 description: >-
-  We run benchmarks for the Electric sync engine and the Electric Cloud,
-  which hosts the sync engine behind a CDN.
+  We run benchmarks for the Electric sync engine, including running
+  it behind a CDN for large-scale fan-out.
 image: /img/guides/diverse-shape-fanout.png
 outline: [2, 4]
 ---
@@ -22,7 +22,7 @@ import ScalabilityChart from '../../../src/components/ScalabilityChart.vue'
 
 # Benchmarks
 
-We run benchmarks for [cloud](#cloud), [core Electric](#electric) and [PGlite](#pglite).
+We run benchmarks for [CDN fan-out](#cloud), [core Electric](#electric) and [PGlite](#pglite).
 
 ## Understanding the benchmarks
 
@@ -48,7 +48,7 @@ We are in the process of open sourcing our [electric-sql/benchmarking-fleet](htt
 
 We are working to set up benchmarks to run on every release (patch, minor and major). When this is done, we will document how to see the release benchmarks and how to track improvements and/or regression in performance.
 
-## Cloud
+## CDN fan-out {#cloud}
 
 Electric is designed to run behind a CDN, using the CDN's [request collapsing](/docs/sync/api/http#request-collapsing) capability to scale out data delivery to lots of concurrent users.
 

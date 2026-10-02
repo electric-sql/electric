@@ -17,8 +17,8 @@ const actions = [
     theme: 'brand',
   },
   {
-    href: '/cloud',
-    text: 'Cloud',
+    href: '/docs/streams',
+    text: 'Docs',
   },
 ]
 </script>

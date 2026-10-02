@@ -423,12 +423,11 @@ const primaryPlatform = computed(
     <!-- ─────────────────── §5 — Bottom CTA ─────────────────── -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
-        <span>Durable · long-running · cloud-connected</span>
+        <span>Durable · long-running · open source</span>
       </template>
       <template #title>Build with Electric&nbsp;Agents</template>
       <template #tagline>
-        Stand up the open-source runtime locally, or connect to
-        Electric&nbsp;Cloud.
+        Stand up the open-source runtime locally or on your own infrastructure.
       </template>
       <template #actions>
         <VPButton
@@ -444,13 +443,6 @@ const primaryPlatform = computed(
           theme="alt"
           text="Agents docs"
           href="/docs/agents/"
-        />
-        <VPButton
-          tag="a"
-          size="medium"
-          theme="alt"
-          text="Cloud"
-          href="/cloud/"
         />
       </template>
     </BottomCtaStrap>

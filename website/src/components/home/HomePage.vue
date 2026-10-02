@@ -10,7 +10,6 @@ import ScalesToSection from './sections/ScalesToSection.vue'
 import WorksWithSection from './sections/WorksWithSection.vue'
 
 import AgentsCTAStrap from './straps/AgentsCTAStrap.vue'
-import ManagedCloudStrap from './straps/ManagedCloudStrap.vue'
 import NoSilosStrap from './straps/NoSilosStrap.vue'
 
 /* WhyEverythingSection — thesis strap that sits between the hero
@@ -70,7 +69,6 @@ onMounted(() => {
 
     <NoSilosStrap :dark="true" />
     <WorksWithSection />
-    <ManagedCloudStrap :dark="true" />
     <ScalesToSection />
 
     <WhyEverythingSection :dark="true" />

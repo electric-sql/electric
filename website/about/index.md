@@ -11,7 +11,7 @@ outline: deep
 
 Electric is the data platform for multi-agent systems.
 
-We make three open source products — [Electric Agents](/agents/), [Electric Streams](/streams/) and [Electric Sync](/sync/) — built on [Postgres](https://www.postgresql.org) and [Durable Streams](https://durablestreams.com), and run them as a managed service on [Electric Cloud](/cloud/).
+We make three open source products — [Electric Agents](/agents/), [Electric Streams](/streams/) and [Electric Sync](/sync/) — built on [Postgres](https://www.postgresql.org) and [Durable Streams](https://durablestreams.com).
 
 ## Products
 

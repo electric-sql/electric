@@ -28,7 +28,7 @@ import MarkdownLink from './MarkdownLink.vue'
         <a href="/docs/sync/">Docs</a>
         <a href="/sync/demos/">Demos</a>
         <a href="/blog">Blog</a>
-        <a href="https://dashboard.electric-sql.cloud/">Sign up</a>
+        <a href="https://github.com/electric-sql/electric">GitHub</a>
       </nav>
 
       <nav class="footer-social">

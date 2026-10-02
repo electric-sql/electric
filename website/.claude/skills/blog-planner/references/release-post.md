@@ -55,7 +55,7 @@ The TLDR *is* the what and why — no separate setup section.
 
 Next steps:
 
-- CTAs: docs, cloud signup, discord
+- CTAs: docs, quickstart, discord
 ```
 
 ## Tone guidance
