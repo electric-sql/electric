@@ -5,7 +5,7 @@
  * SDK events into State Protocol writes via the provided writeEvent callback.
  */
 
-import type { AgentTool, StreamFn } from '@mariozechner/pi-agent-core'
+import type { AgentTool, StreamFn } from '@earendil-works/pi-agent-core'
 
 /** A State Protocol event to be written via the adapter's writeEvent callback. */
 export interface WriteEvent {

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Type } from '@sinclair/typebox'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const BRAVE_API_URL = `https://api.search.brave.com/res/v1/web/search`
 const SEARCH_FALLBACK_MODEL = `claude-haiku-4-5-20251001`

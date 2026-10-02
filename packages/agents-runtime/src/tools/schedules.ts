@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { EntityStreamDBWithActions } from '../entity-stream-db'
 
 type ScheduleManifest = {

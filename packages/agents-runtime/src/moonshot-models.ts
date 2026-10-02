@@ -1,4 +1,4 @@
-import type { Model } from '@mariozechner/pi-ai'
+import type { Model } from '@earendil-works/pi-ai/compat'
 
 export const MOONSHOT_PROVIDER = `moonshot` as const
 export type MoonshotProvider = typeof MOONSHOT_PROVIDER

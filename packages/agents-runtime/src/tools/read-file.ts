@@ -2,7 +2,7 @@ import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const MAX_FILE_SIZE = 512 * 1024 // 512 KB
 const DEFAULT_READ_LIMIT_LINES = 2_000

@@ -4,7 +4,7 @@ import { Type } from '@sinclair/typebox'
 import { runtimeLog } from '../log'
 import { SandboxError } from '../sandbox/types'
 import type { Sandbox } from '../sandbox/types'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 export function createWriteTool(sandbox: Sandbox): AgentTool {
   return {
