@@ -404,6 +404,16 @@ export {
 } from './moonshot-models'
 export type { MoonshotModel, MoonshotProvider } from './moonshot-models'
 
+export {
+  ORCAROUTER_API_BASE_URL,
+  ORCAROUTER_API_KEY_ENV,
+  ORCAROUTER_PROVIDER,
+  getOrcaRouterApiKey,
+  getOrcaRouterModel,
+  getOrcaRouterModels,
+} from './orcarouter-models'
+export type { OrcaRouterModel, OrcaRouterProvider } from './orcarouter-models'
+
 export { createRuntimeHandler, createRuntimeRouter } from './create-handler'
 export { verifyWebhookSignature } from './webhook-signature'
 export { createPullWakeRunner } from './pull-wake-runner'

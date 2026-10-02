@@ -94,6 +94,7 @@ export function createCredentialsController(deps: {
           deps.apiKeys.openai ||
           deps.apiKeys.deepseek ||
           deps.apiKeys.moonshot ||
+          deps.apiKeys.orcarouter ||
           deps.settings.codex?.enabled
       ),
       signedIn: deps.getCloudAuthStatus() === `signed-in`,

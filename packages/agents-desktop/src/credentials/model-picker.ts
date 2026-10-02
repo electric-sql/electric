@@ -22,6 +22,7 @@ export const DEFAULT_ENABLED_MODEL_VALUES = [
   `deepseek:deepseek-v4-flash`,
   `deepseek:deepseek-v4-pro`,
   `moonshot:kimi-k2.6`,
+  `orcarouter:orcarouter/auto`,
 ]
 
 export function normalizeEnabledModelValues(value: unknown): Array<string> {
@@ -48,7 +49,10 @@ export function resolveEnabledModelValues(
 function hasModelKey(
   saved: ApiKeys,
   suggested: ApiKeys,
-  key: keyof Pick<ApiKeys, `anthropic` | `openai` | `deepseek` | `moonshot`>
+  key: keyof Pick<
+    ApiKeys,
+    `anthropic` | `openai` | `deepseek` | `moonshot` | `orcarouter`
+  >
 ): boolean {
   return Boolean(saved[key] || suggested[key])
 }
@@ -63,6 +67,7 @@ function configuredProviders(
   if (hasModelKey(saved, suggested, `openai`)) providers.push(`openai`)
   if (hasModelKey(saved, suggested, `deepseek`)) providers.push(`deepseek`)
   if (hasModelKey(saved, suggested, `moonshot`)) providers.push(`moonshot`)
+  if (hasModelKey(saved, suggested, `orcarouter`)) providers.push(`orcarouter`)
   if (codex.enabled) providers.push(`openai-codex`)
   return providers
 }

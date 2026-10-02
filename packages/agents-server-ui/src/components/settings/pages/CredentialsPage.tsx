@@ -166,6 +166,8 @@ export function CredentialsPage(): React.ReactElement {
                   status.saved.deepseek ?? status.suggested.deepseek ?? ``,
                 moonshot:
                   status.saved.moonshot ?? status.suggested.moonshot ?? ``,
+                orcarouter:
+                  status.saved.orcarouter ?? status.suggested.orcarouter ?? ``,
                 brave: status.saved.brave ?? ``,
                 e2b: status.saved.e2b ?? ``,
               }}
@@ -177,15 +179,23 @@ export function CredentialsPage(): React.ReactElement {
                   status.suggested.anthropic ||
                     status.suggested.openai ||
                     status.suggested.deepseek ||
-                    status.suggested.moonshot
+                    status.suggested.moonshot ||
+                    status.suggested.orcarouter
                 )
               }
-              onSave={async ({ anthropic, openai, deepseek, moonshot }) => {
+              onSave={async ({
+                anthropic,
+                openai,
+                deepseek,
+                moonshot,
+                orcarouter,
+              }) => {
                 await persistApiKeys({
                   anthropic: anthropic.trim() || null,
                   openai: openai.trim() || null,
                   deepseek: deepseek.trim() || null,
                   moonshot: moonshot.trim() || null,
+                  orcarouter: orcarouter.trim() || null,
                   brave: status.saved.brave ?? null,
                   e2b: status.saved.e2b ?? null,
                 })
@@ -232,6 +242,16 @@ export function CredentialsPage(): React.ReactElement {
                     }}
                   />
                 ),
+                orcarouter: (
+                  <ProviderModelSettings
+                    status={status.modelPicker}
+                    provider="orcarouter"
+                    onSave={async (values) => {
+                      await persistEnabledModels(values)
+                      await refreshStatus()
+                    }}
+                  />
+                ),
               }}
             />
           </>
@@ -250,6 +270,7 @@ export function CredentialsPage(): React.ReactElement {
               openai: status.saved.openai ?? ``,
               deepseek: status.saved.deepseek ?? ``,
               moonshot: status.saved.moonshot ?? ``,
+              orcarouter: status.saved.orcarouter ?? ``,
               brave: status.saved.brave ?? status.suggested.brave ?? ``,
               e2b: status.saved.e2b ?? status.suggested.e2b ?? ``,
             }}
@@ -264,6 +285,7 @@ export function CredentialsPage(): React.ReactElement {
                 openai: status.saved.openai ?? null,
                 deepseek: status.saved.deepseek ?? null,
                 moonshot: status.saved.moonshot ?? null,
+                orcarouter: status.saved.orcarouter ?? null,
                 brave: brave.trim() || null,
                 e2b: e2b.trim() || null,
               })
