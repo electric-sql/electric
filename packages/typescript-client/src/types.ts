@@ -28,6 +28,7 @@ export type Offset =
   | `now`
   | `${number}_${number}`
   | `${bigint}_${number}`
+  | `${bigint}_inf`
 
 /** Information about transaction visibility for a snapshot. All fields are encoded as strings, but should be treated as uint64. */
 export type PostgresSnapshot = {

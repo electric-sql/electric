@@ -312,6 +312,36 @@ fetching state — so against a conforming server the first up-to-date a replayi
 stream sees never carries a cursor and suppression does not fire. The dedicated
 test drives the branch with a synthetic cursor header on a non-live response.
 
+## Subset snapshot stream-position semantics
+
+`ShapeStream.requestSnapshot()` pauses the main request loop while it injects a
+subset snapshot. The snapshot response describes an insertion point for the
+snapshot data, not an unconditional replacement for the main stream's cursor.
+
+### SS1: Established streams retain their position
+
+If the stream has a concrete offset when `requestSnapshot()` starts, snapshot
+response metadata must not advance that offset. When the pause is released, the
+main stream resumes from its pre-snapshot offset and replays every intervening
+change. `SnapshotTracker` filters changes already represented in the subset
+snapshot; changes to keys outside the subset remain visible.
+
+### SS2: Cold streams adopt the earliest snapshot position
+
+A stream whose offset is `"now"` or `"-1"` may use snapshot response metadata
+to establish a concrete starting position. If cold snapshot requests overlap,
+they form one cohort and the stream retains the earliest response offset,
+regardless of response order. Replaying from the earliest insertion point is
+required because each snapshot covers only its own subset.
+
+Offsets are ordered numerically by transaction and then operation, preserving
+integer precision. The `inf` operation sorts after all finite operations at the
+same transaction offset; `0_inf` is a valid initial snapshot boundary.
+
+**Enforcement**: Dedicated unit tests in `test/stream.test.ts` verify established
+stream replay and deduplication, single-snapshot cold start, both completion orders
+of concurrent cold snapshots, and numeric/infinity offset boundaries.
+
 ## Shape notification semantics
 
 The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers
