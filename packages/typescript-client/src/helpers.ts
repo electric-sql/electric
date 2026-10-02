@@ -71,6 +71,38 @@ export function getOffset(message: ControlMessage): Offset | undefined {
   return lsn ? (`${lsn}_0` as Offset) : undefined
 }
 
+/**
+ * Returns true when `candidate` is strictly ahead of `current`.
+ *
+ * Offsets are `LSN_op` pairs, compared by LSN first and then by op position.
+ * Both parts are compared as integers because LSNs can exceed the safe
+ * integer range. The `-1` and `now` offsets are initial values that any
+ * concrete offset supersedes.
+ *
+ * Used to avoid moving the offset backwards when an SSE `up-to-date` control
+ * message only carries the LSN (`${lsn}_0`), which regresses behind a header
+ * offset from the same LSN when that LSN carries multiple ops.
+ */
+export function isOffsetAhead(candidate: Offset, current: Offset): boolean {
+  if (current === `-1` || current === `now`) return true
+  if (candidate === `-1` || candidate === `now`) return false
+  const candidateParts = candidate.split(`_`)
+  const currentParts = current.split(`_`)
+  if (candidateParts.length !== 2 || currentParts.length !== 2) return false
+  try {
+    const candidateLsn = BigInt(candidateParts[0])
+    const candidateOp = BigInt(candidateParts[1])
+    const currentLsn = BigInt(currentParts[0])
+    const currentOp = BigInt(currentParts[1])
+    return (
+      candidateLsn > currentLsn ||
+      (candidateLsn === currentLsn && candidateOp > currentOp)
+    )
+  } catch {
+    return false
+  }
+}
+
 function bigintReplacer(_key: string, value: unknown): unknown {
   return typeof value === `bigint` ? value.toString() : value
 }

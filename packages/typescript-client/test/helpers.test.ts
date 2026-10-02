@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { isChangeMessage, isControlMessage, Message } from '../src'
-import { isUpToDateMessage, bigintSafeStringify } from '../src/helpers'
+import {
+  isUpToDateMessage,
+  bigintSafeStringify,
+  isOffsetAhead,
+} from '../src/helpers'
 
 describe(`helpers`, () => {
   const changeMsg = {
@@ -88,6 +92,49 @@ describe(`helpers`, () => {
         `Do not know how to serialize a BigInt`
       )
       expect(() => bigintSafeStringify(obj)).not.toThrow()
+    })
+  })
+
+  describe(`isOffsetAhead`, () => {
+    it(`returns false when the candidate regresses within the same LSN`, () => {
+      expect(isOffsetAhead(`1_0`, `1_285`)).toBe(false)
+    })
+
+    it(`returns true when the candidate advances the op at the same LSN`, () => {
+      expect(isOffsetAhead(`1_290`, `1_285`)).toBe(true)
+    })
+
+    it(`returns true when the candidate advances the LSN`, () => {
+      expect(isOffsetAhead(`2_0`, `1_285`)).toBe(true)
+    })
+
+    it(`returns false when the candidate lags on LSN despite higher op`, () => {
+      expect(isOffsetAhead(`1_999`, `2_0`)).toBe(false)
+    })
+
+    it(`returns false for equal offsets`, () => {
+      expect(isOffsetAhead(`1_285`, `1_285`)).toBe(false)
+    })
+
+    it(`compares LSNs beyond the safe integer range`, () => {
+      expect(isOffsetAhead(`9007199254740993_0`, `9007199254740992_0`)).toBe(
+        true
+      )
+      expect(isOffsetAhead(`9007199254740992_0`, `9007199254740993_0`)).toBe(
+        false
+      )
+    })
+
+    it(`treats -1 and now as superseded by any concrete offset`, () => {
+      expect(isOffsetAhead(`1_0`, `-1`)).toBe(true)
+      expect(isOffsetAhead(`1_0`, `now`)).toBe(true)
+      expect(isOffsetAhead(`-1`, `1_285`)).toBe(false)
+      expect(isOffsetAhead(`now`, `1_285`)).toBe(false)
+    })
+
+    it(`never moves on malformed offsets`, () => {
+      expect(isOffsetAhead(`bogus` as never, `1_285`)).toBe(false)
+      expect(isOffsetAhead(`1_0`, `bogus` as never)).toBe(false)
     })
   })
 

@@ -1064,6 +1064,48 @@ describe(`scenario builder`, () => {
     expect(state.offset).toBe(`42_5`)
   })
 
+  it(`SSE up-to-date offset behind header offset is ignored`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, responseOffset: `1_285` })
+      .expectKind(`syncing`)
+      .messages({
+        isSse: true,
+        upToDateOffset: `1_0`,
+        currentCursor: `cursor-1`,
+      })
+      .done()
+
+    expect(state.offset).toBe(`1_285`)
+  })
+
+  it(`SSE up-to-date offset ahead of header offset is accepted`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, responseOffset: `1_285` })
+      .expectKind(`syncing`)
+      .messages({
+        isSse: true,
+        upToDateOffset: `2_0`,
+        currentCursor: `cursor-1`,
+      })
+      .done()
+
+    expect(state.offset).toBe(`2_0`)
+  })
+
+  it(`SSE up-to-date offset with higher op at same LSN is accepted`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, responseOffset: `1_285` })
+      .expectKind(`syncing`)
+      .messages({
+        isSse: true,
+        upToDateOffset: `1_290`,
+        currentCursor: `cursor-1`,
+      })
+      .done()
+
+    expect(state.offset).toBe(`1_290`)
+  })
+
   it(`non-SSE up-to-date message preserves existing offset`, () => {
     const { state } = scenario()
       .response({ responseHandle: `h1`, responseOffset: `5_0` })
