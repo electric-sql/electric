@@ -103,7 +103,9 @@ async function spawnAgent(room: Room, type: string): Promise<string> {
   const agentId = `${room.id}-${type}-${room.agents.length + 1}`
   const entityUrl = `/${type}/${agentId}`
 
-  const putRes = await fetch(`${AGENTS_URL}${entityUrl}`, {
+  // Spawn via the entity API — a bare PUT /:type/:id falls through to the
+  // durable-streams proxy, which creates a raw stream instead of an entity
+  const putRes = await fetch(`${AGENTS_URL}/_electric/entities${entityUrl}`, {
     method: `PUT`,
     headers: { 'Content-Type': `application/json` },
     body: JSON.stringify({
