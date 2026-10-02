@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "backend:up": "docker compose up -d",
+    "backend:up": "docker compose up -d --wait",
     "backend:down": "docker compose down",
     "backend:clear": "docker compose down -v",
     "start": "node .output/server/index.mjs",
@@ -66,9 +66,7 @@
     "eslint-plugin-prettier": "^5.5.3",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^27.0.0",
-    "open-cli": "^8.0.0",
     "prettier": "^3.6.2",
-    "sst": "3.13.2",
     "tsx": "^4.20.3",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",

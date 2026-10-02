@@ -6,7 +6,6 @@ export default [
     ignores: [
       `**/.nitro/**`,
       `**/.output/**`,
-      `**/.sst/**`,
       `**/.tanstack/**`,
       `**/dist/**`,
       `**/node_modules/**`,

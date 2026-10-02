@@ -1,4 +1,3 @@
-version: "3.3"
 name: "tanstack-start-db-electric-starter"
 
 services:
@@ -19,6 +18,12 @@ services:
       - listen_addresses=*
       - -c
       - wal_level=logical
+    healthcheck:
+      # Use TCP so the check fails while initdb's socket-only server is running
+      test: pg_isready -h localhost -U postgres -d electric
+      interval: 1s
+      timeout: 5s
+      retries: 30
 
   electric:
     image: electricsql/electric:latest
@@ -30,7 +35,8 @@ services:
     ports:
       - 30000:3000
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
