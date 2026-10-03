@@ -74,6 +74,13 @@ defmodule Electric.Shapes.Api.Encoder.JSON do
   @max_batch_items 500
   @max_batch_bytes 256 * 1024
 
+  @doc """
+  Upper bound in bytes for a single encoded response body element (a batch of
+  log items). Consumers of encoded streams may size their write units to this:
+  elements at or under it can be written as-is.
+  """
+  def max_batch_bytes, do: @max_batch_bytes
+
   defp to_json_stream(items) do
     Stream.concat([
       [@json_list_start],

@@ -4,7 +4,7 @@ defmodule Electric.Integration.StalledServeMemoryTest do
   log chunk (~`chunk_bytes_threshold`, 10 MB by default) per connection for an
   unbounded time.
 
-  Reproduces a production OOM (2026-07-01): a bulk write woke a fleet of live
+  Reproduces a production OOM (see #4708): a bulk write woke a fleet of live
   long-pollers into multi-chunk catch-up serves; connections whose clients
   stalled kept their entire in-flight chunk pinned — once in the handler
   process and once in the socket's driver queue — with nothing to reap them.
