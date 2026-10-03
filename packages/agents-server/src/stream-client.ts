@@ -417,7 +417,11 @@ export class StreamClient {
         offset: fromOffset ?? `-1`,
         live: false,
       })
-      return await response.json<T>()
+      const items: Array<T> = []
+      for await (const item of response.jsonStream()) {
+        items.push(item)
+      }
+      return items
     })
   }
 
