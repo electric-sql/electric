@@ -153,7 +153,6 @@ jobs:
       # Passing the ref name instead would let a moving branch be re-resolved to a newer commit.
       git_ref: ${{ needs.derive_build_vars.outputs.commit_sha }}
       image_repo: electricsql/electric
-      artifact_prefix: electric
       context: packages/sync-service
       file: packages/sync-service/Dockerfile
       build_contexts: |
