@@ -31,8 +31,13 @@ on:
         type: string
 
 env:
-  DOCKERHUB_REPO: electricsql/electric
-  DOCKERHUB_CANARY_REPO: electricsql/electric-canary
+  # Docker Hub's electricsql/electric and electricsql/electric-canary repos are broken until Docker
+  # repairs them, so images go to electricsql/electric-temp for now. To restore, uncomment the
+  # lines marked "Docker Hub" here and in derive_build_vars and build_and_publish_image, and
+  # remove the electric-temp lines.
+  # Docker Hub: DOCKERHUB_REPO: electricsql/electric
+  # Docker Hub: DOCKERHUB_CANARY_REPO: electricsql/electric-canary
+  DOCKERHUB_REPO: electricsql/electric-temp
 
 jobs:
   derive_build_vars:
@@ -124,12 +129,13 @@ jobs:
           elif [ "$BUILD_MODE" = "custom" ]; then
             image_tags="${DOCKERHUB_REPO}:${docker_tag}"
           else
-            image_tags=$(
-              printf '%s\n%s\n%s\n' \
-                "${DOCKERHUB_REPO}:canary" \
-                "${DOCKERHUB_CANARY_REPO}:latest" \
-                "${DOCKERHUB_CANARY_REPO}:${short_commit_sha}"
-            )
+            # Docker Hub: image_tags=$(
+            # Docker Hub:   printf '%s\n%s\n%s\n' \
+            # Docker Hub:     "${DOCKERHUB_REPO}:canary" \
+            # Docker Hub:     "${DOCKERHUB_CANARY_REPO}:latest" \
+            # Docker Hub:     "${DOCKERHUB_CANARY_REPO}:${short_commit_sha}"
+            # Docker Hub: )
+            image_tags="${DOCKERHUB_REPO}:canary"
           fi
 
           echo "short_commit_sha=$short_commit_sha" >> "$GITHUB_OUTPUT"
@@ -152,7 +158,8 @@ jobs:
       # Build the exact commit that ELECTRIC_VERSION and the revision label were derived from.
       # Passing the ref name instead would let a moving branch be re-resolved to a newer commit.
       git_ref: ${{ needs.derive_build_vars.outputs.commit_sha }}
-      image_repo: electricsql/electric
+      # Docker Hub: image_repo: electricsql/electric
+      image_repo: electricsql/electric-temp
       context: packages/sync-service
       file: packages/sync-service/Dockerfile
       build_contexts: |
