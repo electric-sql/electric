@@ -103,7 +103,6 @@ jobs:
     with:
       git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
       image_repo: electricax/durable-streams-server-rust
-      artifact_prefix: durable-streams-server-rust
       context: .
       file: packages/durable-streams-rust/Dockerfile
       tags: ${{ needs.derive_build_vars.outputs.image_tags }}
