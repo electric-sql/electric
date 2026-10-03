@@ -6,10 +6,7 @@ These patterns are described in the [Writes guide](https://electric-sql.com/docs
 
 The example is set up to run all the patterns together, in the page, at the same time, as components of a single React application. So you can also evaluate their behaviour side-by-side and and with different network connectivity.
 
-[![Screenshot of the application running](./public/screenshot.png)](https://write-patterns.electric-sql.com)
-
-You can see the example deployed and running online at:
-https://write-patterns.examples.electric-sql.com
+![Screenshot of the application running](./public/screenshot.png)
 
 ## Patterns
 
@@ -62,6 +59,8 @@ Start the docker containers (in this directory):
 ```shell
 pnpm backend:up
 ```
+
+This starts Postgres and a local Electric sync service (at `http://localhost:3000`, running in insecure mode for development) using the [shared Docker Compose file](../../.support/docker-compose.yml). To point the app at a different Electric instance, set the `ELECTRIC_URL` environment variable (and `ELECTRIC_SECRET` if that instance requires an [API secret](https://electric-sql.com/docs/guides/security)).
 
 Start the dev server:
 

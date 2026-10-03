@@ -63,12 +63,10 @@ const server = http.createServer(async (req, res) => {
       // Set the table server-side
       originUrl.searchParams.set(`table`, `items`)
 
-      // Add source credentials if available
-      if (process.env.ELECTRIC_SOURCE_ID) {
-        originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
-      }
-      if (process.env.ELECTRIC_SOURCE_SECRET) {
-        originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+      // Add the Electric API secret if one is configured (not needed when
+      // Electric runs in insecure mode, like in the local docker compose setup)
+      if (process.env.ELECTRIC_SECRET) {
+        originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
       }
 
       try {
