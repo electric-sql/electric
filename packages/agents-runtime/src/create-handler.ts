@@ -145,7 +145,10 @@ export interface RuntimeRouter {
    */
   dispatchWake: (
     notification: WakeNotification,
-    options?: Pick<ProcessWakeConfig, `claimHeaders` | `claimTokenHeader`>
+    options?: Pick<
+      ProcessWakeConfig,
+      `claimHeaders` | `claimTokenHeader` | `onDoneNextWake`
+    >
   ) => void
 
   /** True when a wake for the stream path is already in flight. */

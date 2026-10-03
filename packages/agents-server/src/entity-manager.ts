@@ -81,6 +81,7 @@ type SpawnPersistResult = [
   PromiseSettledResult<number>,
 ]
 type SpawnPersistJob = () => Promise<SpawnPersistResult>
+
 type WriteTokenValidator = (
   entity: ElectricAgentsEntity,
   token: string
@@ -429,12 +430,10 @@ export class EntityManager {
     electricUrl?: string,
     electricSecret?: string
   ): Promise<void> {
-    if (electricUrl) {
-      await this.wakeRegistry.startSync(electricUrl, electricSecret)
-      return
+    if (!electricUrl) {
+      throw new Error(`WakeRegistry runtime requires an Electric URL`)
     }
-
-    await this.wakeRegistry.loadRegistrations()
+    await this.wakeRegistry.startSync(electricUrl, electricSecret)
   }
 
   setWriteTokenValidator(validator: WriteTokenValidator): void {
@@ -3292,7 +3291,7 @@ export class EntityManager {
   ): Promise<void> {
     return await withSpan(`electric_agents.evaluateWakes`, async (span) => {
       span.setAttribute(ATTR.WAKE_SOURCE, sourceUrl)
-      const results = this.wakeRegistry.evaluate(
+      let results = await this.wakeRegistry.evaluate(
         sourceUrl,
         event,
         this.tenantId
@@ -4079,9 +4078,19 @@ export class EntityManager {
     // Ensure the backing stream exists
     const exists = await this.streamClient.exists(streamPath)
     if (!exists) {
-      await this.streamClient.create(streamPath, {
-        contentType: `application/json`,
-      })
+      try {
+        await this.streamClient.create(streamPath, {
+          contentType: `application/json`,
+        })
+      } catch (err) {
+        const status =
+          err instanceof Error && `status` in err
+            ? (err as { status?: unknown }).status
+            : undefined
+        if (status !== 409 && !/\b409\b/.test(String(err))) {
+          throw err
+        }
+      }
     }
 
     const fireAt = getNextCronFireAt(spec.expression, spec.timezone)
