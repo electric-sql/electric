@@ -140,6 +140,38 @@ describe(`ElectricAgentsManager.validateWriteEvent`, () => {
   })
 })
 
+describe(`ElectricAgentsManager.validateWriteEvents`, () => {
+  it(`validates a batch against the entity's own schemas when the type row is missing`, async () => {
+    const manager = createManager()
+    manager.registry.getEntityType = vi.fn().mockResolvedValue(null)
+
+    const validationError = await manager.validateWriteEvents(
+      {
+        type: `observed-child-e1`,
+        state_schemas: {
+          observed_item: observedItemSchema,
+        },
+      } as any,
+      [
+        {
+          type: `observed_item`,
+          value: { key: `item-1`, value: `alpha` },
+        },
+        {
+          type: `unknown_item`,
+          value: { key: `item-2`, value: `beta` },
+        },
+      ]
+    )
+
+    expect(validationError).toMatchObject({
+      code: `UNKNOWN_EVENT_TYPE`,
+      status: 422,
+    })
+    expect(manager.registry.getEntityType).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe(`ElectricAgentsManager attachments`, () => {
   it(`does not delete an existing stream when duplicate attachment creation conflicts`, async () => {
     const create = vi.fn().mockRejectedValue({ status: 409 })
