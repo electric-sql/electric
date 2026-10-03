@@ -235,6 +235,128 @@ describe(`ShapeStream`, () => {
     })
   })
 
+  describe(`requestSnapshot resume position`, () => {
+    const snapshotResponse = (handle: string, offset: string) =>
+      new Response(
+        JSON.stringify({
+          metadata: {
+            snapshot_mark: 1,
+            xmin: `1`,
+            xmax: `2`,
+            xip_list: [],
+            database_lsn: `0`,
+          },
+          data: [],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': handle,
+            'electric-offset': offset,
+            'electric-schema': `{"id":{"type":"text"}}`,
+          },
+        }
+      )
+
+    const pendingUntilAborted = (init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener(
+          `abort`,
+          () => reject(new DOMException(`Aborted`, `AbortError`)),
+          { once: true }
+        )
+      })
+
+    it.for([`earlier`, `later`] as const)(
+      `resumes from the earliest of concurrent cold-start snapshots when the %s one returns first`,
+      async (firstToReturn) => {
+        const logRequests: URL[] = []
+        const pendingSnapshots = new Map<string, (res: Response) => void>()
+        const stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `test` },
+          log: `changes_only`,
+          offset: `now`,
+          signal: aborter.signal,
+          subscribe: false,
+          fetchClient: (input, init) => {
+            const url = new URL(input.toString())
+            const where = url.searchParams.get(`subset__where`)
+            if (where) {
+              return new Promise((resolve) =>
+                pendingSnapshots.set(where, resolve)
+              )
+            }
+            logRequests.push(url)
+            return pendingUntilAborted(init)
+          },
+        })
+
+        const earlier = stream.requestSnapshot({ where: `id = 'a'` })
+        const later = stream.requestSnapshot({ where: `id = 'b'` })
+        await vi.waitFor(() => expect(pendingSnapshots.size).toBe(2))
+
+        const returnEarlier = async () => {
+          pendingSnapshots.get(`id = 'a'`)!(snapshotResponse(`handle-1`, `3_0`))
+          await earlier
+        }
+        const returnLater = async () => {
+          pendingSnapshots.get(`id = 'b'`)!(snapshotResponse(`handle-1`, `5_0`))
+          await later
+        }
+        if (firstToReturn === `earlier`) {
+          await returnEarlier()
+          await returnLater()
+        } else {
+          await returnLater()
+          await returnEarlier()
+        }
+
+        await vi.waitFor(() =>
+          expect(logRequests.at(-1)?.searchParams.get(`offset`)).toBe(`3_0`)
+        )
+      }
+    )
+
+    it(`resumes a live stream on the new handle when a snapshot hits a 409`, async () => {
+      const logRequests: URL[] = []
+      let snapshotRequests = 0
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        log: `changes_only`,
+        offset: `10_0`,
+        handle: `handle-1`,
+        signal: aborter.signal,
+        subscribe: false,
+        fetchClient: async (input, init) => {
+          const url = new URL(input.toString())
+          if (!url.searchParams.has(`subset__where`)) {
+            logRequests.push(url)
+            return pendingUntilAborted(init)
+          }
+          snapshotRequests++
+          if (snapshotRequests === 1) {
+            return new Response(`{"code":409}`, {
+              status: 409,
+              headers: { 'electric-handle': `handle-2` },
+            })
+          }
+          return snapshotResponse(`handle-2`, `0_inf`)
+        },
+      })
+
+      await stream.requestSnapshot({ where: `id = 'a'` })
+
+      await vi.waitFor(() => {
+        const resumed = logRequests.at(-1)
+        expect(resumed?.searchParams.get(`handle`)).toBe(`handle-2`)
+        expect(resumed?.searchParams.get(`offset`)).toBe(`0_inf`)
+      })
+    })
+  })
+
   it(`does not deliver a later SSE batch before subscriber callbacks for the earlier batch finish`, async () => {
     const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
 
