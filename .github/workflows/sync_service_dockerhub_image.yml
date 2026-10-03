@@ -31,12 +31,8 @@ on:
         type: string
 
 env:
-  # Docker Hub publishing is paused until Docker restores the repos. To restore,
-  # uncomment the Docker Hub lines and remove the GHCR ones here and in build_and_publish_image.
-  # DOCKERHUB_REPO: electricsql/electric
-  # DOCKERHUB_CANARY_REPO: electricsql/electric-canary
-  DOCKERHUB_REPO: ghcr.io/electric-sql/electric
-  DOCKERHUB_CANARY_REPO: ghcr.io/electric-sql/electric-canary
+  DOCKERHUB_REPO: electricsql/electric
+  DOCKERHUB_CANARY_REPO: electricsql/electric-canary
 
 jobs:
   derive_build_vars:
@@ -151,17 +147,12 @@ jobs:
   build_and_publish_image:
     needs: [derive_build_vars]
     uses: ./.github/workflows/docker_multiarch_image.yml
-    permissions:
-      contents: read
-      packages: write
     secrets: inherit
     with:
-      registry: ghcr.io
       # Build the exact commit that ELECTRIC_VERSION and the revision label were derived from.
       # Passing the ref name instead would let a moving branch be re-resolved to a newer commit.
       git_ref: ${{ needs.derive_build_vars.outputs.commit_sha }}
-      # image_repo: electricsql/electric
-      image_repo: ghcr.io/electric-sql/electric
+      image_repo: electricsql/electric
       artifact_prefix: electric
       context: packages/sync-service
       file: packages/sync-service/Dockerfile
