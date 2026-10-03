@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       image_repo:
-        description: 'Canonical image repository used for push-by-digest, e.g. electricax/agents-server'
+        description: 'Canonical image repository used for push-by-digest, e.g. ghcr.io/electric-sql/agents-server'
         required: true
         type: string
       context:
@@ -24,7 +24,7 @@ on:
         required: true
         type: string
       registry:
-        description: 'Container registry hostname'
+        description: 'Container registry hostname. ghcr.io logs in with GITHUB_TOKEN, anything else with the DOCKERHUB_* secrets'
         required: false
         default: 'docker.io'
         type: string
@@ -64,8 +64,8 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: ${{ inputs.registry }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ inputs.registry == 'ghcr.io' && github.actor || secrets.DOCKERHUB_USERNAME }}
+          password: ${{ inputs.registry == 'ghcr.io' && secrets.GITHUB_TOKEN || secrets.DOCKERHUB_TOKEN }}
 
       - name: Derive push-by-digest image repositories
         id: image_repos
@@ -120,8 +120,8 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: ${{ inputs.registry }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ inputs.registry == 'ghcr.io' && github.actor || secrets.DOCKERHUB_USERNAME }}
+          password: ${{ inputs.registry == 'ghcr.io' && secrets.GITHUB_TOKEN || secrets.DOCKERHUB_TOKEN }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 

@@ -119,6 +119,9 @@ jobs:
     needs: changesets
     if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.sync_service_release_tag  != '' }}
     uses: ./.github/workflows/sync_service_dockerhub_image.yml
+    permissions:
+      contents: read
+      packages: write
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.sync_service_release_tag }}
@@ -127,6 +130,9 @@ jobs:
     needs: changesets
     if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.agent_server_release_tag != '' }}
     uses: ./.github/workflows/agent_server_dockerhub_image.yml
+    permissions:
+      contents: read
+      packages: write
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
@@ -146,6 +152,9 @@ jobs:
     needs: [changesets, publish-server-rust]
     if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.server_rust_needs_release == 'true' }}
     uses: ./.github/workflows/server_rust_dockerhub_image.yml
+    permissions:
+      contents: read
+      packages: write
     secrets: inherit
     with:
       git_ref: ${{ github.sha }}
