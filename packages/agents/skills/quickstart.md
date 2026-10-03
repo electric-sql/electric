@@ -56,7 +56,7 @@ The handler is **not** a long-running process. It wakes, does its work (usually 
 
 ### Spawning Children
 
-Any entity can spawn child entities. When a child finishes (and the parent registered `wake: { on: "runFinished", includeResponse: true }`), the parent's handler runs again. The wake event includes the child's response and the status of sibling children.
+Any entity can spawn child entities. When a child finishes (and the parent registered `wake: { on: "runFinished", includeResponse: true }`), the parent's handler runs again. The wake event includes the finished child's response. Track child URLs in entity state if you need to coordinate multiple children.
 
 ### The Worker Entity
 
@@ -289,7 +289,7 @@ export function registerPerspectives(registry: EntityRegistry) {
     state: { children: { primaryKey: 'key' } },
     async handler(ctx) {
       ctx.useAgent({
-        systemPrompt: `You are a balanced analyst.\n\n1. Call analyze_question with the question.\n2. Tell the user you are spawning an optimist and a critic to analyze their question and that you will synthesize their perspectives once they finish.\n3. End your turn immediately — say nothing else.\n\nYou will be woken once per worker that finishes. Each wake includes finished_child and other_children (with status "running" or "finished").\n\nCRITICAL: When woken, check other_children. If ANY child still has status "running", you MUST respond with ONLY the exact text "waiting" and nothing else — no commentary, no status updates, no emoji. Just the single word "waiting".\n\nOnly when ALL children show status "finished" should you synthesize a balanced response using both perspectives.`,
+        systemPrompt: `You are a balanced analyst.\n\n1. Call analyze_question with the question.\n2. Tell the user you are spawning an optimist and a critic to analyze their question and that you will synthesize their perspectives once they finish.\n3. End your turn immediately — say nothing else.\n\nYou will be woken once per worker that finishes. Each wake includes finished_child with that worker's result. Use the children state collection to know which workers were spawned and finished_child.url to identify which worker just finished.\n\nCRITICAL: When woken, check the children state collection. If you have not yet received results from every expected child, you MUST respond with ONLY the exact text "waiting" and nothing else — no commentary, no status updates, no emoji. Just the single word "waiting".\n\nOnly when you have results from ALL expected children should you synthesize a balanced response using both perspectives.`,
         model: 'claude-sonnet-4-6',
         tools: [...ctx.electricTools, createAnalyzeTool(ctx)],
       })
