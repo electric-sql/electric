@@ -2,7 +2,6 @@
 title: Durable Doom
 description: >-
   Doom on Durable Streams. Live spectating, time-travel, and fork-to-continue — all client-side, no backend.
-deployed_url: https://durabledoom.com
 source_url: https://github.com/balegas/durable-doom
 blog_post_url: /blog/2026/04/20/doom-on-durable-streams
 image: /img/blog/doom-on-durable-streams/header.png

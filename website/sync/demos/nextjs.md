@@ -2,7 +2,6 @@
 title: Next.js
 description: >-
   Example of an Electric app using Next.js.
-deployed_url: https://nextjs.examples.electric-sql.com/
 image: /img/demos/items-screenshot.png
 example: true
 ---

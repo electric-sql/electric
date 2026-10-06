@@ -23,6 +23,9 @@ const { demo } = defineProps(['demo'])
             target="_blank"
           />
         </li>
+        <li v-else class="feature-cta">
+          <VPButton :href="demo.link" text="Demo page" theme="brand" />
+        </li>
         <li v-if="demo.source_url" class="feature-cta">
           <VPButton
             :href="demo.source_url"
