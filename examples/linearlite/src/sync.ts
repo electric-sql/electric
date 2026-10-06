@@ -11,9 +11,8 @@ const WRITE_SERVER_URL = import.meta.env.VITE_WRITE_SERVER_URL
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL
   ? new URL(import.meta.env.VITE_ELECTRIC_URL).origin
   : `http://localhost:3000`
-const ELECTRIC_SOURCE_ID = import.meta.env.VITE_ELECTRIC_SOURCE_ID
-const ELECTRIC_SOURCE_SECRET = import.meta.env.VITE_ELECTRIC_SOURCE_SECRET
 const APPLY_CHANGES_URL = `${WRITE_SERVER_URL}/apply-changes`
+const SHAPE_URL = `${ELECTRIC_URL}/v1/shape`
 
 type SyncStatus = `initial-sync` | `done`
 
@@ -56,18 +55,12 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
     }
   }
 
-  const issueUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
-  if (ELECTRIC_SOURCE_SECRET) {
-    issueUrl.searchParams.set(`secret`, ELECTRIC_SOURCE_SECRET)
-  }
-
   // Issues Sync
   const issuesSync = await pg.sync.syncShapeToTable({
     shape: {
-      url: issueUrl.toString(),
+      url: SHAPE_URL,
       params: {
         table: `issue`,
-        source_id: ELECTRIC_SOURCE_ID,
       },
     },
     table: `issue`,
@@ -92,18 +85,12 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
     }
   )
 
-  const commentUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
-  if (ELECTRIC_SOURCE_SECRET) {
-    commentUrl.searchParams.set(`secret`, ELECTRIC_SOURCE_SECRET)
-  }
-
   // Comments Sync
   const commentsSync = await pg.sync.syncShapeToTable({
     shape: {
-      url: commentUrl.toString(),
+      url: SHAPE_URL,
       params: {
         table: `comment`,
-        source_id: ELECTRIC_SOURCE_ID,
       },
     },
     table: `comment`,

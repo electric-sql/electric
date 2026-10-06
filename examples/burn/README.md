@@ -208,11 +208,3 @@ To learn more, see:
 ## Support
 
 Reach out on the [Electric Discord](https://discord.electric-sql.com) if you need help or have any questions.
-
-## Deployment
-
-The example retains its SST configuration for intentional manual deployments,
-but it is not deployed automatically by GitHub Actions. Running `pnpm deploy`
-from this directory deploys the `production` stage and requires a valid
-`ANTHROPIC_KEY`. Production uses `claude-haiku-4-5-20251001` — the only model
-alias resolvable there (see `config/config.exs`).

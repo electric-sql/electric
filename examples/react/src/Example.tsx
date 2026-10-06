@@ -10,8 +10,6 @@ export const Example = () => {
     url: `${baseUrl}/v1/shape`,
     params: {
       table: `items`,
-      source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
-      secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
     },
   })
 

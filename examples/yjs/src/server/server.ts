@@ -99,11 +99,6 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
     originUrl.searchParams.set(key, value)
   })
 
-  // Add Electric source ID and secret if available
-  if (process.env.ELECTRIC_SOURCE_ID) {
-    originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
-  }
-
   // Copy all headers from the original request to forward to Electric
   const headers = new Headers()
   c.req.raw.headers.forEach((value, key) => {
@@ -113,8 +108,10 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
     }
   })
 
-  if (process.env.ELECTRIC_SOURCE_SECRET) {
-    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+  // Add the Electric API secret if one is configured (not needed when
+  // Electric runs in insecure mode, like in the local docker compose setup)
+  if (process.env.ELECTRIC_SECRET) {
+    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
   }
 
   // Make the request to Electric
