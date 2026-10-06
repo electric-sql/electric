@@ -788,6 +788,11 @@ export interface ProcessWakeConfig {
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
   /** Optional shutdown signal to end idle waits during host teardown. */
   shutdownSignal?: AbortSignal
+  /**
+   * Called when the Durable Streams done callback reports that releasing this
+   * claim left pending work for the same subscription.
+   */
+  onDoneNextWake?: (streamPath: string) => void
   /** Idle timeout in ms before closing the wake (default: 20_000) */
   idleTimeout?: number
   /** Heartbeat interval in ms (default: 10_000) */

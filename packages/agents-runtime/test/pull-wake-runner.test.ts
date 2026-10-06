@@ -170,6 +170,7 @@ describe(`createPullWakeRunner`, () => {
     expect(testRuntime.dispatchWake).toHaveBeenCalledWith(claimed, {
       claimHeaders: expect.any(Function),
       claimTokenHeader: `electric-claim-token`,
+      onDoneNextWake: expect.any(Function),
     })
     expect(testRuntime.drainWakes).not.toHaveBeenCalled()
     expect(runner.offset).toBe(`42`)
@@ -274,6 +275,156 @@ describe(`createPullWakeRunner`, () => {
       expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
     })
     expect(runner.getHealth().claims_skipped).toBe(1)
+
+    await runner.stop()
+  })
+
+  it(`coalesces wake notifications skipped while the same stream is already being claimed`, async () => {
+    const events = [
+      { ...wakeEvent(`parent`), generation: 1 },
+      { ...wakeEvent(`parent`), generation: 2 },
+      { ...wakeEvent(`parent`), generation: 3 },
+    ]
+    const claims = [`one`, `coalesced`].map(notification)
+    const firstClaimResponse = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        (_input: RequestInfo | URL) => firstClaimResponse.promise
+      )
+      .mockImplementationOnce(async (_input: RequestInfo | URL) =>
+        Response.json(claims[1])
+      )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield* events
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+    expect(testRuntime.dispatchWake).not.toHaveBeenCalled()
+
+    firstClaimResponse.resolve(Response.json(claims[0]))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(2)
+    })
+
+    await runner.stop()
+  })
+
+  it(`does not let a new same-stream notification jump ahead of a queued trigger`, async () => {
+    const continueStream = deferred<void>()
+    const firstClaimResponse = deferred<Response>()
+    const requestGenerations: Array<number> = []
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestGenerations.push(JSON.parse(String(init?.body)).generation)
+        if (requestGenerations.length === 1) return firstClaimResponse.promise
+        return Response.json(notification(`coalesced`))
+      }
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    const testRuntime = runtime()
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield { ...wakeEvent(`parent`), generation: 1 }
+        yield { ...wakeEvent(`parent`), generation: 2 }
+        await continueStream.promise
+        yield { ...wakeEvent(`parent`), generation: 3 }
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(requestGenerations).toEqual([1])
+    })
+
+    firstClaimResponse.resolve(Response.json(notification(`one`)))
+    continueStream.resolve()
+
+    await waitFor(() => {
+      expect(requestGenerations).toEqual([1, 2])
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(requestGenerations).toEqual([1, 2])
+
+    await runner.stop()
+  })
+
+  it(`reclaims immediately when a dispatched wake reports pending work on done`, async () => {
+    const event = { ...wakeEvent(`one`), generation: 1 }
+    const claimed = notification(`one`)
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json(claimed)
+    )
+    vi.stubGlobal(`fetch`, fetchMock)
+    let doneNextWake: ((streamPath: string) => void) | undefined
+    const testRuntime = {
+      ...runtime(),
+      dispatchWake: vi.fn((_notification, options) => {
+        doneNextWake = options?.onDoneNextWake
+      }),
+    }
+    const streamFactory = vi.fn(async () => ({
+      offset: `42`,
+      async *jsonStream() {
+        yield event
+      },
+      closed: Promise.resolve(),
+    }))
+
+    const runner = createPullWakeRunner({
+      baseUrl: `http://server`,
+      runnerId: `runner-1`,
+      runtime: testRuntime,
+      heartbeatIntervalMs: 0,
+      eventHeartbeatThrottleMs: 0,
+      streamFactory,
+    })
+
+    runner.start()
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(1)
+    })
+
+    doneNextWake?.(`/chat/one/main`)
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(testRuntime.dispatchWake).toHaveBeenCalledTimes(2)
+    })
 
     await runner.stop()
   })
