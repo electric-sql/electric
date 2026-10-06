@@ -13,13 +13,43 @@ type UnknownShapeStream = ShapeStream<Row<unknown>>
 
 const streamCache = new Map<string, UnknownShapeStream>()
 const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
+const refCountCache = new Map<UnknownShapeStream, number>()
+
+function increaseStreamRef(shapeStream: UnknownShapeStream): void {
+  const count = (refCountCache.get(shapeStream) ?? 0) + 1
+  refCountCache.set(shapeStream, count)
+
+  if (count === 1) {
+    shapeStream.resume()
+  }
+}
+
+function decreaseStreamRef(shapeStream: UnknownShapeStream): void {
+  if (!refCountCache.has(shapeStream)) return
+
+  const count = refCountCache.get(shapeStream)! - 1
+  refCountCache.set(shapeStream, count)
+
+  if (count === 0) {
+    shapeStream.pause()
+  }
+}
 
 export async function preloadShape<T extends Row<unknown> = Row>(
   options: ShapeStreamOptions<GetExtensions<T>>
 ): Promise<Shape<T>> {
   const shapeStream = getShapeStream<T>(options)
   const shape = getShape<T>(shapeStream)
-  await shape.rows
+
+  shape.start()
+  increaseStreamRef(shapeStream)
+
+  try {
+    await shape.rows
+  } finally {
+    decreaseStreamRef(shapeStream)
+  }
+
   return shape
 }
 
@@ -33,7 +63,6 @@ function sortObjectKeys(obj: any): any {
 
   return Object.keys(obj)
     .sort()
-
     .reduce<Record<string, any>>((sorted, key) => {
       sorted[key] = sortObjectKeys(obj[key])
       return sorted
@@ -82,7 +111,7 @@ export function getShape<T extends Row<unknown>>(
     shapeCache.delete(shapeStream)
   }
 
-  const newShape = new Shape<T>(shapeStream)
+  const newShape = new Shape<T>(shapeStream, { autoStart: false })
   shapeCache.set(shapeStream, newShape)
 
   // Return the created shape
@@ -159,6 +188,7 @@ function identity<T>(arg: T): T {
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
+  enabled?: boolean
 }
 
 export function useShape<
@@ -166,6 +196,7 @@ export function useShape<
   Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
+  enabled = true,
   ...options
 }: UseShapeOptions<SourceData, Selection>): Selection {
   const shapeStream = getShapeStream<SourceData>(
@@ -182,6 +213,15 @@ export function useShape<
     }
 
     const subscribe = (onStoreChange: () => void) => {
+      if (!enabled) {
+        return () => {
+          // noop
+        }
+      }
+
+      shape.start()
+      increaseStreamRef(shapeStream)
+
       // check if shape has changed between the initial snapshot
       // and subscribing, as there are no guarantees that the
       // two will occur synchronously with each other
@@ -191,10 +231,15 @@ export function useShape<
         onStoreChange()
       }
 
-      return shapeSubscribe(shape, () => {
+      const unsubscribe = shapeSubscribe(shape, () => {
         latestShapeData = parseShapeData(shape)
         onStoreChange()
       })
+
+      return () => {
+        unsubscribe()
+        decreaseStreamRef(shapeStream)
+      }
     }
 
     return () => {
@@ -205,7 +250,7 @@ export function useShape<
         selector
       )
     }
-  }, [shape, selector])
+  }, [shapeStream, shape, selector, enabled])
 
   return useShapeData()
 }
