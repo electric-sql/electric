@@ -73,11 +73,6 @@ type WakeMessage = {
     response?: string
     error?: string
   }
-  other_children?: Array<{
-    url: string
-    type: string
-    status: "spawning" | "running" | "idle" | "paused" | "stopping" | "stopped" | "killed"
-  }>
 }
 ```
 
