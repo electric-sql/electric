@@ -1661,6 +1661,61 @@ describe.for(fetchAndSse)(
       )
     })
 
+    it(`should not skip changes committed during a snapshot on a live stream`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      // Commit a row while the snapshot request is in flight: after the
+      // stream paused its live request, before the snapshot's offset.
+      let insertDuringSnapshot: (() => Promise<void>) | undefined
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+        fetchClient: async (input, init) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const insert = insertDuringSnapshot
+          if (insert && (url.includes(`subset__`) || init?.method === `POST`)) {
+            insertDuringSnapshot = undefined
+            await insert()
+          }
+          return fetch(input, init)
+        },
+      })
+      const shape = new Shape(shapeStream)
+
+      await vi.waitFor(() => {
+        expect(shapeStream.isUpToDate).toBe(true)
+      })
+
+      const [before] = await insertIssues({ title: `before snapshot` })
+      await vi.waitFor(() => {
+        expect(shape.currentRows.map((row) => row.id)).toContain(before)
+      })
+
+      let during: string | undefined
+      insertDuringSnapshot = async () => {
+        ;[during] = await insertIssues({ title: `committed during snapshot` })
+      }
+      await shape.requestSnapshot({
+        where: `id = $1`,
+        params: { '1': before },
+      })
+      expect(during).toBeDefined()
+
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === during)
+          expect(row?.title).toBe(`committed during snapshot`)
+        },
+        { timeout: 10000 }
+      )
+    })
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,
