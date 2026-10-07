@@ -230,6 +230,62 @@ describe(`createFetchWithBackoff`, () => {
     expect(result.ok).toBe(true)
   })
 
+  describe(`retry-after jitter`, () => {
+    const retryAfterMs = 60_000
+
+    // Runs one failed attempt followed by a success and returns the delay
+    // passed to setTimeout for the backoff wait.
+    async function backoffWaitFor(random: number): Promise<number> {
+      vi.spyOn(Math, `random`).mockReturnValue(random)
+      const waits: Array<number | undefined> = []
+      vi.spyOn(globalThis, `setTimeout`).mockImplementation(((
+        fn: () => void,
+        ms?: number
+      ) => {
+        waits.push(ms)
+        queueMicrotask(fn)
+        return 0
+      }) as unknown as typeof setTimeout)
+
+      mockFetchClient
+        .mockResolvedValueOnce(
+          new Response(null, {
+            status: 503,
+            headers: new Headers({ 'retry-after': `${retryAfterMs / 1000}` }),
+          })
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+      const fetchWithBackoff = createFetchWithBackoff(mockFetchClient, {
+        ...BackoffDefaults,
+        initialDelay: 1,
+      })
+      await fetchWithBackoff(`https://example.com`)
+
+      expect(waits).toHaveLength(1)
+      return waits[0]!
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it(`should add positive jitter on top of a dominating retry-after`, async () => {
+      // 10% of 60s is 6s, capped at 5s, so a random value of 0.5 adds 2.5s
+      expect(await backoffWaitFor(0.5)).toBe(retryAfterMs + 2_500)
+    })
+
+    it(`should never wait less than retry-after`, async () => {
+      expect(await backoffWaitFor(0)).toBe(retryAfterMs)
+    })
+
+    it(`should keep the added jitter within the cap`, async () => {
+      expect(await backoffWaitFor(0.999999)).toBeLessThanOrEqual(
+        retryAfterMs + 5_000
+      )
+    })
+  })
+
   // it(`should retry multiple times and eventually throw if no success`, async () => {
   //   const mockErrorResponse = new Response(null, { status: 500 })
   //   mockFetchClient.mockImplementation(
