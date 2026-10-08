@@ -1,9 +1,9 @@
 <script setup>
 import EaSection from '../../agents-home/Section.vue'
 
-/* DeploymentSection — "Managed cloud or self&#8209;host".
+/* DeploymentSection — "Self-host anywhere".
 
-   Lifted to match the landing-page CTA panels (cloud-home / sync-home /
+   Lifted to match the landing-page CTA panels (sync-home /
    streams-home / agents-home) using --ea- tokens, an eyebrow chip with
    the brand dot, gradient-accent title, and a single source of "go do
    something" CTAs.
@@ -12,54 +12,52 @@ import EaSection from '../../agents-home/Section.vue'
    the secondary cards now carry the Quickstart / Docs / GitHub buttons
    so we don't repeat the same call to action twice further down. */
 
-const cloudUrl = '/cloud'
+const deploymentUrl = '/docs/sync/guides/deployment'
 </script>
 
 <template>
   <EaSection id="deployment">
-    <template #title> Managed cloud or&nbsp;self&#8209;hosted </template>
+    <template #title> Self&#8209;host&nbsp;anywhere </template>
     <template #subtitle>
-      Vendor agnostic, infra agnostic. Sign up for
-      <a :href="cloudUrl">Electric&nbsp;Cloud</a> or self-host the
+      Vendor agnostic, infra agnostic. Run the
       <span class="no-wrap">Apache&nbsp;2.0</span>,
       <a href="https://github.com/electric-sql/electric">open&#8209;source</a>
-      sync engine.
+      sync engine on your own infrastructure, alongside your
+      existing&nbsp;Postgres.
     </template>
 
     <div class="dp-grid">
-      <a class="dp-cloud no-visual" :href="cloudUrl">
-        <div class="dp-cloud-eyebrow mono">
+      <a class="dp-primary no-visual" :href="deploymentUrl">
+        <div class="dp-primary-eyebrow mono">
           <span class="dot"></span>
-          Hosted &middot; usage-based &middot; turnkey
+          Self-hosted &middot; open source &middot; Docker
         </div>
-        <div class="dp-cloud-body">
-          <div class="dp-cloud-icon">
-            <img src="/img/icons/ddn.svg" alt="Electric Cloud" />
+        <div class="dp-primary-body">
+          <div class="dp-primary-icon">
+            <img src="/img/icons/ddn.svg" alt="" />
           </div>
-          <div class="dp-cloud-text">
-            <h3>Start building on Electric&nbsp;Cloud</h3>
+          <div class="dp-primary-text">
+            <h3>Deploy Electric on your own&nbsp;infra</h3>
             <p>
-              <span class="hidden-sm">Scalable, turnkey</span>
-              <span class="inline-sm">Scalable</span>
-              hosting with
-              <span class="no-wrap">usage-based pricing</span>.
+              A single Docker container that connects to your Postgres and runs
+              behind your existing CDN and&nbsp;API.
             </p>
           </div>
         </div>
-        <div class="dp-cloud-actions">
+        <div class="dp-primary-actions">
           <VPButton
             tag="a"
             size="medium"
             theme="brand"
-            text="Start building now »"
-            href="https://dashboard.electric-sql.cloud/"
+            text="Deployment guide »"
+            :href="deploymentUrl"
           />
           <VPButton
             tag="a"
             size="medium"
             theme="alt"
-            text="See pricing"
-            href="/pricing"
+            text="Config reference"
+            href="/docs/sync/api/config"
           />
         </div>
       </a>
@@ -113,9 +111,9 @@ const cloudUrl = '/cloud'
   gap: 20px;
 }
 
-/* ── Primary cloud panel ──────────────────────────────────────── */
+/* ── Primary panel ──────────────────────────────────────── */
 
-.dp-cloud {
+.dp-primary {
   position: relative;
   display: block;
   padding: 40px 32px 48px;
@@ -135,12 +133,12 @@ const cloudUrl = '/cloud'
     transform 0.2s ease;
 }
 
-.dp-cloud:hover {
+.dp-primary:hover {
   border-color: var(--vp-c-brand-2);
   transform: translateY(-1px);
 }
 
-.dp-cloud-eyebrow {
+.dp-primary-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -155,14 +153,14 @@ const cloudUrl = '/cloud'
   margin-bottom: 22px;
 }
 
-.dp-cloud-eyebrow .dot {
+.dp-primary-eyebrow .dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--vp-c-brand-1);
 }
 
-.dp-cloud-body {
+.dp-primary-body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -170,11 +168,11 @@ const cloudUrl = '/cloud'
   gap: 18px;
 }
 
-.dp-cloud-icon img {
+.dp-primary-icon img {
   width: 56px;
 }
 
-.dp-cloud-text h3 {
+.dp-primary-text h3 {
   margin: 0 0 10px 0;
   font-size: 28px;
   /* Card title — 600 (down from 800) so it sits a step below the
@@ -187,7 +185,7 @@ const cloudUrl = '/cloud'
   text-wrap: balance;
 }
 
-.dp-cloud-text p {
+.dp-primary-text p {
   margin: 0;
   max-width: 480px;
   color: var(--ea-text-2);
@@ -196,7 +194,7 @@ const cloudUrl = '/cloud'
   line-height: 1.6;
 }
 
-.dp-cloud-actions {
+.dp-primary-actions {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -286,19 +284,19 @@ const cloudUrl = '/cloud'
 /* ── Responsive ───────────────────────────────────────────────── */
 
 @media (min-width: 1280px) {
-  .dp-cloud {
+  .dp-primary {
     padding: 48px 32px 52px;
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
-  .dp-cloud {
+  .dp-primary {
     padding: 44px 32px 50px;
   }
 }
 
 @media (max-width: 768px) {
-  .dp-cloud {
+  .dp-primary {
     padding: 36px 28px 42px;
     background:
       linear-gradient(to right, var(--ea-surface) 40%, transparent 85%),
@@ -306,10 +304,10 @@ const cloudUrl = '/cloud'
       url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
       var(--ea-surface);
   }
-  .dp-cloud-icon img {
+  .dp-primary-icon img {
     width: 48px;
   }
-  .dp-cloud-text h3 {
+  .dp-primary-text h3 {
     font-size: 24px;
   }
   .dp-secondary-grid {
@@ -318,7 +316,7 @@ const cloudUrl = '/cloud'
 }
 
 @media (max-width: 518px) {
-  .dp-cloud {
+  .dp-primary {
     padding: 28px 22px 36px;
     background:
       linear-gradient(to right, var(--ea-surface) 40%, transparent 85%),

@@ -11,8 +11,6 @@ Durable Streams are the data primitive for the agent loop.
 
 Persistent, addressable, real‑time streams for building resilient agent sessions and collaborative multi-user, multi-agent systems.
 
-<IntentLink intent="create" serviceType="streams" />
-
 ## Get started
 
 Get a Durable Streams server running in seconds. Create a stream, append data, read it back, and tail it live using curl.

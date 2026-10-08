@@ -11,8 +11,6 @@ StreamDB is a type-safe reactive database in a durable stream.
 
 Pass in a [StandardSchema](#define-a-standardschema) and get typed collections, reactive queries, and optimistic actions on top of [Durable State](durable-state).
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="state" />
-
 ## Installation
 
 ```bash

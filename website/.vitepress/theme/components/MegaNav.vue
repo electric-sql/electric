@@ -89,33 +89,6 @@ const NAV = [
     },
   },
   '|',
-  {
-    id: 'cloud',
-    label: 'Cloud',
-    base: '/cloud',
-    homeLabel: 'Electric Cloud',
-    homeSublabel: 'Managed infrastructure for Electric',
-    primaryLinks: [
-      {
-        label: 'Pricing',
-        sublabel: 'Plans and usage-based pricing',
-        link: '/pricing',
-        className: 'mega-nav-fallback-pricing',
-      },
-      {
-        label: 'Usage',
-        sublabel: 'Connect a database and make API requests',
-        link: '/cloud/usage',
-      },
-      {
-        label: 'CLI',
-        sublabel: 'Manage Cloud resources from the terminal',
-        link: '/cloud/cli',
-      },
-    ],
-  },
-  { id: 'pricing', label: 'Pricing', link: '/pricing', className: 'mega-nav-top-pricing' },
-  '|',
   { id: 'blog', label: 'Blog', link: '/blog', className: 'mega-nav-top-blog' },
   { id: 'resources', label: 'More' },
 ]
@@ -173,8 +146,6 @@ const activeId = computed(() => {
   if (p.startsWith('/agents') || p.startsWith('/docs/agents')) return 'agents'
   if (p.startsWith('/streams') || p.startsWith('/docs/streams')) return 'streams'
   if (p.startsWith('/sync') || p.startsWith('/docs/sync')) return 'sync'
-  if (p.startsWith('/cloud')) return 'cloud'
-  if (p.startsWith('/pricing')) return 'pricing'
   if (p.startsWith('/blog')) return 'blog'
   if (p.startsWith('/about') || p === '/llms') return 'resources'
   return null

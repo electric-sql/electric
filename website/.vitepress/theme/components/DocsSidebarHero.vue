@@ -28,8 +28,8 @@ import VPSidebarItem from "vitepress/dist/client/theme-default/components/VPSide
  *    href     — marketing page the title button links to
  *    matches  — pure function used to pick the active product based
  *               on the current route path; we can't just match on a
- *               single prefix because some products have docs at
- *               `/docs/<product>` while Cloud lives at `/cloud/*`.
+ *               single prefix because some products also have
+ *               pages outside `/docs/<product>` (e.g. demos).
  *    primary  — list of `{ text, link }` entries rendered as loose
  *               links directly under the title button. Each entry is
  *               passed straight through to a real `<VPSidebarItem>`,
@@ -83,20 +83,6 @@ const PRODUCTS = [
       { text: "Quickstart", link: "/docs/sync/quickstart" },
       { text: "Stacks", link: "/docs/sync/stacks" },
       { text: "Demos", link: "/sync/demos/" },
-    ],
-  },
-  {
-    id: "cloud",
-    label: "Electric Cloud",
-    href: "/cloud",
-    // `/cloud` itself is the marketing page (no sidebar); the hero
-    // only renders on `/cloud/usage`, `/cloud/cli`, etc.
-    matches: (p) => p.startsWith("/cloud/") && p !== "/cloud/",
-    primary: [
-      { text: "Usage", link: "/cloud/usage" },
-      { text: "CLI", link: "/cloud/cli" },
-      { text: "Pricing", link: "/pricing" },
-      { text: "Dashboard", link: "https://dashboard.electric-sql.cloud" },
     ],
   },
 ]

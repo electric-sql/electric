@@ -205,10 +205,9 @@ end
 config :phoenix_sync,
   env: config_env(),
   mode: :http,
-  url: "https://api.electric-sql.cloud",
+  url: "https://electric.example.com",
   credentials: [
-    secret: "...",    # required
-    source_id: "..."  # optional, required for Electric Cloud
+    secret: "..."  # your ELECTRIC_SECRET
   ]
 
 # application.ex
@@ -290,10 +289,9 @@ config :phoenix_sync,
 # config/prod.exs
 config :phoenix_sync,
   mode: :http,
-  url: "https://api.electric-sql.cloud",
+  url: "https://electric.example.com",
   credentials: [
-    secret: "...",    # required
-    source_id: "..."  # optional, required for Electric Cloud
+    secret: "..."  # your ELECTRIC_SECRET
   ]
 
 # application.ex

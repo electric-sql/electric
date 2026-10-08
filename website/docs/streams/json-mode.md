@@ -11,8 +11,6 @@ Stream structured data using JSON messages over a Durable Stream.
 
 JSON mode is enabled by creating the stream with `Content-Type: application/json`. Use it when you want to stream structured messages with preserved message boundaries.
 
-<IntentLink intent="create" serviceType="streams" serviceVariant="json" />
-
 ## What JSON mode does
 
 - each `POST` stores a distinct JSON message

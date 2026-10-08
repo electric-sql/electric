@@ -81,29 +81,30 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/usage/installation/*      /docs/sync/quickstart
 
 # Renamed pages on new site
-/product/ddn                          /product/cloud
+/product/ddn                          /docs/sync/guides/deployment
 /product/sync                         /product/electric
 /docs/agents/usage/event-sources      /docs/agents/usage/webhook-sources 301
 
 # Site restructure (2026-01) - products and sync pages
 /product/electric                                   /products/postgres-sync
-/product/cloud                                      /cloud
+/product/cloud                                      /docs/sync/guides/deployment
 /product/pglite                                     /products/pglite
 /use-cases/*                                        /sync
 /docs/api/integrations/react                        /docs/sync/integrations/react
 /docs/guides/writing-your-own-client                /docs/sync/guides/client-development
 /use-cases/state-transfer                           /use-cases/data-sync
-/product/cloud/sign-up                              https://dashboard.electric-sql.cloud
-/product/cloud/onboarding                           /cloud
-/product/cloud/usage                                /cloud/usage
+/product/cloud/*                                    /docs/sync/guides/deployment
 /docs/guides/llms                                   /llms
 /blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db
 
-# Cloud pricing moved to top-level pricing page
-/cloud/pricing                  /pricing 302
-
-# Cloud protocols folded into the Cloud overview
-/cloud/protocols                /cloud#protocols 301
+# Electric Cloud has been shut down; Electric is self-hosted only.
+# Send the old Cloud and pricing pages to the deployment guide.
+/cloud                          /docs/sync/guides/deployment 301
+/cloud/*                        /docs/sync/guides/deployment 301
+/pricing                        /docs/sync/guides/deployment 301
+/pricing/*                      /docs/sync/guides/deployment 301
+/cloud.md                       /docs/sync/guides/deployment.md 301
+/pricing.md                     /docs/sync/guides/deployment.md 301
 
 # Legacy /products/* (was renamed to /primitives/*) now lands on /sync
 /products                                /sync

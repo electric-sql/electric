@@ -401,7 +401,7 @@ ${example.code}
     <EaSection
       id="your-stack"
       title="Your stack, not&nbsp;ours"
-      subtitle="Self-host the server with one binary, or run it on Electric Cloud. Producers and consumers are anything that speaks&nbsp;HTTP."
+      subtitle="Self-host the server with one binary. Producers and consumers are anything that speaks&nbsp;HTTP."
     >
       <div class="ds-stack-layout">
         <div class="ds-stack-diagram md-exclude">
@@ -417,7 +417,7 @@ ${example.code}
           </div>
           <div class="stack-box runtime-box">
             <div class="stack-label">Electric Streams</div>
-            <div class="stack-examples">Electric Cloud · self-host</div>
+            <div class="stack-examples">self-hosted · one binary</div>
           </div>
           <div class="stack-connector">
             <div class="stack-conn-line" />
@@ -684,8 +684,8 @@ ${example.code}
          `<BottomCtaStrap>` so the page-close visual matches the
          agents page. Copy was tightened — eyebrow drops the
          protocol callout (now handled by the open-protocol strap
-         mid-page) and the "Or sign up for Electric Cloud" foot
-         was removed to keep one clear end-of-page action. -->
+         mid-page) and there's no secondary foot line, to keep one
+         clear end-of-page action. -->
     <BottomCtaStrap id="get-started">
       <template #eyebrow>
         <span class="md-exclude">Apache&nbsp;2.0 · open&nbsp;source</span>

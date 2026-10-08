@@ -66,11 +66,10 @@ const KEEP_SERVER_RUNNING = process.env.OG_KEEP === '1'
 const TARGETS = [
   // Site-wide social fallback (`DEFAULT_IMAGE` in config.mts).
   { slug: 'default', out: 'electric.jpg' },
-  // Four landing pages.
+  // Landing pages.
   { slug: 'sync', out: 'electric-sync.jpg' },
   { slug: 'streams', out: 'electric-streams.jpg' },
   { slug: 'agents', out: 'electric-agents.jpg' },
-  { slug: 'cloud', out: 'electric-cloud.jpg' },
 ]
 
 function parseArgs() {

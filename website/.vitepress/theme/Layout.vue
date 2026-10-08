@@ -8,7 +8,6 @@ import DefaultTheme from 'vitepress/theme-without-fonts'
 import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
 import LocalNavOutlineDropdown from '../../src/components/LocalNavOutlineDropdown.vue'
 import MarkdownLink from '../../src/components/MarkdownLink.vue'
-import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
@@ -126,9 +125,6 @@ const layoutClass = computed(() => {
     </template>
     <template #nav-bar-content-before>
       <MegaNav />
-    </template>
-    <template #nav-bar-content-after>
-      <NavSignupButton />
     </template>
     <template #nav-screen-content-before>
       <MegaNavMobile />

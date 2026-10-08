@@ -441,7 +441,7 @@ const demosMarkdown = featuredDemos
               ><code><span class="tk-kw">export const</span> <span class="tk-v">ServerRoute</span> = <span class="tk-fn">createServerFileRoute</span>(<span class="tk-str">"/api/todos"</span>).<span class="tk-fn">methods</span>({
   <span class="tk-prop">GET</span>: <span class="tk-kw">async</span> ({ <span class="tk-v">request</span> }) <span class="tk-kw">=&gt;</span> {
     <span class="tk-kw">const</span> <span class="tk-v">url</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-v">request</span>.<span class="tk-prop">url</span>)
-    <span class="tk-kw">const</span> <span class="tk-v">origin</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-str">"https://api.electric-sql.cloud/v1/shape"</span>)<span class="ann-marker" data-n="1"></span>
+    <span class="tk-kw">const</span> <span class="tk-v">origin</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-str">"http://localhost:3000/v1/shape"</span>)<span class="ann-marker" data-n="1"></span>
     <span class="tk-v">url</span>.<span class="tk-prop">searchParams</span>.<span class="tk-fn">forEach</span>((<span class="tk-v">v</span>, <span class="tk-v">k</span>) <span class="tk-kw">=&gt;</span>
       <span class="tk-v">ELECTRIC_PROTOCOL_QUERY_PARAMS</span>.<span class="tk-fn">includes</span>(<span class="tk-v">k</span>) &amp;&amp;
         <span class="tk-v">origin</span>.<span class="tk-prop">searchParams</span>.<span class="tk-fn">set</span>(<span class="tk-v">k</span>, <span class="tk-v">v</span>))
@@ -485,8 +485,8 @@ const demosMarkdown = featuredDemos
                 <div>
                   <strong>Server-side proxy.</strong>
                   <p>
-                    Forward the request to your Electric instance. Keep the
-                    source secret on the server.
+                    Forward the request to your Electric instance. Keep your
+                    Electric secret on the server.
                   </p>
                 </div>
               </li>

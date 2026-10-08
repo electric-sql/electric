@@ -39,19 +39,6 @@ const NAV = [
     ],
   },
   '|',
-  {
-    id: 'cloud',
-    label: 'Cloud',
-    base: '/cloud',
-    homeLabel: 'Electric Cloud',
-    homeSublabel: 'Managed infrastructure for Electric',
-    primaryLinks: [
-      { label: 'Usage', link: '/cloud/usage' },
-      { label: 'CLI', link: '/cloud/cli' },
-    ],
-  },
-  { id: 'pricing', label: 'Pricing', link: '/pricing' },
-  '|',
   { id: 'blog', label: 'Blog', link: '/blog' },
   { id: 'resources', label: 'More' },
 ]

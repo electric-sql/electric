@@ -9,8 +9,8 @@ const actions = [
     theme: 'brand',
   },
   {
-    href: 'https://dashboard.electric-sql.cloud/',
-    text: 'Sign-up',
+    href: '/docs/sync/quickstart',
+    text: 'Quickstart',
   },
 ]
 

@@ -101,7 +101,7 @@ onUnmounted(() => {
 }
 
 /* Eyebrow chip — small uppercased mono pill with brand-coloured dot,
-   matches the landing-page section-header pattern used on `cloud-home`,
+   matches the landing-page section-header pattern used on `sync-home`,
    `streams-home` etc. Caller injects content via the #eyebrow slot;
    we render the dot automatically. */
 .ea-section-eyebrow {

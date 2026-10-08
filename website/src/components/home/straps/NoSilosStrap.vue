@@ -175,7 +175,7 @@ onUnmounted(() => {
   font-size: 38px;
   /* Strap heading sits a step under the page hero in the type
      hierarchy: hero names stay at 700, every other section/strap
-     title (here, ManagedCloud, AgentsCTA, MidPage, BottomCta,
+     title (here, AgentsCTA, MidPage, BottomCta,
      CTAStrap, Section, HomeProduct…) renders at 600 so the
      hero remains the dominant on-page H1. */
   font-weight: 600;

@@ -676,6 +676,11 @@ export default defineConfig({
   ],
   ignoreDeadLinks: [
     /localhost/,
+    // Electric Cloud and its pricing page have been removed. Historical
+    // blog posts still link to them; `public/_redirects` sends those
+    // paths to the self-hosting docs.
+    /^\/cloud(\/|$)/,
+    /^\/pricing(\/|#|$)/,
   ],
   markdown: {
     theme: 'github-dark',
@@ -730,21 +735,6 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/cloud/': [
-        // Title-button + primary links (Usage, CLI, Pricing, Dashboard)
-        // at the top of the sidebar are rendered by `DocsSidebarHero.vue`
-        // (mounted via the `sidebar-nav-before` slot in Layout.vue), so
-        // the sidebar starts directly with the products Electric Cloud
-        // hosts.
-        {
-          text: 'Hosted products',
-          collapsed: false,
-          items: [
-            { text: 'Electric Streams', link: '/streams' },
-            { text: 'Electric Sync', link: '/sync' },
-          ],
-        },
-      ],
       // Primitive pages live at /sync/{primitive} but conceptually
       // belong to the sync docs — they use the docs sidebar so users
       // can navigate sideways into Guides / API / Integrations.

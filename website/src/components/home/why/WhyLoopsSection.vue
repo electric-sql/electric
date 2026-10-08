@@ -187,7 +187,7 @@ onUnmounted(() => {
 .why-loops-title {
   font-size: 38px;
   /* Same step-down from the hero (700) as the other strap titles
-     (NoSilos, ManagedCloud, AgentsCTA, …) so this band sits in
+     (NoSilos, AgentsCTA, …) so this band sits in
      the established type hierarchy. */
   font-weight: 600;
   line-height: 1.15;

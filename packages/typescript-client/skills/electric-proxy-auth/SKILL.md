@@ -7,7 +7,7 @@ description: >
   cleanup, CORS configuration for electric-offset/electric-handle/
   electric-schema/electric-cursor headers, auth token injection,
   Bun fetch concurrency cap (BUN_CONFIG_MAX_HTTP_REQUESTS default 256),
-  ELECTRIC_SECRET/SOURCE_SECRET server-side only, tenant isolation via
+  ELECTRIC_SECRET server-side only, tenant isolation via
   WHERE positional params, onError 401 token refresh, and subset security
   (AND semantics). Load when creating proxy routes, adding auth, or
   configuring CORS for Electric.
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
   // Server decides shape definition
   originUrl.searchParams.set('table', 'todos')
-  originUrl.searchParams.set('secret', process.env.ELECTRIC_SOURCE_SECRET!)
+  originUrl.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 
   const response = await fetch(originUrl)
   const headers = new Headers(response.headers)
@@ -176,20 +176,20 @@ return new Response(response.body, { status: response.status, headers })
 
 Source: `examples/proxy-auth/app/shape-proxy/route.ts:49-56`
 
-### CRITICAL Exposing ELECTRIC_SECRET or SOURCE_SECRET to browser
+### CRITICAL Exposing ELECTRIC_SECRET to browser
 
 Wrong:
 
 ```ts
 // Client-side code
-const url = `/v1/shape?table=todos&secret=${import.meta.env.VITE_ELECTRIC_SOURCE_SECRET}`
+const url = `/v1/shape?table=todos&secret=${import.meta.env.VITE_ELECTRIC_SECRET}`
 ```
 
 Correct:
 
 ```ts
 // Server proxy only
-originUrl.searchParams.set('secret', process.env.ELECTRIC_SOURCE_SECRET!)
+originUrl.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 ```
 
 Bundlers like Vite expose `VITE_*` env vars to client code. The secret must only be injected server-side in the proxy.

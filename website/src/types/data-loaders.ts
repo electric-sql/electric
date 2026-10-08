@@ -93,18 +93,3 @@ export interface TeamMemberStub {
   published?: boolean
   [key: string]: unknown
 }
-
-// --- pricing (YAML) ---
-
-export type GlobalPricingConfig = Record<string, unknown> & {
-  baseRates?: { writesPerMillion: number; retentionPerGBMonth: number }
-}
-
-export interface PlanYamlRow {
-  type?: string
-  discountPercent?: number
-  order?: number
-  effectiveWriteRate?: number
-  effectiveRetentionRate?: number
-  [key: string]: unknown
-}
