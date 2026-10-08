@@ -12,7 +12,10 @@
 
 import { createServer } from 'node:http'
 import { DurableStreamTestServer } from '@durable-streams/server'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { createDb } from '../src/db/index'
+import { wakeRegistrations } from '../src/db/schema'
 import { EntityManager } from '../src/entity-manager'
 import { ElectricAgentsServer } from '../src/server'
 import { WakeRegistry } from '../src/wake-registry'
@@ -27,7 +30,7 @@ import {
   resetElectricAgentsTestBackend,
 } from './test-backend'
 import type { Server } from 'node:http'
-import type { WakeEvalResult } from '../src/wake-registry'
+import type { WakeEvalResult, WakeRegistration } from '../src/wake-registry'
 
 let nextDbId = 1
 function createMockDb(): any {
@@ -1599,4 +1602,131 @@ describe(`Wake Registry Integration`, () => {
     expect(changes.length).toBeGreaterThanOrEqual(1)
     expect(changes[0]!.collection).toBe(`runs`)
   }, 15_000)
+})
+
+describe(`Wake Registry manifest replacement`, () => {
+  let db: ReturnType<typeof createDb>[`db`]
+  let client: ReturnType<typeof createDb>[`client`]
+
+  beforeAll(async () => {
+    await resetElectricAgentsTestBackend()
+    const connection = createDb(TEST_POSTGRES_URL)
+    db = connection.db
+    client = connection.client
+  }, 120_000)
+
+  afterAll(async () => {
+    vi.restoreAllMocks()
+    await client?.end()
+  }, 120_000)
+
+  const runCompleted = {
+    type: `run`,
+    key: `run-0`,
+    value: { status: `completed` },
+    headers: { operation: `update` },
+  }
+
+  // The registration spawn makes for an observed child, keyed by the child's
+  // manifest entry — the one the parent's manifest sync re-describes.
+  function spawnWake(name: string): WakeRegistration & { manifestKey: string } {
+    return {
+      subscriberUrl: `/parent/${name}`,
+      sourceUrl: `/child/${name}`,
+      condition: `runFinished`,
+      oneShot: false,
+      includeResponse: true,
+      manifestKey: `child:child:${name}`,
+    }
+  }
+
+  async function registrationIds(
+    subscriberUrl: string
+  ): Promise<Array<number>> {
+    const rows = await db
+      .select({ id: wakeRegistrations.id })
+      .from(wakeRegistrations)
+      .where(eq(wakeRegistrations.subscriberUrl, subscriberUrl))
+    return rows.map((row) => row.id)
+  }
+
+  it(`keeps the row spawn registered when the manifest re-describes it`, async () => {
+    const registry = new WakeRegistry(db)
+    const reg = spawnWake(`same`)
+    await registry.register(reg)
+    const before = registry.evaluate(reg.sourceUrl, runCompleted)
+    expect(before).toHaveLength(1)
+
+    await registry.replaceByManifestKey(reg)
+
+    const after = registry.evaluate(reg.sourceUrl, runCompleted)
+    expect(after.map((result) => result.registrationDbId)).toEqual([
+      before[0]!.registrationDbId,
+    ])
+    expect(await registrationIds(reg.subscriberUrl)).toEqual([
+      before[0]!.registrationDbId,
+    ])
+  })
+
+  it(`adopts a changed includeResponse on the existing row`, async () => {
+    const registry = new WakeRegistry(db)
+    const reg = spawnWake(`include-response`)
+    await registry.register(reg)
+    const [before] = registry.evaluate(reg.sourceUrl, runCompleted)
+
+    await registry.replaceByManifestKey({ ...reg, includeResponse: false })
+
+    const after = registry.evaluate(reg.sourceUrl, runCompleted)
+    expect(after).toHaveLength(1)
+    expect(after[0]!.registrationDbId).toBe(before!.registrationDbId)
+    expect(after[0]!.includeResponse).toBe(false)
+    const rows = await db
+      .select({ includeResponse: wakeRegistrations.includeResponse })
+      .from(wakeRegistrations)
+      .where(eq(wakeRegistrations.id, before!.registrationDbId))
+    expect(rows).toEqual([{ includeResponse: false }])
+  })
+
+  it(`never leaves the manifest key without a registration while replacing it`, async () => {
+    const registry = new WakeRegistry(db)
+    const reg = spawnWake(`gap`)
+    await registry.register(reg)
+
+    // A child finishing while its parent's manifest lands has its run event
+    // evaluated somewhere between the registry's statements. Evaluate at
+    // each one and require a match every time: unregister-then-register
+    // would answer with nothing once the delete had landed.
+    const matches: Array<number> = []
+    const observe = (): void => {
+      matches.push(registry.evaluate(reg.sourceUrl, runCompleted).length)
+    }
+    const originalInsert = db.insert.bind(db)
+    const originalDelete = db.delete.bind(db)
+    vi.spyOn(db, `insert`).mockImplementation(((...args: Array<any>) => {
+      observe()
+      return (originalInsert as any)(...args)
+    }) as any)
+    vi.spyOn(db, `delete`).mockImplementation(((...args: Array<any>) => {
+      observe()
+      return (originalDelete as any)(...args)
+    }) as any)
+
+    // A replacement that changes the unique shape, so the old row must go.
+    const replacement = { ...reg, condition: { on: `change` } as const }
+    try {
+      await registry.replaceByManifestKey(replacement)
+    } finally {
+      vi.restoreAllMocks()
+    }
+
+    expect(matches.length).toBeGreaterThanOrEqual(2)
+    expect(matches.every((count) => count >= 1)).toBe(true)
+
+    const after = registry.evaluate(reg.sourceUrl, runCompleted)
+    expect(after).toHaveLength(1)
+    expect(after[0]!.runFinishedStatus).toBeUndefined()
+    expect(await registrationIds(reg.subscriberUrl)).toEqual([
+      after[0]!.registrationDbId,
+    ])
+  })
 })

@@ -704,6 +704,13 @@ export interface WebhookNotification {
   triggeredBy?: Array<string>
   callback: string
   claimToken: string
+  /**
+   * The wake's write token as the Durable Streams backend delivered it
+   * (Write Fencing extension), passed through by the server. The claim
+   * callback's `writeToken` is authoritative; this is the fallback for a
+   * server that adopts none.
+   */
+  write_token?: string
   triggerEvent?: string
   wakeEvent?: WakeEvent
   entity?: {
