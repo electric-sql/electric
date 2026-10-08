@@ -40,14 +40,39 @@ export function resolveMigrationsFolder(fromUrl = import.meta.url): string {
   return folder
 }
 
-export async function runMigrations(postgresUrl: string): Promise<void> {
-  const migrationClient = postgres(postgresUrl, {
-    max: 1,
-    onnotice: () => {},
-  })
-  const db = drizzle(migrationClient)
+async function migrateClient(client: PgClient): Promise<void> {
+  const db = drizzle(client)
   await migrate(db, {
     migrationsFolder: resolveMigrationsFolder(),
   })
-  await migrationClient.end()
+}
+
+/**
+ * Runs migrations with a library-owned client that is always closed.
+ */
+export function runMigrations(postgresUrl: string): Promise<void>
+/**
+ * Runs migrations with a caller-owned client that is never closed.
+ *
+ * The caller remains responsible for closing the client after success or
+ * failure.
+ */
+export function runMigrations(client: PgClient): Promise<void>
+export async function runMigrations(
+  postgresUrlOrClient: string | PgClient
+): Promise<void> {
+  if (typeof postgresUrlOrClient !== `string`) {
+    await migrateClient(postgresUrlOrClient)
+    return
+  }
+
+  const migrationClient = postgres(postgresUrlOrClient, {
+    max: 1,
+    onnotice: () => {},
+  })
+  try {
+    await migrateClient(migrationClient)
+  } finally {
+    await migrationClient.end()
+  }
 }
