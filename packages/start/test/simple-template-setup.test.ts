@@ -1,26 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import type { ElectricCredentials } from '../src/electric-api.js'
 
 // Simple test for basic functionality
 describe(`template-setup (unit)`, () => {
-  const mockCredentials: ElectricCredentials = {
-    source_id: `test-source-id`,
-    secret: `test-secret`,
-    DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
-  }
-
   it(`should export setupTemplate function`, async () => {
     const { setupTemplate } = await import(`../src/template-setup.js`)
     expect(typeof setupTemplate).toBe(`function`)
   })
 
-  it(`should validate credentials structure`, () => {
-    expect(mockCredentials).toHaveProperty(`source_id`)
-    expect(mockCredentials).toHaveProperty(`secret`)
-    expect(mockCredentials).toHaveProperty(`DATABASE_URL`)
-    expect(mockCredentials.source_id).toBe(`test-source-id`)
-    expect(mockCredentials.secret).toBe(`test-secret`)
-    expect(mockCredentials.DATABASE_URL).toContain(`postgresql://`)
+  it(`should point at the local Docker services from the starter's docker-compose.yaml`, async () => {
+    const { LOCAL_DATABASE_URL, LOCAL_ELECTRIC_URL } = await import(
+      `../src/template-setup.js`
+    )
+    expect(LOCAL_DATABASE_URL).toBe(
+      `postgresql://postgres:password@localhost:54321/electric`
+    )
+    expect(LOCAL_ELECTRIC_URL).toBe(`http://localhost:30000`)
   })
 
   it(`should validate app name format`, () => {

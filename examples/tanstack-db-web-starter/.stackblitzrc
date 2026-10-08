@@ -1,4 +1,0 @@
-{
-  "installDependencies": false,
-  "startCommand": "npx @electric-sql/start . && pnpm dev"
-}
