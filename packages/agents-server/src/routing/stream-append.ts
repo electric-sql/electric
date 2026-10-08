@@ -119,18 +119,13 @@ async function handleStreamAppend(
 
     if (event) {
       const events = Array.isArray(event) ? event : [event]
-      for (const eventItem of events) {
-        const validationError = await manager.validateWriteEvent(
-          entity,
-          eventItem
+      const validationError = await manager.validateWriteEvents(entity, events)
+      if (validationError) {
+        return apiError(
+          validationError.status,
+          validationError.code,
+          validationError.message
         )
-        if (validationError) {
-          return apiError(
-            validationError.status,
-            validationError.code,
-            validationError.message
-          )
-        }
       }
     }
   } else if (manager.isForkWriteLockedStream(path)) {

@@ -3711,11 +3711,39 @@ export class EntityManager {
     entity: ElectricAgentsEntity,
     event: Record<string, unknown>
   ): Promise<{ code: string; message: string; status: number } | null> {
-    if (!entity.type) return null
+    return this.validateWriteEvents(entity, [event])
+  }
+
+  /**
+   * Validates a batch of events appended to one entity's stream. The entity's
+   * effective schemas are resolved once for the whole batch, so every event is
+   * checked against the same snapshot, and the first invalid event in order is
+   * reported.
+   */
+  async validateWriteEvents(
+    entity: ElectricAgentsEntity,
+    events: Array<Record<string, unknown>>
+  ): Promise<{ code: string; message: string; status: number } | null> {
+    if (!entity.type || events.length === 0) return null
 
     const { stateSchemas } = await this.getEffectiveSchemas(entity)
     if (!stateSchemas) return null
 
+    for (const event of events) {
+      const validationError = this.validateEventAgainstStateSchemas(
+        stateSchemas,
+        event
+      )
+      if (validationError) return validationError
+    }
+
+    return null
+  }
+
+  private validateEventAgainstStateSchemas(
+    stateSchemas: Record<string, Record<string, unknown>>,
+    event: Record<string, unknown>
+  ): { code: string; message: string; status: number } | null {
     const eventType = event.type as string | undefined
     if (!eventType) return null
 
