@@ -1,7 +1,7 @@
 # 1M-stream cardinality fixes — findings + results (2026-07-02)
 
-Follow-up to `WRITE_BOTTLENECKS_1M.md` (bottleneck #2: stream cardinality) and
-`CONTENTION_INVESTIGATION.md`. Server commit: `662b0c845` on
+Follow-up to the write-bottleneck and WAL-contention investigations
+(bottleneck #2: stream cardinality). Server commit: `662b0c845` on
 `perf/combined-t1a-t1c-t2a`. **Outcome: 1M streams reaches 1,114,644 ops/s on a
 16 vCPU `c4d-standard-16-lssd` (ladder unsaturated), and the 500k→1M degradation at
 equal load is −17% (was a cliff).**
