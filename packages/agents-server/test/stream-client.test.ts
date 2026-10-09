@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DurableStream } from '@durable-streams/client'
 
 import { StreamClient } from '../src/stream-client'
 
@@ -217,6 +218,96 @@ describe(`StreamClient`, () => {
       expect(
         new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get(`authorization`)
       ).toBe(`Bearer service-token-2`)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`opts a stream into write fencing only when asked`, async () => {
+    const createMock = vi.mocked(DurableStream.create).mockClear()
+    createMock.mockResolvedValue(undefined as never)
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(
+        new Response(null, { status: 200, headers: { 'Write-Fence': `true` } })
+      )
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    try {
+      await client.create(`/horton/demo/main`, {
+        contentType: `application/json`,
+        writeFence: true,
+      })
+      await client.create(`/horton/other/main`, {
+        contentType: `application/json`,
+      })
+
+      expect(createMock.mock.calls[0]![0]).toMatchObject({
+        headers: { 'Write-Fence': `true` },
+      })
+      expect(createMock.mock.calls[1]![0]!.headers ?? {}).not.toHaveProperty(
+        `Write-Fence`
+      )
+      // Only the fenced create checks for the echo [WF-02].
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock.mock.calls[0]?.[1]?.method).toBe(`HEAD`)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`refuses a fenced create the backend did not echo`, async () => {
+    vi.mocked(DurableStream.create).mockResolvedValue(undefined as never)
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 200 }))
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    try {
+      await expect(
+        client.create(`/horton/demo/main`, {
+          contentType: `application/json`,
+          writeFence: true,
+        })
+      ).rejects.toThrow(/did not echo Write-Fence/)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`opts a fork into write fencing only when asked`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(
+        new Response(null, { status: 200, headers: { 'Write-Fence': `true` } })
+      )
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    try {
+      await client.fork(`/fork/main`, `/source/main`, { writeFence: true })
+      await client.fork(`/fork/other`, `/source/main`)
+
+      expect(
+        new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get(`Write-Fence`)
+      ).toBe(`true`)
+      expect(
+        new Headers(fetchMock.mock.calls[1]?.[1]?.headers).has(`Write-Fence`)
+      ).toBe(false)
+    } finally {
+      fetchMock.mockRestore()
+    }
+  })
+
+  it(`refuses a fenced fork the backend did not echo`, async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, `fetch`)
+      .mockResolvedValue(new Response(null, { status: 200 }))
+    const client = new StreamClient(`http://127.0.0.1:4545`)
+
+    try {
+      await expect(
+        client.fork(`/fork/main`, `/source/main`, { writeFence: true })
+      ).rejects.toThrow(/did not echo Write-Fence/)
     } finally {
       fetchMock.mockRestore()
     }
