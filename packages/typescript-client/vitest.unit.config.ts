@@ -6,6 +6,7 @@ export default defineConfig({
     setupFiles: [`vitest-localstorage-mock`],
     include: [
       `test/up-to-date-tracker.test.ts`,
+      `test/storage-access.test.ts`,
       `test/helpers.test.ts`,
       `test/parser.test.ts`,
       `test/snapshot-tracker.test.ts`,
