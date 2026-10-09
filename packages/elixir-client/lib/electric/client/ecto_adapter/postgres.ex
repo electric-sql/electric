@@ -537,6 +537,24 @@ if Code.ensure_loaded?(Ecto) do
       end)
     end
 
+    defp dump_binding(Ecto.ULID, {value, cast}) when is_list(value) do
+      value
+      |> Enum.zip(cast)
+      |> Enum.map(&dump_binding(Ecto.ULID, &1))
+      |> Enum.unzip()
+    end
+
+    defp dump_binding(Ecto.ULID, {value, _cast}) do
+      case Ecto.Type.dump(Ecto.ULID, value) do
+        {:ok, dumped} ->
+          {Ecto.UUID.cast!(dumped), dumped}
+
+        :error ->
+          raise ArgumentError,
+                "cannot dump value #{inspect(value)} for type #{inspect(Ecto.ULID)}"
+      end
+    end
+
     defp dump_binding({:parameterized, _} = type, {value, cast}) when is_list(value) do
       value
       |> Enum.zip(cast)
