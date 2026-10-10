@@ -118,8 +118,8 @@ export class UpToDateTracker {
   }
 
   private save(): void {
-    if (typeof localStorage === `undefined`) return
     try {
+      if (typeof localStorage === `undefined`) return
       localStorage.setItem(this.storageKey, JSON.stringify(this.data))
     } catch {
       // Ignore localStorage errors (quota exceeded, etc.)
@@ -127,8 +127,8 @@ export class UpToDateTracker {
   }
 
   private load(): void {
-    if (typeof localStorage === `undefined`) return
     try {
+      if (typeof localStorage === `undefined`) return
       const stored = localStorage.getItem(this.storageKey)
       if (stored) {
         this.data = JSON.parse(stored)
