@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox'
 import type { HandlerContext } from '@electric-ax/agents-runtime'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 function asToolResult(value: unknown) {
   return {

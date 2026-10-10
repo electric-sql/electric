@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAssistantMessageEventStream } from '@mariozechner/pi-ai'
+import { createAssistantMessageEventStream } from '@earendil-works/pi-ai/compat'
 import { getCronStreamPath } from '../src/cron-utils'
 import { createHandlerContext } from '../src/context-factory'
 import { ENTITY_COLLECTIONS } from '../src/entity-schema'

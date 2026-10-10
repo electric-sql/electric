@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { completeSimple, getModel } from '@mariozechner/pi-ai'
+import { completeSimple, getModel } from '@earendil-works/pi-ai/compat'
 import {
   MOONSHOT_PROVIDER,
   getMoonshotApiKey,
   getMoonshotModel,
 } from './moonshot-models'
 import type { AgentConfig } from './types'
-import type { KnownProvider } from '@mariozechner/pi-ai'
+import type { KnownProvider } from '@earendil-works/pi-ai/compat'
 
 export interface LowCostModelChoice {
   provider: KnownProvider | string
@@ -29,7 +29,7 @@ export type LowCostModelConfig = Pick<
 const PREFERRED_IDS_BY_PROVIDER: Record<string, Array<string>> = {
   anthropic: [`claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`],
   openai: [`gpt-4.1-nano`, `gpt-4o-mini`, `gpt-4.1-mini`],
-  'openai-codex': [`gpt-5.4-mini`, `gpt-5.1-codex-mini`],
+  'openai-codex': [`gpt-5.6-luna`, `gpt-5.4-mini`, `gpt-5.1-codex-mini`],
   deepseek: [`deepseek-v4-flash`, `deepseek-v4-pro`],
   moonshot: [`kimi-k2.6`, `kimi-k2.5`, `moonshot-v1-8k`],
 }
@@ -92,7 +92,7 @@ function envCatalog(): LowCostModelCatalog {
   if (providers.includes(`openai-codex`)) {
     choices.push({
       provider: `openai-codex`,
-      id: `gpt-5.4-mini`,
+      id: `gpt-5.6-luna`,
       reasoning: false,
     })
   }

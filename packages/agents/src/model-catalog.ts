@@ -1,4 +1,4 @@
-import { getModels } from '@mariozechner/pi-ai'
+import { getModels } from '@earendil-works/pi-ai/compat'
 import {
   MOONSHOT_API_BASE_URL,
   MOONSHOT_PROVIDER,
@@ -62,7 +62,7 @@ export type BuiltinAgentModelConfig = Pick<
 
 const DEFAULT_ANTHROPIC_MODEL = `claude-sonnet-4-6`
 const DEFAULT_OPENAI_MODEL = `gpt-4.1`
-const DEFAULT_CODEX_MODEL = `gpt-5.4`
+const DEFAULT_CODEX_MODEL = `gpt-5.6-terra`
 const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
 const DEFAULT_MOONSHOT_MODEL = `kimi-k2.6`
 

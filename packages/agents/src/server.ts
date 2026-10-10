@@ -31,7 +31,7 @@ import type {
   PullWakeRunnerConfig,
 } from '@electric-ax/agents-runtime'
 import type { DurableStreamsFetchCacheOptions } from './durable-streams-cache.js'
-import type { StreamFn } from '@mariozechner/pi-agent-core'
+import type { StreamFn } from '@earendil-works/pi-agent-core'
 
 export interface BuiltinAgentsServerOptions {
   agentServerUrl: string

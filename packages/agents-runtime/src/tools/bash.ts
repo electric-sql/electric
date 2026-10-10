@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox'
 import type { Sandbox } from '../sandbox/types'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_TIMEOUT_MS = 600_000

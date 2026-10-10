@@ -1,5 +1,5 @@
 import { Type } from '@sinclair/typebox'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { HandlerContext } from '@electric-ax/agents-runtime'
 
 export function createSetTitleTool(ctx: HandlerContext): AgentTool {

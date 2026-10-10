@@ -5,7 +5,7 @@ import {
   defaultWebhookSourceSubscriptionLifetime,
   webhookSourceSubscriptionManifestKey,
 } from '../webhook-sources'
-import type { AgentTool } from '@mariozechner/pi-agent-core'
+import type { AgentTool } from '@earendil-works/pi-agent-core'
 import type { EntityStreamDBWithActions } from '../types'
 import type {
   WebhookSourceContract,
