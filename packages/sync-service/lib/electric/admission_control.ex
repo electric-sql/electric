@@ -55,6 +55,14 @@ defmodule Electric.AdmissionControl do
   end
 
   @doc """
+  The process-dictionary key under which a request handler stashes its held
+  permit as `{stack_id, kind}`. Owned here so that other components that
+  must inspect or account for a handler's permit (e.g. the serve watchdog
+  releasing a killed handler's permit) share one definition.
+  """
+  def permit_pd_key, do: {__MODULE__, :permit}
+
+  @doc """
   Try to acquire a permit for the given stack_id.
 
   Returns `:ok` if permit granted, `{:error, :overloaded}` if at capacity.
