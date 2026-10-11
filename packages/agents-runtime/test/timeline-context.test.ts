@@ -524,6 +524,41 @@ describe(`timeline context`, () => {
     ])
   })
 
+  it(`timelineToMessages projects composer_input rows read from the db as source text`, () => {
+    const db = {
+      collections: {
+        runs: { toArray: [] },
+        texts: { toArray: [] },
+        textDeltas: { toArray: [] },
+        toolCalls: { toArray: [] },
+        steps: { toArray: [] },
+        errors: { toArray: [] },
+        inbox: {
+          toArray: [
+            {
+              key: `msg-1`,
+              from: `user`,
+              message_type: `composer_input`,
+              payload: { source: `summarize the article` },
+              timestamp: `2026-03-28T00:00:00.000Z`,
+            },
+          ],
+          __electricRowOffsets: new Map([[`msg-1`, offset(1)]]),
+        },
+        wakes: { toArray: [], __electricRowOffsets: new Map() },
+        signals: { toArray: [], __electricRowOffsets: new Map() },
+        contextInserted: { toArray: [], __electricRowOffsets: new Map() },
+        contextRemoved: { toArray: [], __electricRowOffsets: new Map() },
+        manifests: { toArray: [], __electricRowOffsets: new Map() },
+        childStatus: { toArray: [], __electricRowOffsets: new Map() },
+      },
+    } as unknown as EntityStreamDB
+
+    expect(timelineToMessages(db)).toEqual([
+      { role: `user`, content: `summarize the article` },
+    ])
+  })
+
   it(`timelineToMessages handles an empty entity timeline`, () => {
     const db = {
       collections: {
