@@ -1,18 +1,36 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import { parseEnv } from 'node:util'
 
 // Load repo root .env first, then local .env (local values take precedence)
-const envPaths = [
-  path.resolve(import.meta.dirname, `../../../../.env`),
-  path.resolve(import.meta.dirname, `../../.env`),
-]
-for (const envPath of envPaths) {
+function loadEnvFile(envPath: string, override: boolean): void {
   try {
-    process.loadEnvFile(envPath)
+    const env = parseEnv(readFileSync(envPath, `utf8`))
+    for (const [key, value] of Object.entries(env)) {
+      if (override || process.env[key] === undefined) {
+        process.env[key] = value
+      }
+    }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== `ENOENT`) {
       console.error(`Failed to load .env file:`, err)
     }
   }
+}
+
+loadEnvFile(path.resolve(import.meta.dirname, `../../../../.env`), false)
+loadEnvFile(path.resolve(import.meta.dirname, `../../.env`), true)
+
+function envFingerprint(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) return `${name}=unset`
+
+  const fingerprint = createHash(`sha256`)
+    .update(value)
+    .digest(`hex`)
+    .slice(0, 8)
+  return `${name}=set sha256:${fingerprint}`
 }
 
 import {
@@ -136,5 +154,10 @@ server.listen(PORT, async () => {
   await runtime.registerTypes()
   console.log(`Deep Survey server ready on port ${PORT}`)
   console.log(`DARIX: ${DARIX_URL}`)
+  console.log(
+    `Model credentials: ${envFingerprint(`ANTHROPIC_API_KEY`)}, ${envFingerprint(
+      `MOONSHOT_API_KEY`
+    )}`
+  )
   console.log(`${runtime.typeNames.length} entity types registered`)
 })
