@@ -317,7 +317,7 @@ export class BuiltinAgentsServer {
       })
       if (!this.bootstrap) {
         throw new Error(
-          `ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or MOONSHOT_API_KEY must be set before starting builtin agents`
+          `ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, MOONSHOT_API_KEY, or ORCAROUTER_API_KEY must be set before starting builtin agents`
         )
       }
 

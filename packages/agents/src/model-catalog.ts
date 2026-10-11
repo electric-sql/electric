@@ -2,10 +2,15 @@ import { getModels } from '@mariozechner/pi-ai'
 import {
   MOONSHOT_API_BASE_URL,
   MOONSHOT_PROVIDER,
+  ORCAROUTER_API_BASE_URL,
+  ORCAROUTER_PROVIDER,
   detectAvailableProviders,
   getMoonshotApiKey,
   getMoonshotModel,
   getMoonshotModels,
+  getOrcaRouterApiKey,
+  getOrcaRouterModel,
+  getOrcaRouterModels,
   readCodexAccessToken,
 } from '@electric-ax/agents-runtime'
 import type {
@@ -65,6 +70,7 @@ const DEFAULT_OPENAI_MODEL = `gpt-4.1`
 const DEFAULT_CODEX_MODEL = `gpt-5.4`
 const DEFAULT_DEEPSEEK_MODEL = `deepseek-v4-flash`
 const DEFAULT_MOONSHOT_MODEL = `kimi-k2.6`
+const DEFAULT_ORCAROUTER_MODEL = `orcarouter/auto`
 
 function modelValue(provider: BuiltinModelProvider, id: string): string {
   return `${provider}:${id}`
@@ -77,6 +83,7 @@ export function builtinModelProviderLabel(
   if (provider === `openai-codex`) return `OpenAI Codex`
   if (provider === `deepseek`) return `DeepSeek`
   if (provider === MOONSHOT_PROVIDER) return `Kimi`
+  if (provider === ORCAROUTER_PROVIDER) return `OrcaRouter`
   return `OpenAI`
 }
 
@@ -123,12 +130,19 @@ async function fetchAvailableModelIds(
                 },
                 signal: AbortSignal.timeout(3_000),
               })
-            : await fetch(`https://api.openai.com/v1/models`, {
-                headers: {
-                  authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
-                },
-                signal: AbortSignal.timeout(3_000),
-              })
+            : provider === ORCAROUTER_PROVIDER
+              ? await fetch(`${ORCAROUTER_API_BASE_URL}/models`, {
+                  headers: {
+                    authorization: `Bearer ${getOrcaRouterApiKey() ?? ``}`,
+                  },
+                  signal: AbortSignal.timeout(3_000),
+                })
+              : await fetch(`https://api.openai.com/v1/models`, {
+                  headers: {
+                    authorization: `Bearer ${process.env.OPENAI_API_KEY ?? ``}`,
+                  },
+                  signal: AbortSignal.timeout(3_000),
+                })
 
     if (res.status === 401 || res.status === 403) return new Set()
     if (!res.ok) return null
@@ -149,9 +163,14 @@ async function fetchAvailableModelIds(
 function knownModelsForProvider(provider: BuiltinModelProvider) {
   return provider === MOONSHOT_PROVIDER
     ? getMoonshotModels()
-    : getModels(
-        provider as Exclude<BuiltinModelProvider, typeof MOONSHOT_PROVIDER>
-      )
+    : provider === ORCAROUTER_PROVIDER
+      ? getOrcaRouterModels()
+      : getModels(
+          provider as Exclude<
+            BuiltinModelProvider,
+            typeof MOONSHOT_PROVIDER | typeof ORCAROUTER_PROVIDER
+          >
+        )
 }
 
 export function resolveBuiltinModelContextWindow(
@@ -161,6 +180,10 @@ export function resolveBuiltinModelContextWindow(
 
   if (modelConfig.provider === MOONSHOT_PROVIDER) {
     return getMoonshotModel(modelId)?.contextWindow ?? null
+  }
+
+  if (modelConfig.provider === ORCAROUTER_PROVIDER) {
+    return getOrcaRouterModel(modelId)?.contextWindow ?? null
   }
 
   if (!modelConfig.provider) return null
@@ -353,6 +376,11 @@ export async function createBuiltinModelCatalog(
         choice.provider === MOONSHOT_PROVIDER &&
         choice.id === DEFAULT_MOONSHOT_MODEL
     ) ??
+    choices.find(
+      (choice) =>
+        choice.provider === ORCAROUTER_PROVIDER &&
+        choice.id === DEFAULT_ORCAROUTER_MODEL
+    ) ??
     choices[0]!
 
   return { choices, defaultChoice }
@@ -392,6 +420,9 @@ export function resolveBuiltinModelConfig(
     }),
     ...(choice.provider === MOONSHOT_PROVIDER && {
       getApiKey: () => getMoonshotApiKey(),
+    }),
+    ...(choice.provider === ORCAROUTER_PROVIDER && {
+      getApiKey: () => getOrcaRouterApiKey(),
     }),
   }
 

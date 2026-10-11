@@ -3,6 +3,8 @@ import type { AgentConfig } from '@electric-ax/agents-runtime'
 const SONNET_MODEL = `claude-sonnet-4-5-20250929`
 const KIMI_MODEL = `kimi-k2.6`
 const KIMI_BASE_URL = `https://api.moonshot.ai/v1`
+const ORCAROUTER_MODEL = `orcarouter/auto`
+const ORCAROUTER_BASE_URL = `https://api.orcarouter.ai/v1`
 
 type AgentModelConfig = Pick<
   AgentConfig,
@@ -71,10 +73,43 @@ function kimiConfig(): AgentModelConfig {
   }
 }
 
+function orcarouterConfig(): AgentModelConfig {
+  const apiKey = getUsableEnv(`ORCAROUTER_API_KEY`)
+  if (!apiKey) {
+    throw new Error(`ORCAROUTER_API_KEY must be set to use ${ORCAROUTER_MODEL}`)
+  }
+
+  return {
+    model: {
+      id: ORCAROUTER_MODEL,
+      name: `OrcaRouter Auto`,
+      api: `openai-completions`,
+      provider: `orcarouter`,
+      baseUrl: ORCAROUTER_BASE_URL,
+      reasoning: true,
+      input: [`text`],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 262144,
+      maxTokens: 32768,
+      compat: {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+        maxTokensField: `max_completion_tokens`,
+      },
+    },
+    getApiKey: (provider) => (provider === `orcarouter` ? apiKey : undefined),
+  }
+}
+
 function assertModelEnv(): void {
-  if (!hasEnv(`ANTHROPIC_API_KEY`) && !hasEnv(`MOONSHOT_API_KEY`)) {
+  if (
+    !hasEnv(`ANTHROPIC_API_KEY`) &&
+    !hasEnv(`MOONSHOT_API_KEY`) &&
+    !hasEnv(`ORCAROUTER_API_KEY`)
+  ) {
     throw new Error(
-      `Set ANTHROPIC_API_KEY or MOONSHOT_API_KEY before running Deep Survey`
+      `Set ANTHROPIC_API_KEY, MOONSHOT_API_KEY, or ORCAROUTER_API_KEY before running Deep Survey`
     )
   }
 }
@@ -86,5 +121,6 @@ export function orchestratorModelConfig(): AgentModelConfig {
 
 export function surveyWorkerModelConfig(): AgentModelConfig {
   assertModelEnv()
+  if (hasEnv(`ORCAROUTER_API_KEY`)) return orcarouterConfig()
   return hasEnv(`MOONSHOT_API_KEY`) ? kimiConfig() : sonnetConfig()
 }
