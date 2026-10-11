@@ -41,6 +41,9 @@
   "pnpm": {
     "patchedDependencies": {
       "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch"
+    },
+    "overrides": {
+      "on-headers": "1.1.0"
     }
   }
 }
