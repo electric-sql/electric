@@ -15,6 +15,9 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoderTest do
              "c"
            ]
 
+    assert ArrayDecoder.decode!(~S[{"a\\b"}], :string) == ["a\\b"]
+    assert ArrayDecoder.decode!(~S[{"a\\\\b"}], :string) == ["a\\\\b"]
+
     assert ArrayDecoder.decode!(~S[{NULL,NULL,"NULL"}], :string) == [nil, nil, "NULL"]
   end
 

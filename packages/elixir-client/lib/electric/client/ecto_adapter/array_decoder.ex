@@ -64,8 +64,8 @@ if Code.ensure_loaded?(Ecto) do
     defp decode_quoted_elem(<<?", rest::bitstring>>, acc, state),
       do: {rest, cast_quoted(acc, state)}
 
-    defp decode_quoted_elem(<<"\\\"", rest::bitstring>>, acc, state),
-      do: decode_quoted_elem(rest, [acc | [?"]], state)
+    defp decode_quoted_elem(<<?\\, c::utf8, rest::bitstring>>, acc, state),
+      do: decode_quoted_elem(rest, [acc | <<c::utf8>>], state)
 
     defp decode_quoted_elem(<<c::utf8, rest::bitstring>>, acc, state),
       do: decode_quoted_elem(rest, [acc | <<c::utf8>>], state)
