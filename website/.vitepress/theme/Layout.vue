@@ -36,7 +36,7 @@ onMounted(() => {
       async () => {
         const { posthog } = await posthogPromise
         posthog.init('phc_o4xENyuuSCdNPG2CWtfdqzYYXs6v8SbmVDzm3CP0Qwn', {
-          api_host: `https://admin.electric-sql.cloud/api/ph`,
+          api_host: `/ph`,
           ui_host: 'https://us.i.posthog.com',
         })
         posthog.capture(`$pageview`, {

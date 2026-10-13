@@ -11,3 +11,4 @@
 [[edge_functions]]
   function = "serve-markdown"
   path = "/*"
+  excludedPath = ["/ph/*"]
