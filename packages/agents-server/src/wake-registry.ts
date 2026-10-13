@@ -740,19 +740,23 @@ export class WakeRegistry {
 
     if (message.headers.operation === `delete`) {
       // Shape keys are protocol-level identifiers and are not guaranteed to be
-      // the table primary key. The wake_registrations shape uses
-      // `replica: full`, so deletes should carry the deleted row in old_value;
-      // use that row id to remove the matching in-memory registration. If the
-      // id is unavailable, reset the cache so we fail closed rather than
-      // keeping a stale wake registration alive.
-      const oldValue = (
-        message as unknown as {
-          old_value?: { id?: unknown }
-        }
-      ).old_value
-      const oldId = Number(oldValue?.id)
-      if (Number.isFinite(oldId)) {
-        this.removeCachedRegistrationByDbId(oldId)
+      // the table primary key. With `replica: full` Electric puts the deleted
+      // row in `value` (`old_value` is only set on updates), so read the id
+      // from there first. If no id can be found, reset the cache so we fail
+      // closed rather than keeping a stale wake registration alive.
+      //
+      // Reading only `old_value` reset the whole cache on every delete: a
+      // parent that spawned N children with `runFinished` wakes was left with
+      // only the registration inserted after the last delete, so only its
+      // last child ever woke it — and the shape log replays the same deletes
+      // on every restart.
+      const deleted = message as unknown as {
+        value?: { id?: unknown }
+        old_value?: { id?: unknown }
+      }
+      const deletedId = Number(deleted.value?.id ?? deleted.old_value?.id)
+      if (Number.isFinite(deletedId)) {
+        this.removeCachedRegistrationByDbId(deletedId)
       } else {
         this.resetCachedRegistrations()
       }

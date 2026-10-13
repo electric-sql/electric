@@ -64,6 +64,8 @@ function createMockDb(): any {
   }
 }
 
+type WakeRegistrationShapeRowLike = Record<string, unknown>
+
 describe(`WakeRegistry Electric sync`, () => {
   it(`ignores malformed shape messages without headers while waiting for up-to-date`, async () => {
     const registry = new WakeRegistry(createMockDb())
@@ -85,6 +87,58 @@ describe(`WakeRegistry Electric sync`, () => {
 
     await expect(startPromise).resolves.toBeUndefined()
 
+    await registry.stopSync()
+  })
+
+  it(`a delete carrying the row in value removes only that registration`, async () => {
+    const registry = new WakeRegistry(createMockDb())
+    const startPromise = registry.startSync(`http://electric.test`)
+    const row = (id: number, source: string) => ({
+      id,
+      subscriber_url: `/parent/p1`,
+      source_url: source,
+      condition: `runFinished` as const,
+      debounce_ms: 0,
+      timeout_ms: 0,
+      one_shot: false,
+      timeout_consumed: false,
+      include_response: true,
+      manifest_key: `child:${source}`,
+      created_at: new Date(),
+    })
+    const runFinished = (key: string) => ({
+      type: `run`,
+      key,
+      value: { status: `completed` },
+      headers: { operation: `update` },
+    })
+    await shapeStreamState.latest!.emit([
+      {
+        key: `1`,
+        value: row(1, `/child/c1`),
+        headers: { operation: `insert` },
+      },
+      {
+        key: `2`,
+        value: row(2, `/child/c2`),
+        headers: { operation: `insert` },
+      },
+      { headers: { control: `up-to-date` } },
+    ])
+    await startPromise
+
+    // Electric's `replica: full` delete message carries the deleted row in
+    // `value`, not `old_value` (measured against electricsql/electric 1.7.10).
+    await shapeStreamState.latest!.emit([
+      {
+        key: `1`,
+        value: row(1, `/child/c1`) as unknown as WakeRegistrationShapeRowLike,
+        headers: { operation: `delete` },
+      },
+    ])
+
+    expect(registry.evaluate(`/child/c1`, runFinished(`run-1`))).toHaveLength(0)
+    expect(registry.evaluate(`/child/c2`, runFinished(`run-1`))).toHaveLength(1)
     await registry.stopSync()
   })
 
