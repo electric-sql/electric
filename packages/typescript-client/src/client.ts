@@ -2275,6 +2275,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchUrl = result.fetchUrl
       fetchOptions = {
         method: `POST`,
+        signal: this.options.signal,
         headers: {
           ...result.requestHeaders,
           'Content-Type': `application/json`,
@@ -2284,7 +2285,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } else {
       const result = await this.#constructUrl(this.options.url, true, opts)
       fetchUrl = result.fetchUrl
-      fetchOptions = { headers: result.requestHeaders }
+      fetchOptions = { headers: result.requestHeaders, signal: this.options.signal }
     }
 
     // Apply cache buster from same-handle 409 retry

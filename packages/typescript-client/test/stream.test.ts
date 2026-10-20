@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ShapeStream,
   FetchError,
+  FetchBackoffAbortError,
   isChangeMessage,
   isControlMessage,
   Message,
@@ -55,6 +56,57 @@ describe(`ShapeStream`, () => {
       process.off(`unhandledRejection`, onUnhandledRejection)
     }
   })
+
+  it.each([
+    { method: `fetchSnapshot`, subsetMethod: `GET` },
+    { method: `fetchSnapshot`, subsetMethod: `POST` },
+    { method: `requestSnapshot`, subsetMethod: `GET` },
+    { method: `requestSnapshot`, subsetMethod: `POST` },
+  ] as const)(
+    `$method aborts an in-flight $subsetMethod snapshot with the stream signal`,
+    async ({ method, subsetMethod }) => {
+      let signal: AbortSignal | null | undefined
+      let rejectFetch!: (error: unknown) => void
+      const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        signal = init?.signal
+        return new Promise<Response>((_resolve, reject) => {
+          rejectFetch = reject
+          signal?.addEventListener(`abort`, () => reject(signal!.reason), {
+            once: true,
+          })
+        })
+      })
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        signal: aborter.signal,
+        subsetMethod,
+        log: `changes_only`,
+        fetchClient: fetchMock,
+        backoffOptions: {
+          initialDelay: 1,
+          maxDelay: 1,
+          multiplier: 1,
+          maxRetries: 0,
+        },
+      })
+      const result = stream[method]({ limit: 1 }).catch((error) => error)
+
+      try {
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+        expect(signal).toBe(aborter.signal)
+        expect(signal?.aborted).toBe(false)
+        aborter.abort()
+        expect(await result).toBeInstanceOf(FetchBackoffAbortError)
+        expect(fetchMock).toHaveBeenCalledOnce()
+      } finally {
+        aborter.abort()
+        // Settle the request even if the signal assertion fails.
+        rejectFetch(aborter.signal.reason)
+        await result
+      }
+    }
+  )
 
   it(`requestSnapshot waits for snapshot messages to be published to subscribers before resolving`, async () => {
     const snapshotRow = {
