@@ -443,6 +443,18 @@ identity or caching logic — it only affects the raw URL sent to the server/CDN
 - L4 (main stream `#requestShape` 409 path): model-based property test commands `Respond409SameHandleCmd` and `Respond409NoHandleCmd` in `test/model-based.test.ts`.
 - L6 (`fetchSnapshotWithRetry` 409 path): property tests in `test/pbt-micro.test.ts > Shape #fetchSnapshotWithRetry 409 loop PBT` — asserts every retry URL carries a unique `cache-buster` param across 409-new, 409-same, and 409-no-handle sequences, and that `#maxSnapshotRetries = 5` is strictly upheld.
 
+### Snapshot cancellation
+
+Snapshot GET and POST requests use the external `ShapeStreamOptions.signal`, so
+aborting the stream also cancels in-flight `fetchSnapshot` and `requestSnapshot`
+requests through the existing abort-aware fetch wrapper. They must not use the
+internal live-request controller: acquiring the snapshot pause lock intentionally
+aborts that controller while the snapshot must remain able to complete.
+
+**Enforcement**: `stream.test.ts` covers both snapshot methods and HTTP methods,
+asserting that the snapshot remains active until the external signal is aborted
+and then rejects without another fetch attempt.
+
 ### Loop-back sites
 
 Six sites in `client.ts` recurse or loop to issue a new fetch:
