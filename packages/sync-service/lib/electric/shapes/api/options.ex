@@ -5,7 +5,7 @@ defmodule Electric.Shapes.Api.Options do
     conn
     |> add_cache_max_age_header()
     |> filter_cors_headers()
-    |> add_keep_alive()
+    |> Electric.Shapes.Api.Response.put_keep_alive_header()
     |> send_options_response()
   end
 
@@ -32,8 +32,6 @@ defmodule Electric.Shapes.Api.Options do
         end
     end
   end
-
-  defp add_keep_alive(conn), do: Plug.Conn.put_resp_header(conn, "connection", "keep-alive")
 
   defp send_options_response(conn), do: Plug.Conn.send_resp(conn, 204, "")
 end
