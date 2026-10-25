@@ -1249,6 +1249,145 @@ describe(`ShapeStream`, () => {
     warnSpy.mockRestore()
   })
 
+  describe(`fast-loop detection with subset snapshots`, () => {
+    const snapshotResponse = () =>
+      new Response(
+        JSON.stringify({
+          metadata: {
+            snapshot_mark: 1,
+            xmin: `1`,
+            xmax: `2`,
+            xip_list: [],
+            database_lsn: `0`,
+          },
+          data: [],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `my-handle`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":{"type":"text"}}`,
+          },
+        }
+      )
+
+    const isSnapshotRequest = (input: Parameters<typeof fetch>[0]) =>
+      new URL(input.toString()).searchParams.has(`subset__limit`)
+
+    const warnedFastLoop = (warnSpy: { mock: { calls: unknown[][] } }) =>
+      warnSpy.mock.calls.some(([message]) =>
+        String(message).includes(`fast retry loop`)
+      )
+
+    it(`does not count requests that a snapshot pause aborted`, async () => {
+      // Each requestSnapshot pauses the stream, which aborts the in-flight
+      // request, and the stream restarts at the same offset once the snapshot
+      // is done. An aborted request got no response, so many snapshots in a
+      // row are not a retry loop.
+      const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+      let caughtError: Error | null = null
+      let mainRequestCount = 0
+
+      const fetchMock = (
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+      ): Promise<Response> => {
+        if (isSnapshotRequest(input)) {
+          return Promise.resolve(snapshotResponse())
+        }
+        mainRequestCount++
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener(`abort`, () => {
+            reject(new DOMException(`Aborted`, `AbortError`))
+          })
+        })
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        log: `changes_only`,
+        signal: aborter.signal,
+        fetchClient: fetchMock,
+        onError: (error) => {
+          caughtError = error
+        },
+      })
+
+      stream.subscribe(() => {})
+
+      for (let i = 0; i < 30; i++) {
+        await stream.requestSnapshot({ limit: 1 })
+      }
+
+      expect(warnedFastLoop(warnSpy)).toBe(false)
+      expect(caughtError).toBe(null)
+      // The stream is still running: it resumes once the last snapshot is done.
+      const requestsBeforeResume = mainRequestCount
+      await vi.waitFor(() => {
+        expect(mainRequestCount).toBe(requestsBeforeResume + 1)
+      })
+
+      warnSpy.mockRestore()
+    })
+
+    it(`still detects a loop of responses when snapshots run in between`, async () => {
+      let requestCount = 0
+      let caughtError: Error | null = null
+      const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+      const fetchMock = (
+        input: Parameters<typeof fetch>[0]
+      ): Promise<Response> => {
+        if (isSnapshotRequest(input)) {
+          return Promise.resolve(snapshotResponse())
+        }
+        requestCount++
+        return Promise.resolve(
+          new Response(`[]`, {
+            status: 409,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `handle-${requestCount}`,
+            },
+          })
+        )
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        log: `changes_only`,
+        signal: aborter.signal,
+        fetchClient: fetchMock,
+        subscribe: false,
+        onError: (error) => {
+          caughtError = error
+        },
+      })
+
+      stream.subscribe(() => {})
+
+      for (let i = 0; i < 5; i++) {
+        await stream.requestSnapshot({ limit: 1 })
+      }
+
+      await vi.waitFor(
+        () => {
+          expect(caughtError).not.toBe(null)
+        },
+        { timeout: 15_000 }
+      )
+
+      expect(caughtError!.message).toContain(`fast retry loop`)
+      expect(warnedFastLoop(warnSpy)).toBe(true)
+
+      warnSpy.mockRestore()
+    })
+  })
+
   it(`backs off before retrying when onError returns retry options`, async () => {
     const randomSpy = vi.spyOn(Math, `random`).mockReturnValue(0.5)
     const requestTimes: number[] = []

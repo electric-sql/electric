@@ -705,7 +705,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
-  // Fast-loop detection: track recent non-live requests to detect tight retry
+  // Fast-loop detection: track recent non-live responses to detect tight retry
   // loops caused by proxy/CDN misconfiguration or stale client-side caches
   #recentRequestEntries: Array<{ timestamp: number; offset: string }> = []
   #fastLoopWindowMs = 500
@@ -1039,6 +1039,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#pendingRequestShapeCacheBuster = undefined
 
+    const requestOffset = this.#syncState.offset
+
     try {
       await this.#fetchShape({
         fetchUrl,
@@ -1046,6 +1048,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         headers: requestHeaders,
         resumingFromPause,
       })
+      this.#recordFastLoopResponse(requestOffset)
     } catch (e) {
       const abortReason = requestAbortController.signal.reason
       const isMarkedRestartAbort = this.#restartAbortControllers.delete(
@@ -1075,12 +1078,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         //    #staleCacheBuster set to bypass CDN cache on next request.
         // 2. Self-healing: stale retries exhausted, expired entry cleared,
         //    stream reset — retry without expired_handle param.
+        this.#recordFastLoopResponse(requestOffset)
         return this.#requestShape()
       }
 
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
+        this.#recordFastLoopResponse(requestOffset)
+
         // Upon receiving a 409, start from scratch with the newly
         // provided shape handle (if present). An unconditional cache
         // buster ensures the retry URL is always unique regardless of
@@ -1128,6 +1134,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /**
+   * Records a request that got a response, for fast-loop detection. Requests
+   * aborted before their response (e.g. by a snapshot pausing the stream)
+   * are not recorded: they say nothing about a retry loop.
+   */
+  #recordFastLoopResponse(requestOffset: Offset): void {
+    this.#recentRequestEntries.push({
+      timestamp: Date.now(),
+      offset: requestOffset,
+    })
+  }
+
+  /**
    * Detects tight retry loops (e.g., from stale client-side caches or
    * proxy/CDN misconfiguration) and attempts recovery. On first detection,
    * clears client-side caches (in-memory and localStorage) and resets the
@@ -1141,7 +1159,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#recentRequestEntries = this.#recentRequestEntries.filter(
       (e) => now - e.timestamp < this.#fastLoopWindowMs
     )
-    this.#recentRequestEntries.push({ timestamp: now, offset: currentOffset })
 
     // Only flag as a fast loop if requests are stuck at the same offset.
     // Normal rapid syncing advances the offset with each response.
