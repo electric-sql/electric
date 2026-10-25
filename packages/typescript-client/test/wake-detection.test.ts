@@ -255,6 +255,221 @@ describe(`Wake detection`, () => {
     aborter.abort()
   })
 
+  describe(`SSE request watchdog`, () => {
+    const upToDateResponse = () =>
+      new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+        status: 200,
+        headers: new Headers({
+          'electric-handle': `h1`,
+          'electric-offset': `0_0`,
+          'electric-schema': `{}`,
+          'electric-up-to-date': ``,
+        }),
+      })
+
+    const sseResponse = (body: ReadableStream<Uint8Array>) =>
+      new Response(body, {
+        status: 200,
+        headers: new Headers({
+          'content-type': `text/event-stream`,
+          'electric-handle': `h1`,
+          'electric-offset': `0_0`,
+          'electric-schema': `{}`,
+          'electric-cursor': `c1`,
+        }),
+      })
+
+    function startSseStream(
+      sseFetch: (signal: AbortSignal) => Promise<Response>,
+      liveRequestTimeoutMs: number | false = 100
+    ) {
+      const sseSignals: AbortSignal[] = []
+      const fetchWrapper = (
+        input: RequestInfo | URL,
+        init?: RequestInit
+      ): Promise<Response> => {
+        if (!input.toString().includes(`live_sse=true`)) {
+          return Promise.resolve(upToDateResponse())
+        }
+        sseSignals.push(init!.signal!)
+        return sseFetch(init!.signal!)
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+        liveSse: true,
+        liveRequestTimeoutMs,
+      })
+      const unsub = stream.subscribe(() => {})
+      return { sseSignals, unsub }
+    }
+
+    it(`should restart an SSE request whose headers never arrive`, async () => {
+      vi.useFakeTimers()
+
+      // A fetch that never settles, even when aborted.
+      const { sseSignals, unsub } = startSseStream(
+        () => new Promise<Response>(() => {})
+      )
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(sseSignals).toHaveLength(1)
+
+      await vi.advanceTimersByTimeAsync(101)
+
+      expect(sseSignals[0]!.aborted).toBe(true)
+      expect(sseSignals).toHaveLength(2)
+
+      unsub()
+    })
+
+    it(`should restart an SSE request whose body goes silent`, async () => {
+      vi.useFakeTimers()
+
+      // Headers arrive, then nothing: a half-open connection.
+      const { sseSignals, unsub } = startSseStream(() =>
+        Promise.resolve(sseResponse(new ReadableStream<Uint8Array>()))
+      )
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(sseSignals).toHaveLength(1)
+
+      await vi.advanceTimersByTimeAsync(101)
+
+      expect(sseSignals[0]!.aborted).toBe(true)
+      expect(sseSignals).toHaveLength(2)
+
+      unsub()
+    })
+
+    it(`should drop a late SSE response after the watchdog restarted the request`, async () => {
+      vi.useFakeTimers()
+
+      const encode = (message: object) =>
+        new TextEncoder().encode(`data: ${JSON.stringify(message)}\n\n`)
+      let resolveLateFetch!: (response: Response) => void
+      let sseFetchCount = 0
+      const fetchWrapper = (
+        input: RequestInfo | URL,
+        _init?: RequestInit
+      ): Promise<Response> => {
+        if (!input.toString().includes(`live_sse=true`)) {
+          return Promise.resolve(upToDateResponse())
+        }
+        sseFetchCount++
+        // The first SSE fetch ignores abort and resolves late; later ones hang.
+        if (sseFetchCount === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveLateFetch = resolve
+          })
+        }
+        return new Promise<Response>(() => {})
+      }
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+        liveSse: true,
+        liveRequestTimeoutMs: 100,
+      })
+      const received: unknown[] = []
+      const unsub = stream.subscribe((messages) => {
+        received.push(...messages)
+      })
+
+      await vi.advanceTimersByTimeAsync(101)
+      expect(sseFetchCount).toBe(2)
+      const messagesBeforeLateResponse = received.length
+
+      resolveLateFetch(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                encode({
+                  headers: { operation: `insert` },
+                  key: `stale`,
+                  value: { id: `stale` },
+                  offset: `1_0`,
+                })
+              )
+              controller.enqueue(
+                encode({ headers: { control: `up-to-date` }, offset: `1_0` })
+              )
+              controller.close()
+            },
+          }),
+          {
+            status: 200,
+            headers: new Headers({
+              'content-type': `text/event-stream`,
+              'electric-handle': `h2`,
+              'electric-offset': `1_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `c2`,
+            }),
+          }
+        )
+      )
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(received).toHaveLength(messagesBeforeLateResponse)
+      expect(stream.shapeHandle).toBe(`h1`)
+      expect(stream.lastOffset).toBe(`0_0`)
+
+      unsub()
+    })
+
+    it(`should keep an SSE request open while keep-alive comments arrive`, async () => {
+      vi.useFakeTimers()
+
+      const keepAlive = new TextEncoder().encode(`: keep-alive\n\n`)
+      const { sseSignals, unsub } = startSseStream(() => {
+        let interval: ReturnType<typeof setInterval>
+        return Promise.resolve(
+          sseResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                interval = setInterval(() => controller.enqueue(keepAlive), 50)
+              },
+              cancel() {
+                clearInterval(interval)
+              },
+            })
+          )
+        )
+      })
+
+      await vi.advanceTimersByTimeAsync(500)
+
+      expect(sseSignals).toHaveLength(1)
+      expect(sseSignals[0]!.aborted).toBe(false)
+
+      unsub()
+    })
+
+    it(`should not watch SSE requests when liveRequestTimeoutMs is false`, async () => {
+      vi.useFakeTimers()
+
+      const { sseSignals, unsub } = startSseStream(
+        () => Promise.resolve(sseResponse(new ReadableStream<Uint8Array>())),
+        false
+      )
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(sseSignals).toHaveLength(1)
+      expect(sseSignals[0]!.aborted).toBe(false)
+
+      unsub()
+    })
+  })
+
   it(`should use the React Native export to install AppState visibility`, async () => {
     vi.useFakeTimers()
 

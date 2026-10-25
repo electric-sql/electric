@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@microsoft/fetch-event-source':
-    hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
+    hash: d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e
     path: patches/@microsoft__fetch-event-source.patch
 
 importers:
@@ -2422,7 +2422,7 @@ importers:
     dependencies:
       '@microsoft/fetch-event-source':
         specifier: ^2.0.1
-        version: 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+        version: 2.0.1(patch_hash=d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e)
     devDependencies:
       '@tanstack/intent':
         specifier: ^0.0.9
@@ -25447,7 +25447,7 @@ snapshots:
 
   '@durable-streams/client@0.2.6':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e)
       fastq: 1.20.1
 
   '@durable-streams/server-conformance-tests@0.3.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/coverage-v8@4.1.5)(jsdom@29.1.0(@noble/hashes@2.0.1))(vite@7.3.2(@types/node@25.9.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.48.0)(tsx@4.20.3)(yaml@2.9.0))':
@@ -25516,13 +25516,13 @@ snapshots:
 
   '@electric-sql/client@1.2.0':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
 
   '@electric-sql/client@1.5.20':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
 
@@ -27953,7 +27953,7 @@ snapshots:
     dependencies:
       langium: 4.2.2
 
-  '@microsoft/fetch-event-source@2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)': {}
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=d12e26c91542de0d9a31b23311c81898a71176f305ce663424a52c7330871d0e)': {}
 
   '@mistralai/mistralai@1.14.1':
     dependencies:

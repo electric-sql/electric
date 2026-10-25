@@ -1,8 +1,33 @@
+diff --git a/lib/cjs/fetch.d.ts b/lib/cjs/fetch.d.ts
+index 744cf66..c4f67c7 100644
+--- a/lib/cjs/fetch.d.ts
++++ b/lib/cjs/fetch.d.ts
+@@ -4,9 +4,10 @@ export interface FetchEventSourceInit extends RequestInit {
+     headers?: Record<string, string>;
+     onopen?: (response: Response) => Promise<void>;
+     onmessage?: (ev: EventSourceMessage) => void;
++    onbytes?: () => void;
+     onclose?: () => void;
+     onerror?: (err: any) => number | null | undefined | void;
+     openWhenHidden?: boolean;
+     fetch?: typeof fetch;
+ }
+-export declare function fetchEventSource(input: RequestInfo, { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onclose, onerror, openWhenHidden, fetch: inputFetch, ...rest }: FetchEventSourceInit): Promise<void>;
++export declare function fetchEventSource(input: RequestInfo, { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onbytes, onclose, onerror, openWhenHidden, fetch: inputFetch, ...rest }: FetchEventSourceInit): Promise<void>;
 diff --git a/lib/cjs/fetch.js b/lib/cjs/fetch.js
-index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..47be859185ab0276954300f06b1c74eafae62ba7 100644
+index ab40f1e..1d03297 100644
 --- a/lib/cjs/fetch.js
 +++ b/lib/cjs/fetch.js
-@@ -26,31 +26,33 @@ function fetchEventSource(input, _a) {
+@@ -17,7 +17,7 @@ exports.EventStreamContentType = 'text/event-stream';
+ const DefaultRetryInterval = 1000;
+ const LastEventId = 'last-event-id';
+ function fetchEventSource(input, _a) {
+-    var { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onclose, onerror, openWhenHidden, fetch: inputFetch } = _a, rest = __rest(_a, ["signal", "headers", "onopen", "onmessage", "onclose", "onerror", "openWhenHidden", "fetch"]);
++    var { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onbytes, onclose, onerror, openWhenHidden, fetch: inputFetch } = _a, rest = __rest(_a, ["signal", "headers", "onopen", "onmessage", "onbytes", "onclose", "onerror", "openWhenHidden", "fetch"]);
+     return new Promise((resolve, reject) => {
+         const headers = Object.assign({}, inputHeaders);
+         if (!headers.accept) {
+@@ -26,33 +26,35 @@ function fetchEventSource(input, _a) {
          let curRequestController;
          function onVisibilityChange() {
              curRequestController.abort();
@@ -40,9 +65,23 @@ index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..47be859185ab0276954300f06b1c74ea
 -                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: curRequestController.signal }));
 +                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: sig }));
                  await onopen(response);
-                 await parse_1.getBytes(response.body, parse_1.getLines(parse_1.getMessages(id => {
+-                await parse_1.getBytes(response.body, parse_1.getLines(parse_1.getMessages(id => {
++                const onChunk = parse_1.getLines(parse_1.getMessages(id => {
                      if (id) {
-@@ -67,11 +69,14 @@ function fetchEventSource(input, _a) {
+                         headers[LastEventId] = id;
+                     }
+@@ -61,17 +63,24 @@ function fetchEventSource(input, _a) {
+                     }
+                 }, retry => {
+                     retryInterval = retry;
+-                }, onmessage)));
++                }, onmessage));
++                await parse_1.getBytes(response.body, (arr) => {
++                    onbytes === null || onbytes === void 0 ? void 0 : onbytes();
++                    onChunk(arr);
++                });
+                 onclose === null || onclose === void 0 ? void 0 : onclose();
+                 dispose();
                  resolve();
              }
              catch (err) {
@@ -60,11 +99,36 @@ index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..47be859185ab0276954300f06b1c74ea
                      }
                      catch (innerErr) {
                          dispose();
+diff --git a/lib/esm/fetch.d.ts b/lib/esm/fetch.d.ts
+index 744cf66..c4f67c7 100644
+--- a/lib/esm/fetch.d.ts
++++ b/lib/esm/fetch.d.ts
+@@ -4,9 +4,10 @@ export interface FetchEventSourceInit extends RequestInit {
+     headers?: Record<string, string>;
+     onopen?: (response: Response) => Promise<void>;
+     onmessage?: (ev: EventSourceMessage) => void;
++    onbytes?: () => void;
+     onclose?: () => void;
+     onerror?: (err: any) => number | null | undefined | void;
+     openWhenHidden?: boolean;
+     fetch?: typeof fetch;
+ }
+-export declare function fetchEventSource(input: RequestInfo, { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onclose, onerror, openWhenHidden, fetch: inputFetch, ...rest }: FetchEventSourceInit): Promise<void>;
++export declare function fetchEventSource(input: RequestInfo, { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onbytes, onclose, onerror, openWhenHidden, fetch: inputFetch, ...rest }: FetchEventSourceInit): Promise<void>;
 diff --git a/lib/esm/fetch.js b/lib/esm/fetch.js
-index 31eb2278da53ba79d9fc78ea32d69f2d15f325ff..5c56bd9909f89156e4176b14f07c4e35edf91220 100644
+index 31eb227..4f95c96 100644
 --- a/lib/esm/fetch.js
 +++ b/lib/esm/fetch.js
-@@ -23,31 +23,33 @@ export function fetchEventSource(input, _a) {
+@@ -14,7 +14,7 @@ export const EventStreamContentType = 'text/event-stream';
+ const DefaultRetryInterval = 1000;
+ const LastEventId = 'last-event-id';
+ export function fetchEventSource(input, _a) {
+-    var { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onclose, onerror, openWhenHidden, fetch: inputFetch } = _a, rest = __rest(_a, ["signal", "headers", "onopen", "onmessage", "onclose", "onerror", "openWhenHidden", "fetch"]);
++    var { signal: inputSignal, headers: inputHeaders, onopen: inputOnOpen, onmessage, onbytes, onclose, onerror, openWhenHidden, fetch: inputFetch } = _a, rest = __rest(_a, ["signal", "headers", "onopen", "onmessage", "onbytes", "onclose", "onerror", "openWhenHidden", "fetch"]);
+     return new Promise((resolve, reject) => {
+         const headers = Object.assign({}, inputHeaders);
+         if (!headers.accept) {
+@@ -23,33 +23,35 @@ export function fetchEventSource(input, _a) {
          let curRequestController;
          function onVisibilityChange() {
              curRequestController.abort();
@@ -102,9 +166,23 @@ index 31eb2278da53ba79d9fc78ea32d69f2d15f325ff..5c56bd9909f89156e4176b14f07c4e35
 -                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: curRequestController.signal }));
 +                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: sig }));
                  await onopen(response);
-                 await getBytes(response.body, getLines(getMessages(id => {
+-                await getBytes(response.body, getLines(getMessages(id => {
++                const onChunk = getLines(getMessages(id => {
                      if (id) {
-@@ -64,11 +66,14 @@ export function fetchEventSource(input, _a) {
+                         headers[LastEventId] = id;
+                     }
+@@ -58,17 +60,24 @@ export function fetchEventSource(input, _a) {
+                     }
+                 }, retry => {
+                     retryInterval = retry;
+-                }, onmessage)));
++                }, onmessage));
++                await getBytes(response.body, (arr) => {
++                    onbytes === null || onbytes === void 0 ? void 0 : onbytes();
++                    onChunk(arr);
++                });
+                 onclose === null || onclose === void 0 ? void 0 : onclose();
+                 dispose();
                  resolve();
              }
              catch (err) {
