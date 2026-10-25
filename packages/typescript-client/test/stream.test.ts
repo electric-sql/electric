@@ -377,6 +377,135 @@ describe(`ShapeStream`, () => {
     }
   })
 
+  describe.each([
+    [
+      `ends cleanly`,
+      (controller: ReadableStreamDefaultController) => controller.close(),
+    ],
+    [
+      `breaks`,
+      (controller: ReadableStreamDefaultController) =>
+        controller.error(new Error(`connection reset`)),
+    ],
+  ])(`SSE body that %s before its up-to-date`, (_, endBody) => {
+    it(`resumes from the last applied offset with a long poll, then returns to SSE`, async () => {
+      const row = {
+        key: `row-1`,
+        value: { id: `1` },
+        headers: { operation: `insert`, relation: [`public`, `test`] },
+        offset: `3_0`,
+      }
+      const headers = (offset: string, contentType: string) => ({
+        'content-type': contentType,
+        'electric-handle': `handle-1`,
+        'electric-offset': offset,
+        'electric-cursor': `cursor-1`,
+        'electric-schema': `{"id":{"type":"text"}}`,
+      })
+
+      const requests: URL[] = []
+      let liveAfterCatchUp = false
+      const fetchMock = vi.fn((input: string | URL | Request) => {
+        const url = new URL(input.toString())
+        requests.push(url)
+
+        if (url.searchParams.get(`offset`) === `-1`) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                { headers: { control: `up-to-date` }, offset: `0_0` },
+              ]),
+              {
+                status: 200,
+                headers: {
+                  ...headers(`0_0`, `application/json`),
+                  'electric-up-to-date': ``,
+                },
+              }
+            )
+          )
+        }
+
+        if (url.searchParams.get(`live_sse`) !== `true`) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                row,
+                {
+                  headers: {
+                    control: `up-to-date`,
+                    global_last_seen_lsn: `5`,
+                  },
+                },
+              ]),
+              {
+                status: 200,
+                headers: {
+                  ...headers(`5_0`, `application/json`),
+                  'electric-up-to-date': ``,
+                },
+              }
+            )
+          )
+        }
+
+        if (url.searchParams.get(`offset`) === `0_0`) {
+          // A catch-up chunk: its header is the chunk's end, and the body
+          // stops before any up-to-date.
+          const body = new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(`data: ${JSON.stringify(row)}\n\n`)
+              )
+              // Let the client read the event before the body ends.
+              await resolveInMacrotask(undefined)
+              endBody(controller)
+            },
+          })
+          return Promise.resolve(
+            new Response(body, {
+              status: 200,
+              headers: headers(`5_0`, `text/event-stream`),
+            })
+          )
+        }
+
+        liveAfterCatchUp = true
+        return new Promise<Response>(() => {})
+      })
+
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        signal: aborter.signal,
+        fetchClient: fetchMock,
+        liveSse: true,
+      })
+
+      const received: string[] = []
+      stream.subscribe((messages) => {
+        for (const message of messages) {
+          if (isChangeMessage(message)) received.push(message.key)
+        }
+      })
+
+      await vi.waitFor(() => {
+        expect(liveAfterCatchUp).toBe(true)
+      })
+
+      const params = requests.map((url) => ({
+        offset: url.searchParams.get(`offset`),
+        sse: url.searchParams.get(`live_sse`),
+      }))
+      expect(params.slice(1)).toEqual([
+        { offset: `0_0`, sse: `true` },
+        { offset: `0_0`, sse: null },
+        { offset: `5_0`, sse: `true` },
+      ])
+      expect(received).toEqual([`row-1`])
+    })
+  })
+
   it(`reentrant requestSnapshot may re-enter bystander subscribers before their earlier callback completes`, async () => {
     const streamRow = {
       key: `stream-1`,

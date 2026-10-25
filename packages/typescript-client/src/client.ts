@@ -1389,7 +1389,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * or `false` if the response was ignored (stale) and the body should be skipped.
    * Throws on stale-retry (to trigger a retry with cache buster).
    */
-  async #onInitialResponse(response: Response): Promise<boolean> {
+  async #onInitialResponse(
+    response: Response,
+    isSseResponse = false
+  ): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
     const shapeKey = this.#currentFetchUrl
@@ -1425,6 +1428,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       responseCursor: headers.get(LIVE_CACHE_BUSTER_HEADER),
       responseSchema: getSchemaFromHeaders(headers),
       expiredHandle,
+      isSse: isSseResponse,
       now: Date.now(),
       maxStaleCacheRetries: this.#maxStaleCacheRetries,
       createCacheBuster,
@@ -1748,14 +1752,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     let ignoredStaleResponse = false
+    let buffer: Array<Message<T>> = []
     try {
-      let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
         headers: sseHeaders,
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
-          const shouldProcessBody = await this.#onInitialResponse(response)
+          const shouldProcessBody = await this.#onInitialResponse(
+            response,
+            true
+          )
           if (!shouldProcessBody) {
             ignoredStaleResponse = true
             throw new Error(`stale response ignored`)
@@ -1818,6 +1825,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const transition = this.#syncState.handleSseConnectionClosed({
         connectionDuration,
         wasAborted,
+        hadUnflushedMessages: buffer.length > 0,
         minConnectionDuration: this.#minSseConnectionDuration,
         maxShortConnections: this.#maxShortSseConnections,
       })
@@ -2208,6 +2216,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           responseOffset,
           responseCursor: null,
           expiredHandle: null,
+          isSse: false,
           now: Date.now(),
           maxStaleCacheRetries: this.#maxStaleCacheRetries,
           createCacheBuster,

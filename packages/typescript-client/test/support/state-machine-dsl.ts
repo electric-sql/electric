@@ -44,6 +44,7 @@ export function makeResponseInput(
     responseOffset: `0_0`,
     responseCursor: `cursor-1`,
     expiredHandle: undefined,
+    isSse: false,
     now: Date.now(),
     maxStaleCacheRetries: 3,
     createCacheBuster: () => `cb-1`,
@@ -372,6 +373,7 @@ export function pickRandomEvent(rng: () => number, now: number): EventSpec {
         input: {
           connectionDuration: randInt(10000),
           wasAborted: rng() > 0.7,
+          hadUnflushedMessages: rng() > 0.7,
           minConnectionDuration: 1000,
           maxShortConnections: 3,
         },

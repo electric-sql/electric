@@ -268,9 +268,27 @@ responses cannot overwrite it.
 
 - SSE up-to-date messages update offset via `upToDateOffset`
 - Non-SSE up-to-date messages preserve existing offset
+- SSE responses do not take the `electric-offset` header when they open.
+  LiveState holds it and applies it with the body's next up-to-date, before
+  that up-to-date's own offset, which still takes precedence. The client applies
+  an SSE body's messages only when an up-to-date arrives, while the header is
+  the end of the chunk the body is about to send, so taking it at open would
+  skip that chunk whenever the body ends first.
+- An SSE body that ends (cleanly, with an error, or aborted) with messages no
+  up-to-date has flushed drops them, and LiveState then long polls from the
+  same offset until the next up-to-date. A body that ends cleanly before its
+  up-to-date may be a complete catch-up chunk, so asking again over SSE could
+  return the same chunk forever; a long poll reads its whole body before taking
+  the header, so it moves past each chunk.
 
 **Enforcement**: Dedicated tests (`SSE up-to-date message updates offset`,
-`non-SSE up-to-date message preserves existing offset`).
+`non-SSE up-to-date message preserves existing offset`,
+`SSE response keeps the offset until an up-to-date`,
+`SSE up-to-date without an offset takes the response's header`,
+`SSE up-to-date offset still overrides the response's header`,
+`long polls after an SSE body ends with unflushed messages, until an up-to-date`,
+and `SSE body that ends cleanly / breaks before its up-to-date` in
+`stream.test.ts`).
 
 ### C7: Stale response always enters stale-retry
 
@@ -283,10 +301,13 @@ The `currentFields` (including any valid local handle) are preserved in the new
 
 ### C8: SSE state is private to LiveState
 
-`sseFallbackToLongPolling` and `consecutiveShortSseConnections` are private fields
-on `LiveState`, not carried in `SharedStateFields`. LiveState preserves SSE state
-through its own self-transitions (`handleResponseMetadata`, `onUpToDate`,
-`handleSseConnectionClosed`, `withHandle`) via a private `sseState` accessor.
+`sseFallbackToLongPolling`, `consecutiveShortSseConnections` and the C6
+pending SSE header and long-poll-until-up-to-date flag are private fields on `LiveState`, not carried in
+`SharedStateFields`. LiveState preserves SSE state through its own
+self-transitions (`handleResponseMetadata`, `onUpToDate`,
+`handleSseConnectionClosed`, `withHandle`) via a private `sseState` accessor,
+except that `onUpToDate` clears the pending header and the long-poll flag, and
+`handleResponseMetadata` replaces the pending header with the new response's.
 Other states don't carry SSE state — when transitioning from a non-Live state
 back to Live, SSE state resets to defaults.
 
