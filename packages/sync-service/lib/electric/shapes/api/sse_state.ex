@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Api.SseState do
     :request,
     :stream,
     :since_offset,
+    :catch_up_offset,
     :last_message_time,
     :keepalive_ref
   ]
@@ -16,6 +17,7 @@ defmodule Electric.Shapes.Api.SseState do
           request: Api.Request.t(),
           stream: Enumerable.t() | nil,
           since_offset: LogOffset.t(),
+          catch_up_offset: LogOffset.t() | nil,
           last_message_time: pos_integer(),
           keepalive_ref: reference()
         }

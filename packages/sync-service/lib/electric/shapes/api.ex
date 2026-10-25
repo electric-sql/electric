@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Api do
   alias __MODULE__.Response
   alias __MODULE__.SseState
 
-  import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
+  import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2, is_log_offset_lte: 2]
 
   require Logger
 
@@ -1061,64 +1061,22 @@ defmodule Electric.Shapes.Api do
 
   defp next_sse_event(%SseState{mode: :receive} = state) do
     %{
-      keepalive_ref: keepalive_ref,
       last_message_time: last_message_time,
-      request:
-        %{
-          api: %{
-            stack_id: stack_id,
-            keepalive_interval: keepalive_interval
-          },
-          handle: shape_handle,
-          new_changes_ref: ref
-        } = request,
+      request: %{
+        api: %{keepalive_interval: keepalive_interval},
+        new_changes_ref: ref
+      },
       since_offset: since_offset
     } = state
 
     receive do
+      # An earlier segment already read up to or past this change.
+      {^ref, :new_changes, latest_log_offset}
+      when is_log_offset_lte(latest_log_offset, since_offset) ->
+        {[], state}
+
       {^ref, :new_changes, latest_log_offset} ->
-        updated_request =
-          %{request | last_offset: latest_log_offset}
-          |> determine_global_last_seen_lsn()
-          |> determine_log_chunk_offset()
-          |> determine_up_to_date()
-
-        # This is usually but not always the `latest_log_offset`
-        # as per `determine_log_chunk_offset/1`.
-        end_offset = updated_request.chunk_end_offset
-
-        case Shapes.get_merged_log_stream(
-               stack_id,
-               shape_handle,
-               since: since_offset,
-               up_to: end_offset,
-               live_sse: true
-             ) do
-          {:ok, log} ->
-            Process.cancel_timer(keepalive_ref)
-
-            control_messages = maybe_up_to_date(updated_request, end_offset.tx_offset)
-            message_stream = Stream.concat(log, control_messages)
-            encoded_stream = encode_log(updated_request, message_stream)
-
-            current_time = System.monotonic_time(:millisecond)
-
-            new_keepalive_ref =
-              Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
-
-            {[],
-             %{
-               state
-               | mode: :emit,
-                 stream: encoded_stream,
-                 since_offset: end_offset,
-                 last_message_time: current_time,
-                 keepalive_ref: new_keepalive_ref
-             }}
-
-          {:error, _error} ->
-            {[], state}
-        end
+        stream_new_changes(state, latest_log_offset)
 
       {^ref, :shape_rotation} ->
         {[], %{state | mode: :done}}
@@ -1159,8 +1117,14 @@ defmodule Electric.Shapes.Api do
     # The JSON encoder groups stream elements by 500. So perhaps this
     # could be a larger number for more efficiency?
     case StreamSplit.take_and_drop(stream, 3) do
-      {[], _tail} ->
+      {[], _tail} when is_nil(state.catch_up_offset) ->
         {[], %{state | mode: :receive, stream: nil}}
+
+      {[], _tail} ->
+        stream_new_changes(
+          %{state | mode: :receive, stream: nil, catch_up_offset: nil},
+          state.catch_up_offset
+        )
 
       {head, tail} ->
         {head, %{state | stream: tail}}
@@ -1168,6 +1132,75 @@ defmodule Electric.Shapes.Api do
   end
 
   defp next_sse_event(%SseState{mode: :done} = state), do: {:halt, state}
+
+  defp stream_new_changes(%SseState{} = state, latest_log_offset) do
+    %{
+      keepalive_ref: keepalive_ref,
+      request:
+        %{
+          api: %{stack_id: stack_id, keepalive_interval: keepalive_interval},
+          handle: shape_handle,
+          new_changes_ref: ref
+        } = request,
+      since_offset: since_offset
+    } = state
+
+    # The chunk end and up-to-date are worked out from where this segment
+    # starts, not from the request's original offset, which the log may
+    # already have passed.
+    updated_request =
+      %{
+        request
+        | last_offset: latest_log_offset,
+          params: %{request.params | offset: since_offset}
+      }
+      |> determine_global_last_seen_lsn()
+      |> determine_log_chunk_offset()
+      |> determine_up_to_date()
+
+    # This is usually but not always the `latest_log_offset`
+    # as per `determine_log_chunk_offset/1`.
+    end_offset = updated_request.chunk_end_offset
+
+    case Shapes.get_merged_log_stream(
+           stack_id,
+           shape_handle,
+           since: since_offset,
+           up_to: end_offset,
+           live_sse: true
+         ) do
+      {:ok, log} ->
+        Process.cancel_timer(keepalive_ref)
+
+        control_messages = maybe_up_to_date(updated_request, end_offset.tx_offset)
+        message_stream = Stream.concat(log, control_messages)
+        encoded_stream = encode_log(updated_request, message_stream)
+
+        current_time = System.monotonic_time(:millisecond)
+
+        new_keepalive_ref =
+          Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+        # A segment that stops at a chunk boundary carries no up-to-date, so
+        # the rest of the log follows it at once rather than on the next change.
+        catch_up_offset =
+          if updated_request.response.up_to_date, do: nil, else: latest_log_offset
+
+        {[],
+         %{
+           state
+           | mode: :emit,
+             stream: encoded_stream,
+             since_offset: end_offset,
+             catch_up_offset: catch_up_offset,
+             last_message_time: current_time,
+             keepalive_ref: new_keepalive_ref
+         }}
+
+      {:error, _error} ->
+        {[], state}
+    end
+  end
 
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
