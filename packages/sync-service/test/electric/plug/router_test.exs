@@ -2562,6 +2562,26 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"value" => %{"value" => "30"}}, _] = Jason.decode!(conn.resp_body)
     end
 
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), tag TEXT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, tag) VALUES (1, 1, 'a'), (2, 2, 'b')"
+         ]
+    test "allows an empty typed array beside a subquery in where clause", %{opts: opts} do
+      where = "tag = ANY(ARRAY[]::text[]) OR parent_id IN (SELECT id FROM parent WHERE value = 1)"
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
+               |> Router.call(opts)
+
+      assert [
+               %{"value" => %{"id" => "1", "parent_id" => "1", "tag" => "a"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = Jason.decode!(conn.resp_body)
+    end
+
     test "return 400 if subquery references unknown table", %{opts: opts} do
       assert %{status: 400} =
                conn("GET", "/v1/shape", %{

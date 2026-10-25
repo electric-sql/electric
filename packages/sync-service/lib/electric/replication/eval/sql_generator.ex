@@ -259,6 +259,12 @@ defmodule Electric.Replication.Eval.SqlGenerator do
     {uuid_literal(value), @prec_atom}
   end
 
+  # Postgres cannot type an empty `ARRAY[]` on its own ("cannot determine type
+  # of empty array"), so a constant-folded empty array keeps its element type.
+  defp to_sql_prec(%Const{type: {:array, type}, value: []}) when is_atom(type) do
+    {"ARRAY[]::#{type}[]", @prec_atom}
+  end
+
   defp to_sql_prec(%Const{type: {:array, type}, value: value}) when is_list(value) do
     elements = Enum.map_join(value, ", ", &const_list_element_to_sql(&1, type))
     {"ARRAY[#{elements}]", @prec_atom}

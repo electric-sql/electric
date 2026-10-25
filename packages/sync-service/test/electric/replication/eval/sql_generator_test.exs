@@ -457,6 +457,10 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       ast = %Array{elements: []}
       assert SqlGenerator.to_sql(ast) == "ARRAY[]"
     end
+
+    test "constant-folded empty typed array keeps its element type" do
+      assert SqlGenerator.to_sql(%Const{type: {:array, :text}, value: []}) == "ARRAY[]::text[]"
+    end
   end
 
   describe "row expressions" do
