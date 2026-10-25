@@ -184,6 +184,7 @@ describe(`shape stream state machine`, () => {
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 5000,
       wasAborted: false,
+      advancedOffset: false,
       minConnectionDuration: 1000,
       maxShortConnections: 3,
     })
@@ -203,6 +204,7 @@ describe(`shape stream state machine`, () => {
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
       wasAborted: false,
+      advancedOffset: false,
       minConnectionDuration: 1000,
       maxShortConnections: 3,
     })
@@ -222,6 +224,7 @@ describe(`shape stream state machine`, () => {
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
       wasAborted: false,
+      advancedOffset: false,
       minConnectionDuration: 1000,
       maxShortConnections: 3,
     })
@@ -242,12 +245,35 @@ describe(`shape stream state machine`, () => {
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100, // short duration, but aborted intentionally
       wasAborted: true,
+      advancedOffset: false,
       minConnectionDuration: 1000,
       maxShortConnections: 3,
     })
 
     expect(transition.state).toBeInstanceOf(LiveState)
     expect(transition.state.consecutiveShortSseConnections).toBe(1) // unchanged
+    expect(transition.wasShortConnection).toBe(false)
+    expect(transition.fellBackToLongPolling).toBe(false)
+  })
+
+  // A short connection that moved the offset is a catch-up the server
+  // closed after sending it, not a sign that a proxy is buffering.
+  it(`short connection that advanced the offset leaves the counter unchanged`, () => {
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 2,
+    })
+
+    const transition = live.handleSseConnectionClosed({
+      connectionDuration: 10,
+      wasAborted: false,
+      advancedOffset: true,
+      minConnectionDuration: 1000,
+      maxShortConnections: 3,
+    })
+
+    expect(transition.state).toBeInstanceOf(LiveState)
+    expect(transition.state.consecutiveShortSseConnections).toBe(2)
+    expect(transition.state.sseFallbackToLongPolling).toBe(false)
     expect(transition.wasShortConnection).toBe(false)
     expect(transition.fellBackToLongPolling).toBe(false)
   })
@@ -538,6 +564,7 @@ describe(`shape stream state machine`, () => {
     const transition = syncing.handleSseConnectionClosed({
       connectionDuration: 100,
       wasAborted: false,
+      advancedOffset: false,
       minConnectionDuration: 1000,
       maxShortConnections: 3,
     })
@@ -1128,6 +1155,7 @@ describe(`tier-2: transition truth table`, () => {
       input: {
         connectionDuration: 5000,
         wasAborted: false,
+        advancedOffset: false,
         minConnectionDuration: 1000,
         maxShortConnections: 3,
       },

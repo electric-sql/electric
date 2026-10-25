@@ -312,6 +312,26 @@ fetching state — so against a conforming server the first up-to-date a replayi
 stream sees never carries a cursor and suppression does not fire. The dedicated
 test drives the branch with a synthetic cursor header on a non-live response.
 
+### C10: An SSE response that moved the offset is not a short connection
+
+`LiveState.handleSseConnectionClosed` counts a non-aborted SSE response that
+ended within `minConnectionDuration` as a short connection unless its body
+delivered messages and the stream's offset after the response differs from the
+offset the request was made at. The offset header alone does not exempt a
+response. Three short connections in a row fall back to long polling. The server
+answers a live SSE request that is behind the log end with the catch-up and then
+closes it, so a burst of writes ends several SSE responses in a row within
+milliseconds; each one delivered messages and moved the offset, so no proxy
+buffered it. Such a response neither increments nor resets the counter, and it
+is not followed by the short-connection backoff. A response that carried
+messages but left the offset where it was (a replay of the same operations)
+still counts, so a loop at one offset still backs off and falls back.
+
+**Enforcement**: Dedicated tests (`short connection that advanced the offset leaves the counter unchanged`,
+`keeps using SSE when the server closes catch-up responses that carried messages`,
+`falls back to long polling when short SSE responses carry messages but leave the offset where it was`,
+`falls back to long polling after three short SSE responses without messages`).
+
 ## Shape notification semantics
 
 The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers
@@ -389,6 +409,7 @@ observing an intermediate empty-rows notification. The
 | C7         | -     | yes         | yes            |
 | C8         | -     | -           | yes            |
 | C9         | -     | -           | yes            |
+| C10        | -     | -           | yes            |
 
 ### Code -> Doc: Is each test derived from the spec?
 
@@ -400,7 +421,7 @@ observing an intermediate empty-rows notification. The
 | Fuzz testing                   | I0-I12 (all invariants)     |
 | Mutation testing               | I0-I12 (robustness)         |
 | shouldUseSse guard tests       | LiveState SSE behavior      |
-| SSE connection closed tests    | LiveState SSE fallback      |
+| SSE connection closed tests    | LiveState SSE fallback, C10 |
 | applyUrlParams tests           | URL construction            |
 | Schema adoption tests          | C4                          |
 | 204/200 lastSyncedAt tests     | C5                          |

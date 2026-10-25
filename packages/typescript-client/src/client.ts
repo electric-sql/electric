@@ -1748,6 +1748,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     let ignoredStaleResponse = false
+    let receivedMessages = false
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
@@ -1763,6 +1764,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         },
         onmessage: (event: EventSourceMessage) => {
           if (event.data) {
+            receivedMessages = true
             // event.data is a single JSON object
             const schema = this.#syncState.schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
             const message = this.#messageParser.parse<Message<T>>(
@@ -1818,6 +1820,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const transition = this.#syncState.handleSseConnectionClosed({
         connectionDuration,
         wasAborted,
+        // The header alone can move the offset; it counts only with messages.
+        advancedOffset:
+          receivedMessages &&
+          this.#syncState.offset !==
+            fetchUrl.searchParams.get(OFFSET_QUERY_PARAM),
         minConnectionDuration: this.#minSseConnectionDuration,
         maxShortConnections: this.#maxShortSseConnections,
       })
