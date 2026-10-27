@@ -1078,6 +1078,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return this.#requestShape()
       }
 
+      // A caller-approved body retry must not reuse a cached invalid response.
+      if (
+        e instanceof SyntaxError ||
+        (e instanceof FetchError && e.status >= 200 && e.status < 300)
+      ) {
+        this.#pendingRequestShapeCacheBuster = createCacheBuster()
+      }
+
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
@@ -1389,7 +1397,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * or `false` if the response was ignored (stale) and the body should be skipped.
    * Throws on stale-retry (to trigger a retry with cache buster).
    */
-  async #onInitialResponse(response: Response): Promise<boolean> {
+  async #onInitialResponse(
+    response: Response,
+    acceptBody?: (schema: Schema) => void
+  ): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
     const shapeKey = this.#currentFetchUrl
@@ -1430,6 +1441,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createCacheBuster,
     })
 
+    // Accept long-poll metadata only after the body has parsed successfully.
+    if (transition.action === `accepted`) acceptBody?.(transition.state.schema!)
     this.#syncState = transition.state
 
     // Clear recovery guard on 204 (no-content), since the empty body means
@@ -1443,8 +1456,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (transition.action === `stale-retry`) {
-      // Cancel the response body to release the connection before retrying.
-      await response.body?.cancel()
+      // Long-poll bodies are already consumed; SSE bodies still need cancellation.
+      if (!response.bodyUsed) await response.body?.cancel()
       if (transition.exceededMaxRetries) {
         if (shapeKey) {
           // Clear the expired entry — keeping it only poisons future sessions.
@@ -1706,26 +1719,31 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
 
     this.#connected = true
-    const shouldProcessBody = await this.#onInitialResponse(response)
-    if (!shouldProcessBody) return
-
-    const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
-    const messages = res || `[]`
-    const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
+    let batch!: Array<Message<T>>
+    const shouldProcessBody = await this.#onInitialResponse(
+      response,
+      (schema) => {
+        batch = this.#messageParser.parse<Array<Message<T>>>(
+          res || `[]`,
+          schema
+        )
 
-    if (!Array.isArray(batch)) {
-      const preview = bigintSafeStringify(batch)?.slice(0, 200)
-      throw new FetchError(
-        response.status,
-        `Received non-array response body from shape endpoint. ` +
-          `This may indicate a proxy or CDN is returning an unexpected response. ` +
-          `Expected a JSON array, got ${typeof batch}: ${preview}`,
-        undefined,
-        Object.fromEntries(response.headers.entries()),
-        fetchUrl.toString()
-      )
-    }
+        if (!Array.isArray(batch)) {
+          const preview = bigintSafeStringify(batch)?.slice(0, 200)
+          throw new FetchError(
+            response.status,
+            `Received non-array response body from shape endpoint. ` +
+              `This may indicate a proxy or CDN is returning an unexpected response. ` +
+              `Expected a JSON array, got ${typeof batch}: ${preview}`,
+            undefined,
+            Object.fromEntries(response.headers.entries()),
+            fetchUrlString
+          )
+        }
+      }
+    )
+    if (!shouldProcessBody) return
 
     await this.#onMessages(batch)
   }

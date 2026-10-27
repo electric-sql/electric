@@ -1681,6 +1681,211 @@ describe(`ShapeStream`, () => {
     expect(requestCount).toBeLessThan(200)
   })
 
+  describe(`long-poll response acceptance`, () => {
+    it.each([
+      { body: `[`, offset: `-1`, handle: undefined },
+      { body: `{}`, offset: `-1`, handle: undefined },
+      { body: `[`, offset: `1_0`, handle: `original-handle` },
+      { body: `{}`, offset: `1_0`, handle: `original-handle` },
+    ] as const)(
+      `retries $body from $offset without adopting rejected metadata or prefetched data`,
+      async ({ body, offset, handle }) => {
+        const requests: URL[] = []
+        let prefetchedRequestAborted = false
+        let rejectedOnce = false
+        let stateAtError: { offset: string; handle?: string } | undefined
+        let stream: ShapeStream<{ id: string }>
+        const onError = vi.fn(() => {
+          stateAtError = {
+            offset: stream.lastOffset,
+            handle: stream.shapeHandle,
+          }
+          return {}
+        })
+        const messages = vi.fn()
+        const subscriberError = vi.fn()
+        const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+          const url = new URL(input.toString())
+          requests.push(url)
+          if (!rejectedOnce) {
+            rejectedOnce = true
+            return new Response(body, {
+              headers: {
+                'electric-handle': `rejected-handle`,
+                'electric-offset': `10_0`,
+                'electric-schema': JSON.stringify({ id: { type: `int4` } }),
+                'electric-cursor': `rejected-cursor`,
+              },
+            })
+          }
+          // The SDK starts this prefetch from headers before parsing the bad body.
+          // A retry must discard it rather than consume data past the rejected chunk.
+          if (url.searchParams.get(`offset`) === `10_0`) {
+            return new Promise<Response>((_resolve, reject) => {
+              const abort = () => {
+                prefetchedRequestAborted = true
+                reject(new DOMException(`Aborted`, `AbortError`))
+              }
+              if (init?.signal?.aborted) abort()
+              else
+                init?.signal?.addEventListener(`abort`, abort, { once: true })
+            })
+          }
+          return new Response(
+            JSON.stringify([
+              {
+                key: `row-1`,
+                value: { id: `row-1` },
+                headers: { operation: `insert` },
+                offset: `20_0`,
+              },
+              { headers: { control: `up-to-date` } },
+            ]),
+            {
+              headers: {
+                'electric-handle': `accepted-handle`,
+                'electric-offset': `20_0`,
+                'electric-schema': JSON.stringify({ id: { type: `text` } }),
+                'electric-cursor': `accepted-cursor`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        })
+        stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `test` },
+          offset,
+          handle,
+          signal: aborter.signal,
+          subscribe: false,
+          fetchClient: fetchMock,
+          onError,
+          backoffOptions: { initialDelay: 1, maxDelay: 1, multiplier: 1 },
+        })
+        try {
+          stream.subscribe(messages, subscriberError)
+          await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+          expect(stateAtError).toEqual({ offset, handle })
+          await vi.waitFor(() => expect(messages).toHaveBeenCalledOnce())
+          const retry = requests.find((url) =>
+            url.searchParams.has(`cache-buster`)
+          )
+          expect(retry?.searchParams.get(`offset`)).toBe(offset)
+          expect(retry?.searchParams.get(`handle`)).toBe(handle ?? null)
+          expect(retry?.searchParams.get(`cursor`)).not.toBe(`rejected-cursor`)
+          expect(prefetchedRequestAborted).toBe(true)
+          expect(messages.mock.calls[0][0][0].value).toEqual({ id: `row-1` })
+          expect(stream.lastOffset).toBe(`20_0`)
+          expect(stream.shapeHandle).toBe(`accepted-handle`)
+          expect(subscriberError).not.toHaveBeenCalled()
+        } finally {
+          aborter.abort()
+        }
+      }
+    )
+
+    it(`retries a rejected live response with the last accepted cursor and schema`, async () => {
+      const requests: URL[] = []
+      let stateAtError: { offset: string; handle?: string } | undefined
+      let stream: ShapeStream<{ id: string }>
+      const onError = vi.fn(() => {
+        stateAtError = { offset: stream.lastOffset, handle: stream.shapeHandle }
+        return {}
+      })
+      const row = (id: string) => [
+        { key: id, value: { id }, headers: { operation: `insert` } },
+        { headers: { control: `up-to-date` } },
+      ]
+      const fetchMock = vi.fn<typeof fetch>(async (input) => {
+        requests.push(new URL(input.toString()))
+        const rejected = requests.length === 2
+        return new Response(
+          rejected
+            ? `[`
+            : JSON.stringify(row(requests.length === 1 ? `first` : `second`)),
+          {
+            headers: {
+              'electric-handle': rejected
+                ? `rejected-handle`
+                : `accepted-handle`,
+              'electric-offset': rejected
+                ? `10_0`
+                : requests.length === 1
+                  ? `1_0`
+                  : `2_0`,
+              'electric-schema': JSON.stringify({
+                id: { type: rejected ? `int4` : `text` },
+              }),
+              'electric-cursor': rejected
+                ? `rejected-cursor`
+                : requests.length === 1
+                  ? `first-cursor`
+                  : `second-cursor`,
+              'electric-up-to-date': ``,
+            },
+          }
+        )
+      })
+      const messages = vi.fn((batch: Message<{ id: string }>[]) => {
+        if (
+          batch.some(
+            (message) =>
+              isChangeMessage(message) && message.value.id === `second`
+          )
+        )
+          aborter.abort()
+      })
+      stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        signal: aborter.signal,
+        fetchClient: fetchMock,
+        onError,
+        backoffOptions: { initialDelay: 1, maxDelay: 1, multiplier: 1 },
+      })
+      stream.subscribe(messages)
+      await vi.waitFor(() => expect(messages).toHaveBeenCalledTimes(2))
+      expect(stateAtError).toEqual({ offset: `1_0`, handle: `accepted-handle` })
+      expect(requests[2].searchParams.get(`offset`)).toBe(`1_0`)
+      expect(requests[2].searchParams.get(`handle`)).toBe(`accepted-handle`)
+      expect(requests[2].searchParams.get(`cursor`)).toBe(`first-cursor`)
+      expect(requests[2].searchParams.get(`cache-buster`)).toBeTruthy()
+      expect(
+        messages.mock.calls.map(([batch]) =>
+          batch.filter(isChangeMessage).map((message) => message.value.id)
+        )
+      ).toEqual([[`first`], [`second`]])
+      expect(stream.lastOffset).toBe(`2_0`)
+    })
+
+    it(`preserves the caller's stop policy and SyntaxError type for invalid JSON`, async () => {
+      const onError = vi.fn()
+      const subscriberError = vi.fn()
+      const stream = new ShapeStream({
+        url: shapeUrl,
+        params: { table: `test` },
+        signal: aborter.signal,
+        fetchClient: async () =>
+          new Response(`[`, {
+            headers: {
+              'electric-handle': `rejected-handle`,
+              'electric-offset': `10_0`,
+              'electric-schema': `{}`,
+              'electric-up-to-date': ``,
+            },
+          }),
+        onError,
+      })
+      stream.subscribe(() => {}, subscriberError)
+      await vi.waitFor(() => expect(subscriberError).toHaveBeenCalledOnce())
+      expect(onError.mock.calls[0][0]).toBeInstanceOf(SyntaxError)
+      expect(subscriberError.mock.calls[0][0]).toBe(onError.mock.calls[0][0])
+      expect(stream.lastOffset).toBe(`-1`)
+      expect(stream.shapeHandle).toBeUndefined()
+    })
+  })
+
   describe(`HTTP URL warning`, () => {
     let windowWasPresent: boolean
     let originalWindow: typeof globalThis.window
