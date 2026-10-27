@@ -104,6 +104,15 @@ function createCacheBuster(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 }
 
+/**
+ * Subscriber error callbacks receive an `Error`, but a custom `fetchClient` can
+ * reject with anything (a string, a plain object, an `Error` from another realm).
+ * Wrapping keeps the value visible to subscribers instead of dropping it.
+ */
+function asError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err), { cause: err })
+}
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -884,9 +893,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
                 `Error: ${err instanceof Error ? err.message : String(err)}`,
               new Error(`stack trace`)
             )
-            if (err instanceof Error) {
-              this.#sendErrorToSubscribers(err)
-            }
+            this.#sendErrorToSubscribers(asError(err))
             this.#teardown()
             return
           }
@@ -911,18 +918,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
-        if (err instanceof Error) {
-          this.#sendErrorToSubscribers(err)
-        }
+        this.#sendErrorToSubscribers(asError(err))
         this.#teardown()
         return
       }
 
       // No onError handler provided, this is an unrecoverable error
       // Notify subscribers and throw
-      if (err instanceof Error) {
-        this.#sendErrorToSubscribers(err)
-      }
+      this.#sendErrorToSubscribers(asError(err))
       this.#teardown()
       throw err
     }

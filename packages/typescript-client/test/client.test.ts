@@ -924,6 +924,89 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     expect(callCount).toBe(1)
   })
 
+  it(`should notify subscribers when it gives up on a non-Error rejection`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let callCount = 0
+    const subscriberErrors: Array<Error> = []
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      // The SSE transport swallows non-`FetchError` rejections and falls back to
+      // long polling, so pin the transport to hit the teardown path directly.
+      liveSse: false,
+      fetchClient: async () => {
+        callCount++
+        throw `upstream exploded`
+      },
+      // Returning nothing means "don't retry", so the stream tears down on the
+      // first failure.
+      onError: () => undefined,
+    })
+
+    const unsub = shapeStream.subscribe(
+      () => unsub(),
+      (err) => {
+        subscriberErrors.push(err)
+      }
+    )
+
+    await vi.waitFor(
+      () => {
+        expect(callCount).toBe(1)
+        expect(subscriberErrors).toHaveLength(1)
+        expect(shapeStream.isConnected()).false
+      },
+      { timeout: 1000 }
+    )
+
+    const err = subscriberErrors[0]
+    expect(err).toBeInstanceOf(Error)
+    expect(err.message).toBe(`upstream exploded`)
+    expect(err.cause).toBe(`upstream exploded`)
+    unsub()
+  })
+
+  it(`should notify subscribers of a non-Error rejection when there is no onError handler`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const rejection = { code: `ERR_UPSTREAM` }
+    const subscriberErrors: Array<Error> = []
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      liveSse: false,
+      fetchClient: async () => {
+        throw rejection
+      },
+    })
+
+    const unsub = shapeStream.subscribe(
+      () => unsub(),
+      (err) => {
+        subscriberErrors.push(err)
+      }
+    )
+
+    await vi.waitFor(() => expect(subscriberErrors).toHaveLength(1), {
+      timeout: 1000,
+    })
+
+    expect(subscriberErrors[0]).toBeInstanceOf(Error)
+    expect(subscriberErrors[0].cause).toEqual(rejection)
+    unsub()
+  })
+
   it(`should set isConnected to false after fetch if not subscribed`, async ({
     issuesTableUrl,
     aborter,
