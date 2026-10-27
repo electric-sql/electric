@@ -670,6 +670,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
+  #running = false
   #syncState: ShapeStreamState
   #connected: boolean = false
   #mode: LogMode
@@ -838,6 +839,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #start(): Promise<void> {
+    if (this.#running) return
+    this.#running = true
+    try {
+      await this.#run()
+    } finally {
+      this.#running = false
+      // A quick resume can arrive before the paused request finishes aborting.
+      if (
+        this.#syncState instanceof PausedState &&
+        !(this.#syncState.resume() instanceof ErrorState) &&
+        !this.#pauseLock.isPaused &&
+        !this.options.signal?.aborted &&
+        (this.options.subscribe || !this.#syncState.isUpToDate)
+      ) {
+        this.#start().catch(() => {})
+      }
+    }
+  }
+
+  async #run(): Promise<void> {
     this.#started = true
     this.#subscribeToWakeDetection()
 
@@ -893,9 +914,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Clear the error since we're retrying
           this.#error = null
+          const pausedState =
+            this.#syncState instanceof PausedState ? this.#syncState : undefined
+          if (pausedState) this.#syncState = pausedState.resume()
           if (this.#syncState instanceof ErrorState) {
             this.#syncState = this.#syncState.retry()
           }
+          if (pausedState) this.#syncState = this.#syncState.pause()
           this.#fastLoopConsecutiveCount = 0
           this.#recentRequestEntries = []
 
@@ -906,8 +931,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           // Restart from current offset
-          this.#started = false
-          return this.#start()
+          return this.#run()
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
@@ -974,7 +998,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     // ErrorState should never reach the request loop — re-throw so
-    // #start's catch block can route it through onError properly.
+    // #run's catch block can route it through onError properly.
     if (this.#syncState instanceof ErrorState) {
       throw this.#syncState.error
     }
@@ -1015,6 +1039,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       url,
       resumingFromPause
     )
+
+    // Auth resolution may span a pause/resume; rebuild the catch-up request.
+    if (this.#syncState instanceof PausedState) {
+      return this.#requestShape(activeCacheBuster)
+    }
 
     if (activeCacheBuster) {
       fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, activeCacheBuster)
@@ -1112,7 +1141,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       } else {
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
-        // body of a response, so we exit the loop and let #start handle it
+        // body of a response, so we exit the loop and let #run handle it
         // Note: We don't notify subscribers here because onError might recover
         throw e
       }
@@ -1793,7 +1822,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (requestAbortController.signal.aborted) {
         // An abort during SSE stream parsing produces a raw AbortError
         // instead of going through createFetchWithBackoff -- wrap it so
-        // #start handles it correctly.
+        // #run handles it correctly.
         throw new FetchBackoffAbortError()
       }
       // Re-throw known Electric errors so the caller can handle them
