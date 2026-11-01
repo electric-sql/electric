@@ -2169,6 +2169,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const snapshotReason = `snapshot-${++this.#snapshotCounter}`
 
     this.#pauseLock.acquire(snapshotReason)
+    const startedOnColdStart = this.#syncState.offset === `now`
 
     // Warn if the snapshot holds the pause lock for too long — this likely
     // indicates a hung fetch or leaked lock. Visibility pauses are
@@ -2201,7 +2202,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       // On cold start the stream's offset is still at "now". Advance it
       // to the snapshot's position so no updates are missed in between.
-      if (responseOffset !== null || responseHandle !== null) {
+      // Only a cold start may move the stream: a subset snapshot covers its
+      // own rows only, so moving a stream that is already running to its
+      // offset would skip the changes of every other row logged in between.
+      // Snapshots started on a cold start run concurrently and finish in any
+      // order, and the stream has read nothing yet, so the earliest one wins.
+      const currentOffset = this.#syncState.offset
+      const shouldAdvance =
+        startedOnColdStart &&
+        (currentOffset === `now`
+          ? responseOffset !== null || responseHandle !== null
+          : responseOffset !== null &&
+            responseHandle === this.#syncState.handle &&
+            isOffsetBefore(responseOffset, currentOffset))
+      if (shouldAdvance) {
         const transition = this.#syncState.handleResponseMetadata({
           status: 200,
           responseHandle,
@@ -2437,6 +2451,27 @@ function getSchemaFromHeaders(
     return {}
   }
   return JSON.parse(schemaHeader)
+}
+
+/**
+ * Whether log offset `a` comes before log offset `b`. Offsets that are not a
+ * log position, like `-1` or `now`, are not ordered and return false. A new
+ * shape answers `0_inf`, the end of its initial snapshot, which comes before
+ * every logged offset.
+ */
+function isOffsetBefore(a: Offset, b: Offset): boolean {
+  const parse = (offset: Offset): [bigint, number] | null => {
+    const match = /^(\d+)_(\d+|inf)$/.exec(offset)
+    if (!match) return null
+    return [BigInt(match[1]), match[2] === `inf` ? Infinity : Number(match[2])]
+  }
+  const parsedA = parse(a)
+  const parsedB = parse(b)
+  if (!parsedA || !parsedB) return false
+  return (
+    parsedA[0] < parsedB[0] ||
+    (parsedA[0] === parsedB[0] && parsedA[1] < parsedB[1])
+  )
 }
 
 /**

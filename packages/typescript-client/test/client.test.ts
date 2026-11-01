@@ -4,6 +4,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import {
   testWithIssuesTable as it,
   testWithBigintTable,
+  IssueRow,
+  UpdateIssueFn,
 } from './support/test-context'
 import {
   ShapeStream,
@@ -1483,6 +1485,125 @@ function waitForFetch(stream: ShapeStream): Promise<void> {
   }).finally(() => unsub())
 }
 
+// A fetch client that holds the live requests until released, and can hold
+// back the response of one snapshot after the server has taken it, so the
+// order of the stream's requests is deterministic
+function createHoldingFetch() {
+  let releaseLiveRequests = () => {}
+  const liveRequestsReleased = new Promise<void>(
+    (resolve) => (releaseLiveRequests = resolve)
+  )
+  const state = {
+    isLiveRequestHeld: false,
+    heldSnapshot: null as null | {
+      match: string
+      received: () => void
+      released: Promise<void>
+    },
+    heldSnapshotResponse: null as null | { handle: string; offset: string },
+  }
+
+  const fetchClient: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.searchParams.get(`live`) === `true`) {
+      state.isLiveRequestHeld = true
+      await new Promise<void>((resolve, reject) => {
+        init?.signal?.addEventListener(`abort`, () =>
+          reject(init.signal!.reason)
+        )
+        void liveRequestsReleased.then(resolve)
+      }).finally(() => (state.isLiveRequestHeld = false))
+    }
+
+    const response = await fetch(input, init)
+    const heldSnapshot = state.heldSnapshot
+    const request = `${url} ${typeof init?.body === `string` ? init.body : ``}`
+    if (heldSnapshot && request.includes(heldSnapshot.match)) {
+      state.heldSnapshot = null
+      state.heldSnapshotResponse = {
+        handle: response.headers.get(`electric-handle`)!,
+        offset: response.headers.get(`electric-offset`)!,
+      }
+      // The server finishes the snapshot once its body is read, so only its
+      // delivery to the stream is held
+      const body = await response.arrayBuffer()
+      heldSnapshot.received()
+      await heldSnapshot.released
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      })
+    }
+    return response
+  }
+
+  const holdSnapshot = (match: string) => {
+    let received = () => {}
+    let release = () => {}
+    const receivedPromise = new Promise<void>((resolve) => (received = resolve))
+    const released = new Promise<void>((resolve) => (release = resolve))
+    state.heldSnapshot = { match, received, released }
+    return { received: receivedPromise, release }
+  }
+
+  return { state, fetchClient, releaseLiveRequests, holdSnapshot }
+}
+
+// Waits until the shape log has the change, as a snapshot only reflects it in
+// its offset once Electric has logged it
+async function waitForLoggedTitle(
+  table: string,
+  from: { handle: string; offset: string },
+  title: string,
+  where?: string
+) {
+  const url = new URL(`${BASE_URL}/v1/shape`)
+  url.searchParams.set(`table`, table)
+  if (where) url.searchParams.set(`where`, where)
+  url.searchParams.set(`handle`, from.handle)
+  url.searchParams.set(`offset`, from.offset)
+  url.searchParams.set(`log`, `changes_only`)
+  await vi.waitFor(
+    async () => {
+      const messages = (await (await fetch(url)).json()) as Message<Row>[]
+      expect(
+        messages.some(
+          (message) => isChangeMessage(message) && message.value.title === title
+        )
+      ).toBe(true)
+    },
+    { timeout: 10000 }
+  )
+}
+
+// Electric only replicates a new table once a shape of it exists, so this
+// waits for that through a shape of another row, leaving the shapes under test
+// new
+async function waitForReplication(
+  table: string,
+  id: string,
+  updateIssue: UpdateIssueFn
+) {
+  const where = `id = '${id}'`
+  const url = new URL(`${BASE_URL}/v1/shape`)
+  url.searchParams.set(`table`, table)
+  url.searchParams.set(`where`, where)
+  url.searchParams.set(`offset`, `-1`)
+  const response = await fetch(url)
+  await response.text()
+  await updateIssue({ id, title: `replicated` })
+  await waitForLoggedTitle(
+    table,
+    {
+      handle: response.headers.get(`electric-handle`)!,
+      offset: response.headers.get(`electric-offset`)!,
+    },
+    `replicated`,
+    where
+  )
+}
+
 // Simple SSE parser that buffers lines until an event is complete
 // And filters out events that don't pass the filter function
 function createSSEFilterStream(filterFn: (event: string) => boolean) {
@@ -1657,6 +1778,124 @@ describe.for(fetchAndSse)(
           const row = shape.currentRows.find((r) => r.id === id)
           expect(row?.title).toBe(`updated-after-snapshot`)
         },
+        { timeout: 10000 }
+      )
+    })
+
+    it(`should not skip changes to other rows when a snapshot is requested on a running stream`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id1, id2, id3] = await insertIssues(
+        { title: `row 1` },
+        { title: `row 2` },
+        { title: `row 3` }
+      )
+      await waitForReplication(issuesTableUrl, id3, updateIssue)
+      const holdingFetch = createHoldingFetch()
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+        fetchClient: holdingFetch.fetchClient,
+      })
+      const shape = new Shape(shapeStream)
+
+      await shape.requestSnapshot({ where: `id = $1`, params: { 1: id1 } })
+      await vi.waitFor(() =>
+        expect(holdingFetch.state.isLiveRequestHeld).toBe(true)
+      )
+      const offsetBeforeUpdate = shapeStream.lastOffset
+
+      // The stream cannot read this update yet, as its live request is held
+      await updateIssue({ id: id1, title: `row 1 updated` })
+      await waitForLoggedTitle(
+        issuesTableUrl,
+        { handle: shapeStream.shapeHandle!, offset: offsetBeforeUpdate },
+        `row 1 updated`
+      )
+
+      // A snapshot of another row, taken after the update
+      await shape.requestSnapshot({ where: `id = $1`, params: { 1: id2 } })
+      expect(shapeStream.lastOffset).toBe(offsetBeforeUpdate)
+
+      holdingFetch.releaseLiveRequests()
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === id1)
+          expect(row?.title).toBe(`row 1 updated`)
+        },
+        { timeout: 10000 }
+      )
+    })
+
+    it(`should resume from the earliest of the snapshots requested on a cold start`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id1, id2, id3] = await insertIssues(
+        { title: `row 1` },
+        { title: `row 2` },
+        { title: `row 3` }
+      )
+
+      await waitForReplication(issuesTableUrl, id3, updateIssue)
+
+      const holdingFetch = createHoldingFetch()
+      const shapeStream = new ShapeStream<IssueRow>({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+        fetchClient: holdingFetch.fetchClient,
+      })
+      const updatedTitles: string[] = []
+      shapeStream.subscribe((messages) => {
+        for (const message of messages) {
+          if (
+            isChangeMessage(message) &&
+            message.headers.operation === `update`
+          ) {
+            updatedTitles.push(message.value.title)
+          }
+        }
+      })
+
+      // The server takes the snapshot of the row 1 first, but its response
+      // arrives last
+      const heldSnapshot = holdingFetch.holdSnapshot(id1)
+      const snapshotRow1 = shapeStream.requestSnapshot({
+        where: `id = $1`,
+        params: { 1: id1 },
+      })
+      await heldSnapshot.received
+      const offsetOfSnapshotRow1 = holdingFetch.state.heldSnapshotResponse!
+      expect(offsetOfSnapshotRow1.offset).toBe(`0_inf`)
+
+      await updateIssue({ id: id1, title: `row 1 updated` })
+      await waitForLoggedTitle(
+        issuesTableUrl,
+        offsetOfSnapshotRow1,
+        `row 1 updated`
+      )
+
+      await shapeStream.requestSnapshot({ where: `id = $1`, params: { 1: id2 } })
+      heldSnapshot.release()
+      await snapshotRow1
+      expect(shapeStream.lastOffset).toBe(offsetOfSnapshotRow1.offset)
+
+      holdingFetch.releaseLiveRequests()
+      await vi.waitFor(
+        () => expect(updatedTitles).toContain(`row 1 updated`),
         { timeout: 10000 }
       )
     })
