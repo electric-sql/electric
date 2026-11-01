@@ -1888,16 +1888,18 @@ describe.for(fetchAndSse)(
         `row 1 updated`
       )
 
-      await shapeStream.requestSnapshot({ where: `id = $1`, params: { 1: id2 } })
+      await shapeStream.requestSnapshot({
+        where: `id = $1`,
+        params: { 1: id2 },
+      })
       heldSnapshot.release()
       await snapshotRow1
       expect(shapeStream.lastOffset).toBe(offsetOfSnapshotRow1.offset)
 
       holdingFetch.releaseLiveRequests()
-      await vi.waitFor(
-        () => expect(updatedTitles).toContain(`row 1 updated`),
-        { timeout: 10000 }
-      )
+      await vi.waitFor(() => expect(updatedTitles).toContain(`row 1 updated`), {
+        timeout: 10000,
+      })
     })
 
     it(`requestSnapshot should populate stream and match returned data`, async ({
