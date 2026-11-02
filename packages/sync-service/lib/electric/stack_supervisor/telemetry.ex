@@ -17,8 +17,12 @@ defmodule Electric.StackSupervisor.Telemetry do
   @doc false
   # used in tests
   def default_periodic_measurements(%{stack_id: stack_id} = config) do
+    admission_limits =
+      Map.get(config, :max_concurrent_requests, Electric.Config.default(:max_concurrent_requests))
+
     [
       {__MODULE__, :count_shapes, [stack_id]},
+      {__MODULE__, :report_admission_control, [stack_id, admission_limits]},
       {__MODULE__, :report_write_buffer_size, [stack_id]},
       {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]},
       {__MODULE__, :report_disk_usage, [stack_id]},
@@ -89,6 +93,17 @@ defmodule Electric.StackSupervisor.Telemetry do
       %{count: num_shapes, count_indexed: indexed_shapes, count_unindexed: unindexed_shapes},
       %{stack_id: stack_id}
     )
+  end
+
+  # release/3 and try_swap/4 don't emit, so the acquire-time gauge goes stale without this
+  def report_admission_control(stack_id, limits, _telemetry_opts) do
+    for {kind, current} <- Electric.AdmissionControl.get_current(stack_id) do
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :admission_control, :acquire],
+        %{current: current, limit: Map.fetch!(limits, kind)},
+        %{stack_id: stack_id, kind: kind}
+      )
+    end
   end
 
   def report_write_buffer_size(stack_id, _telemetry_opts) do
